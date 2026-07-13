@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Total Weight Transfer Rear Axle [%]</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Total Weight Transfer Rear Axle [%]',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Weight Transfer [%]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Weight Transfer [%]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Total Weight Transfer Rear Axle [%]'
+	}
+};
+var trace0 =
+{
+x: ["0.0021947083535451507","2.1954516279062264","4.391759773204567","6.58798445183927","8.783197196966613","10.976482506648885","13.166939260234898","15.35368210138367","17.535842783656772","19.712571474790884","21.883038015963937","24.046433132592075"],
+y: ["50.47479667052807","50.47886340412483","50.482620827397106","50.486065624898394","50.48919898330936","50.49202236197152","50.494537491410604","50.496746371915556","50.498651272168786","50.50025472793396","50.50155954079729","50.50256877696727"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Total Weight Transfer Rear Axle [%]',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

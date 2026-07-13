@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Max. Lateral Acceleration</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Max. Lateral Acceleration',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Corner Radius [m]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Lateral Acceleration [m/s²]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Corner Radius [m]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Lateral Acceleration [m/s²]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Max. Lateral Acceleration'
+    }
+};
+
+var trace0 =
+{
+x: ["1.0","2.0","3.0","4.0","5.0","6.0","7.0","8.0","9.0","10.0","11.0","12.0","13.0","14.0","15.0","16.0","17.0","18.0","19.0","20.0","21.0","22.0","23.0","24.0","25.0"],
+y: ["14.861951657487245","15.06003252752572","15.262218038751014","15.468498221290723","15.679027082330705","15.893865079594939","16.11310953984238","16.336811162674383","16.56505182541031","16.797893826077647","17.03544952679571","17.277744063668806","17.524854662589327","17.776838415379032","18.03393115162518","18.295964885222187","18.56309230729353","18.835373305653807","19.11310739732902","19.396012031919337","19.68430073775184","19.97804513502244","20.277595959903614","20.582615325024175","20.893379843114523"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Max. Lateral Acceleration',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Dynamic Vehicle Jacking Forces</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Dynamic Vehicle Jacking Forces',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Jacking Force [N]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Jacking Force [N]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Dynamic Vehicle Jacking Forces'
+    }
+};
+
+var trace0 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["0.01526861379176836","14.876412716486499","28.944831355294134","42.16865923122454","54.50465980583399","65.89690705294738","75.42909470221825","74.29284040449666","72.38716323932637","69.78127662645099","66.53409276715874","62.692142692575786"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Jacking Force Front Axle',
+};
+var trace1 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["0.03117256965164472","27.30495047142729","55.19078861589914","83.99119794420773","114.04146179217805","145.67066085554475","161.81470325911488","165.1632925385127","167.48790795752132","168.9275975397103","169.61262921120044","169.66227475035708"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Jacking Force Rear Axle',
+};
+
+        var data = [ trace0, trace1];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

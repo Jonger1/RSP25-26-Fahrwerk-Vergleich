@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Dynamic SVSA Length Front Axle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Dynamic SVSA Length Front Axle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Side View Virtual Swing Arm Length [mm]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Side View Virtual Swing Arm Length [mm]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Dynamic SVSA Length Front Axle'
+	}
+};
+var trace0 =
+{
+x: ["-11.406363509257488","-5.704666525841901","0.0","5.7064920985488925","11.413673225807031"],
+y: ["1609.6981474081776","1608.3092680813008","1606.8334366551533","1605.2682302275402","1603.6110718411242"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic SVSA Length Front Axle',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

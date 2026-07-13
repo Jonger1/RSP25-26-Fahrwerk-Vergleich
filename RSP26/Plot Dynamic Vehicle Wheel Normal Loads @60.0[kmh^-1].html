@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Dynamic Vehicle Wheel Normal Loads @60.0[kmh^-1]</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Dynamic Vehicle Wheel Normal Loads @60.0[kmh^-1]',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Normal Load [N]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Normal Load [N]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Dynamic Vehicle Wheel Normal Loads @60.0[kmh^-1]'
+    }
+};
+
+var trace0 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["761.5409547910853","664.1526888120463","565.8623223938275","466.8827600414764","367.3319345582857","267.32952782233355","175.0","175.0","175.0","175.0","175.0","175.0"],
+marker: {
+    size: 6.0,
+    color: 'rgba(173,216,230,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(173,216,230,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Normal Load Inner Wheel Front @60.0[km/h]',
+};
+var trace1 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["761.7350452089148","859.1233111879537","957.4136776061727","1056.3932399585237","1155.9440654417144","1255.9464721776665","1356.279326040314","1456.8202970479094","1557.446062886622","1658.0324477932622","1758.4544858083282","1858.5863982532521"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Normal Load Outer Wheel Front @60.0[km/h]',
+};
+var trace2 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["716.4137705281868","617.8945576010101","518.553517730862","418.56962856271485","318.02479813572677","217.0018294342202","175.0","175.0","175.0","175.0","175.0","175.0"],
+marker: {
+    size: 6.0,
+    color: 'rgba(255,114,114,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(255,114,114,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Normal Load Inner Wheel Rear @60.0[km/h]',
+};
+var trace3 =
+{
+x: ["0.00395138280862479","3.968138922040889","7.96716730610149","11.993041635567415","16.041652178089358","20.10883512128869","24.190384083379087","28.282060661200887","32.37960369026152","36.47873691280776","40.57517477548776","44.66462610616632"],
+y: ["716.6102294718132","815.1294423989899","914.470482269138","1014.4543714372851","1114.9992018642731","1216.0221705657798","1317.4398413109577","1419.1683993774311","1521.1238958337615","1623.2224782038084","1725.3806048293893","1827.5152407705648"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Normal Load Outer Wheel Rear @60.0[km/h]',
+};
+
+        var data = [ trace0, trace1, trace2, trace3];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

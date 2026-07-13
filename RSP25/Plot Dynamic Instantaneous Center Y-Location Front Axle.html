@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Dynamic Instantaneous Center Y-Location Front Axle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Dynamic Instantaneous Center Y-Location Front Axle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Instantaneous Center Y-Location [mm]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Instantaneous Center Y-Location [mm]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Dynamic Instantaneous Center Y-Location Front Axle'
+	}
+};
+var trace0 =
+{
+x: ["-1.0910867718448387","-0.5452006173627397","0.0","0.5445239743729217","1.0883798669836564"],
+y: ["-364.60701402342534","-350.85046590735226","-337.02516699759144","-323.1434505661358","-309.2176781787024"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Instantaneous Center Y-Location Front Axle',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

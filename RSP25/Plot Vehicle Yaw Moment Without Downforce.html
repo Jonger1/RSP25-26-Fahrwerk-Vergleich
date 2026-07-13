@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Vehicle Yaw Moment Without Downforce</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Vehicle Yaw Moment Without Downforce',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Yaw Moment [Nm]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Lateral Acceleration [m/s²]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Yaw Moment [Nm]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Vehicle Yaw Moment Without Downforce'
+	}
+};
+var trace0 =
+{
+x: ["0.0021947083535451507","2.1954516279062264","4.391759773204567","6.58798445183927","8.783197196966613","10.976482506648885","13.166939260234898","15.35368210138367","17.535842783656772","19.712571474790884","21.883038015963937","24.046433132592075"],
+y: ["-24.638153347817035","-24.29075785939475","-23.244140271124053","-21.493242037520346","-19.035112264299173","-15.868890827799909","-11.995781143028863","-7.419013197652048","-2.1437971799894986","3.8227319175682313","-56.32068839205843","-137.58353366121278"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Vehicle Yaw Moment Without Downforce',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

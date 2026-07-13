@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Dynamic Wheelrate Heave-Spring Rear Axle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Dynamic Wheelrate Heave-Spring Rear Axle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Wheelrate Spring [N/m]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Wheelrate Spring [N/m]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Dynamic Wheelrate Heave-Spring Rear Axle'
+	}
+};
+var trace0 =
+{
+x: ["-20.909318795056123","-10.471357331680508","10.497330826719832","21.0134896796402"],
+y: ["39202.6661983117","40427.489707087334","42751.14107452313","43837.297815350394"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Wheelrate Heave-Spring Rear Axle',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

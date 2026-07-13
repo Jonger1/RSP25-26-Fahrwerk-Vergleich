@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Rigid Camber Angle Outer Wheel Front</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Rigid Camber Angle Outer Wheel Front',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Corner Radius [m]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Camber Angle [°]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Corner Radius [m]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Camber Angle [°]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Rigid Camber Angle Outer Wheel Front'
+    }
+};
+
+var trace0 =
+{
+x: ["1.0","2.0","3.0","4.0","5.0","6.0","7.0","8.0","9.0","10.0","11.0","12.0","13.0","14.0","15.0","16.0","17.0","18.0","19.0","20.0","21.0","22.0","23.0","24.0","25.0"],
+y: ["-0.05078831824995691","-0.051468832237938245","-0.052163584924416154","-0.05287255218666352","-0.05359627401038235","-0.054334969547646474","-0.0550889853805255","-0.05585850844168453","-0.05664383360024484","-0.057445189116037194","-0.058262976369369016","-0.059097297315883326","-0.05994843404101772","-0.06081660017225781","-0.06170262629953397","-0.06260595237338804","-0.06352712437304296","-0.06446636952042971","-0.06542474313416481","-0.06640129323176712","-0.06739678066909277","-0.06841147799274709","-0.06944662381247765","-0.07050107862671592","-0.07157582778739797"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Rigid Camber Angle Outer Wheel Front',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

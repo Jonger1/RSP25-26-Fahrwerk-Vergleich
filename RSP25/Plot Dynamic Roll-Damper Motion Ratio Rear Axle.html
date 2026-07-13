@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Dynamic Roll-Damper Motion Ratio Rear Axle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Dynamic Roll-Damper Motion Ratio Rear Axle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Damper Motion Ratio [1]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Damper Motion Ratio [1]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Dynamic Roll-Damper Motion Ratio Rear Axle'
+	}
+};
+var trace0 =
+{
+x: ["-0.9016218582699433","-0.45069874078621136","0.45047382719112805","0.9007366371639097"],
+y: ["1.7582361695069852","1.7580386875771437","1.7580994186028251","1.758545101246035"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Roll-Damper Motion Ratio Rear Axle push',
+};
+var trace1 =
+{
+x: ["-0.9016218582699433","-0.45069874078621136","0.45047382719112805","0.9007366371639097"],
+y: ["1.7585422853342387","1.7580991156802939","1.758038854810537","1.7582371963320924"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Roll-Damper Motion Ratio Rear Axle pull',
+};
+
+        var data = [ trace0, trace1];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25V2: Inner &amp; Outer Wheel Steering Angle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25V2: Inner &amp; Outer Wheel Steering Angle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Tie Rod Inner Y-Movement [mm]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Tie Rod Inner Y-Movement [mm]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25V2: Inner & Outer Wheel Steering Angle'
+	}
+};
+var trace0 =
+{
+x: ["30.0","20.0","10.0","0.0"],
+y: ["29.438676289683823","18.905651801488343","9.220168745399748","0.0"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Inner Wheel Steering Angle',
+};
+var trace1 =
+{
+x: ["0.0","10.0","20.0","30.0"],
+y: ["0.0","9.014138433569618","18.03931493039731","27.30201409149901"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Outer Wheel Steering Angle',
+};
+
+        var data = [ trace0, trace1];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

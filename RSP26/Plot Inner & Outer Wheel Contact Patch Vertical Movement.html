@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Inner &amp; Outer Wheel Contact Patch Vertical Movement</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Inner &amp; Outer Wheel Contact Patch Vertical Movement',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Contact Patch Vertical Movement [mm]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Inner & Outer Wheel Contact Patch Vertical Movement'
+    }
+};
+
+var trace0 =
+{
+x: ["26.96047970144016","25.198185903793885","23.52093133832278","21.91507042040622","20.370090627838273","18.877687646655836","17.43116404430149","16.025023086611903","14.654685490796227","13.316286499181906","12.006527084136824","10.722562622321204","9.461918115911073","8.222422611619674","7.002157756770324","5.799416935948464","4.612672442223252","3.440548830338807","2.281801083260155","1.1352965674554603","0.0"],
+y: ["-1.3817821079093449","-1.2582135244310848","-1.1445153904422227","-1.0393219145428816","-0.9415800787669752","-0.8504580092554477","-0.765285285013789","-0.6855125417764043","-0.6106832506463604","-0.5404134638046969","-0.4743769380229139","-0.4122939865688693","-0.3539229769044141","-0.2990537447925874","-0.2475024219553177","-0.19910732342975734","-0.1537256410218788","-0.11123075808950489","-0.07151004901407987","-0.034463060933376255","0.0"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Inner Wheel Contact Patch Vertical Movement',
+};
+var trace1 =
+{
+x: ["0.0","-1.125039168182861","-2.240697414541441","-3.347786213807093","-4.447059798753932","-5.539221839895712","-6.624931226344004","-7.704807095137567","-8.77943322897354","-9.849361920622629","-10.91511738504693","-11.977198786482548","-13.036082936515044","-14.092226710293835","-15.146069220490102","-16.19803378275682","-17.248529701378043","-18.297953899722806","-19.346692416767645","-20.395121788115283","-21.443610327558172"],
+y: ["0.0","0.031959537502103785","0.061487635465141466","0.08864896592987748","0.1135015633593639","0.1360974880243191","0.15648339681240486","0.1747010362639969","0.19078766988189955","0.20477644957730945","0.21669673937498146","0.2265743980993875","0.2344320266335842","0.2402891844216697","0.24416257913389927","0.24606623278981488","0.2460116271256254","0.24400783055997977","0.24006160875751448","0.23417752048473517","0.22635800019907037"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Outer Wheel Contact Patch Vertical Movement',
+};
+
+        var data = [ trace0, trace1];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP25_2025: Dynamic Roll Stiffness Front &amp; Rear Axle pull</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP25_2025: Dynamic Roll Stiffness Front &amp; Rear Axle pull',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Roll Stiffness [N/m]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Vehicle Roll Angle [°]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Roll Stiffness [N/m]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+var config = {
+	responsive: true,
+	displayModeBar: true,
+	toImageButtonOptions: {
+		format: 'svg',
+		filename: 'RSP25_2025: Dynamic Roll Stiffness Front & Rear Axle pull'
+	}
+};
+var trace0 =
+{
+x: ["-1.0910867718448387","-0.5452006173627397","0.5445239743729217","1.0883798669836564"],
+y: ["49590.227351782516","49619.22281787817","49623.5582368487","49618.012027009405"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Roll Stiffness Front Axle pull',
+};
+var trace1 =
+{
+x: ["-1.0910867718448387","-0.5452006173627397","0.5445239743729217","1.0883798669836564"],
+y: ["48743.44552768107","48803.160834571165","48884.044131979135","48915.118197092015"],
+marker: {
+    size: 6.0,
+    color: 'rgba(164,0,0,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(164,0,0,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Dynamic Roll Stiffness Rear Axle pull',
+};
+
+        var data = [ trace0, trace1];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>
