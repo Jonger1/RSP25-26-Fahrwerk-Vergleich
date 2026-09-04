@@ -14,9 +14,11 @@ Es gibt drei Ausbaustufen der Creo-Anbindung. Sie bauen aufeinander auf — wir 
 |---|---|---|---|---|
 | **0 — Dateiübergabe** | Tool schreibt `.ibl`, du importierst von Hand (3 Klicks) | keine | — | ab M1 nutzbar |
 | **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | **keine** — CREOSON läuft ohne Zusatzlizenz auf dem kostenlosen J-Link; für **Creo 8 mindestens CREOSON 2.8.0** | mittel | **M5, das realistische Ziel** |
-| **2 — Echtes Ribbon-Plugin** | Eigener Reiter "Aero Studio" in Creo mit Buttons "Spec laden", "Update", "Regelcheck" | Ribbon-Buttons und Menüs: **kostenloses J-Link reicht.** Nur eingebettete PTC-Dialoge (uifc) brauchen die kostenpflichtige Object-TOOLKIT-Lizenz — ein normales Java-Swing-Fenster geht auch ohne | hoch | M6, optional |
+| **2 — Echtes Ribbon-Plugin** | Eigener Reiter "Aero Studio" in Creo mit Buttons "Spec laden", "Update", "Regelcheck" | Ribbon-Buttons und Menüs: **kostenloses J-Link reicht.** Nur eingebettete PTC-Dialoge (uifc) brauchen die kostenpflichtige Object-TOOLKIT-Lizenz — ein normales Java-Swing-Fenster geht auch ohne | hoch | M7, optional |
 
-**Empfehlung: Stufe 1 als Zielbild, Stufe 2 nur wenn das Team es wirklich täglich benutzt.** Stufe 1 liefert 95 % des Nutzens (ein Klick in Python statt in Creo) bei einem Bruchteil des Aufwands. Ein Ribbon-Button ist Komfort, keine Funktion.
+**Empfehlung: Stufe 1 als Zielbild, Stufe 2 nur wenn das Team es wirklich täglich benutzt.** Stufe 1 liefert 95 % des Nutzens bei einem Bruchteil des Aufwands.
+
+Und seit die eigene UI gesetzt ist (nächstes Kapitel), schrumpft der Nutzen von Stufe 2 weiter: Der Anwender arbeitet ohnehin in Aero Studio, nicht in Creo. Der Ribbon-Button spart dann nur noch einen Fensterwechsel. Er bleibt im Plan, aber weit hinten.
 
 **Eine harte technische Randbedingung, die den Plan prägt:** Eine importierte Bezugskurve in Creo liest ihre Quelldatei **nicht** bei der Regenerierung neu ein — *Edit Definition* öffnet den Import DataDoctor, nicht den Dateidialog. Ein geändertes Profil bedeutet also immer: altes Import-Feature löschen, neu importieren. Genau dafür gibt es in CREOSON die Funktion `interface.mapkey`, die einen aufgezeichneten Mapkey in Creo abspielt. Das ist der Kern von M5.
 
@@ -71,6 +73,54 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 
 ---
 
+## Die UI — gesetzt, und deshalb strukturbestimmend
+
+Die grafische Oberfläche ist Pflicht. Das ist keine Kosmetik am Ende, sondern eine Entscheidung, die den Aufbau des gesamten Programms prägt — deshalb steht sie hier vor den Meilensteinen und nicht in einem davon.
+
+### Das Grundprinzip: Die UI hält keinen Zustand
+
+**Der einzige Zustand des Programms ist das AeroSpec-YAML.** Die UI liest es, stellt es dar, schreibt Änderungen hinein — mehr nicht. Jede Berechnung, jeder Export, jede Regelprüfung leitet sich allein aus dem Spec ab.
+
+Warum das so wichtig ist:
+
+- **UI und Kommandozeile sind automatisch gleichwertig.** Ein DoE-Lauf über 500 Varianten (M8) läuft ohne UI, benutzt aber exakt dieselbe Logik wie der Anwender im Browser. Es gibt keine zwei Wahrheiten.
+- **Jeder Designstand ist eine Textdatei im Git.** Diffbar, kommentierbar, im Design Report zitierbar. Was jemand geklickt hat, ist nachvollziehbar.
+- **Die UI ist austauschbar.** Wenn sich in zwei Jahren herausstellt, dass eine andere Technologie besser passt, wird die Oberfläche ersetzt und nicht das Programm.
+
+Die Versuchung, "schnell mal" einen Wert nur im UI-Widget zu halten, ist der Weg, auf dem solche Tools unwartbar werden. Diese Regel wird ab M1 durchgehalten.
+
+### Die sieben Ansichten
+
+| Ansicht | Was der Anwender tut | Ab |
+|---|---|---|
+| **Projekt** | Spec laden und speichern, Varianten vergleichen, Versionsstand mit Hash sehen | M1 |
+| **Profil-Editor** | Profil aus Katalog wählen oder per CST-Regler formen; Kontur, Krümmungs- und Dickenverlauf live; Fertigungsampel (Hinterkantendicke, Nasenradius) | M1 |
+| **Kaskaden-Editor** | Elemente hinzufügen, Gap / Overlap / Anstellwinkel per Regler oder durch Ziehen im Plot ändern; Schlitzkanal-Diagramm mit Konvergenzwarnung | M2 |
+| **Fahrzeug & Regeln** | Seiten- und Draufsicht mit den T-8.2-Hüllkurven; Regelampel mit anklickbaren Verstößen; Regler für Hub, Nick und Wank, um den Fahrzustands-Envelope abzufahren | M2 |
+| **Aerodynamik** | AoA-Sweeps, Polaren, Kandidatenvergleich, h/c-Sensitivität | M3 |
+| **Spannweite & 3D** | Verteilungskurven `chord(y)`, `twist(y)`, `z(y)`, `x(y)` mit ziehbaren Stützstellen; 3D-Vorschau des Elements | M4 |
+| **Creo** | Exportpfad, Punktzahl pro Kurve, Vorschau der erzeugten IBL, Buttons *Dateien schreiben*, *Push nach Creo*, *doctor* mit Statusanzeige | M1 (schreiben), M5 (push) |
+
+Jede Ansicht wird in dem Meilenstein gebaut, in dem ihre Fachlogik entsteht — nicht alles am Schluss. So ist ab M1 jederzeit etwas Vorzeigbares da, und Fehlentscheidungen in der Bedienung fallen früh auf.
+
+### Bedienbarkeit als Anforderung, nicht als Absicht
+
+Die Anwender sind Teammitglieder, die Aerodynamik können und nicht Python. Daraus folgen harte Anforderungen:
+
+- **Start mit einem Doppelklick.** Eine `Aero Studio.bat`, die die Umgebung hochfährt und die Oberfläche öffnet. Kein Terminal, keine virtuelle Umgebung, keine Pfadvariablen.
+- **Nie eine nackte Fehlermeldung.** Jeder Fehler wird in einen Satz übersetzt, der sagt, was zu tun ist ("Creo läuft nicht — bitte Creo starten und CREOSON verbinden"), mit ausklappbarem Detail für den, der es wissen will.
+- **Rückgängig auf Spec-Ebene.** Da der Zustand eine Datei ist, ist Undo ein Sprung zur vorherigen Version. Kostet fast nichts und rettet Nachmittage.
+- **Nichts Wichtiges nur über Tastenkürzel oder verstecktes Ziehen.** Alles per Regler oder Eingabefeld erreichbar; Ziehen ist die Abkürzung, nicht der einzige Weg.
+
+### Offene Entscheidung: die Technologie
+
+Die sieben Ansichten und das Zustandsprinzip gelten unabhängig davon. Unterschiedlich ist der Aufwand und wie sich direkte Manipulation anfühlt:
+
+- **Dash im Browser** *(Empfehlung)* — passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly aufbaut. Schnell gebaut, plattformunabhängig, ein Teammitglied kann die Oberfläche auch von einem anderen Rechner aus benutzen. Regler und Live-Plots sind die Stärke; Ziehen im Plot geht über editierbare Plotly-Formen, ist aber nicht so direkt wie in einer nativen Anwendung.
+- **PySide6-Desktopanwendung** — fühlt sich an wie ein echtes Konstruktionswerkzeug, flüssiges Ziehen von Stützstellen und Flaps, native Dateidialoge. Etwa zwei- bis dreifacher Aufwand für die Oberfläche, und die Auslieferung an die Teamrechner braucht ein Paketierungswerkzeug.
+
+---
+
 ## M0 — Umgebung und Machbarkeitsnachweis
 
 **Ziel:** Bevor eine Zeile Anwendungscode entsteht, ist bewiesen, dass der Creo-Weg trägt.
@@ -107,7 +157,9 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 9. DXF-Writer (ezdxf) als Nebenstrecke für Fertigungsvorlagen.
 10. Unit-Tests inkl. Regression auf Referenzprofile (E423, S1223).
 
-**Fertig, wenn:** Ein E423 mit 250 mm Sehne, −4° Anstellung, an definierter Position, wird aus dem Tool exportiert, in Creo importiert, in einer Skizze über *Referenzen projizieren* übernommen und extrudiert. Nachgemessene Sehnenlänge und Anstellwinkel stimmen. Screenshot ins Repo.
+**UI dazu:** Grundgerüst mit Navigation und den Ansichten **Projekt**, **Profil-Editor** und **Creo** (vorerst nur *Dateien schreiben*). Spec laden und speichern, CST-Regler mit Live-Kontur, Krümmungs- und Dickenverlauf, Fertigungsampel. Ab hier gilt das Zustandsprinzip: Die Oberfläche schreibt ins Spec, sonst nirgendwohin.
+
+**Fertig, wenn:** Ein E423 mit 250 mm Sehne, −4° Anstellung, an definierter Position, wird **in der Oberfläche eingestellt**, exportiert, in Creo importiert, in einer Skizze über *Referenzen projizieren* übernommen und extrudiert. Nachgemessene Sehnenlänge und Anstellwinkel stimmen. Screenshot ins Repo.
 
 **Risiko:** Zu viele Punkte → wellige Splines. Gegenmittel ist Teil der Aufgabe (Punktzahl als Parameter, visuelle Kontrolle).
 
@@ -128,7 +180,9 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 8. Validator, der **über den gesamten Fahrzustands-Envelope** prüft, nicht nur statisch (T 8.2 verlangt Einhaltung "with any suspension setup with or without a driver").
 9. Ampel-Report: Regelnummer, Sollwert, Istwert, kritischster Fahrzustand.
 
-**Fertig, wenn:** Eine 3-Element-Frontflügelkaskade ist definiert, der Validator meldet grün, und eine absichtlich zu hoch gesetzte Variante wird mit korrekter Regelnummer und Millimeterangabe abgelehnt.
+**UI dazu:** Ansicht **Kaskaden-Editor** (Elementliste, Gap/Overlap/AoA per Regler und durch Ziehen im Plot, Schlitzkanal-Diagramm) und Ansicht **Fahrzeug & Regeln** (Seiten- und Draufsicht mit T-8.2-Hüllkurven, Regelampel mit anklickbaren Verstößen, Regler für Hub, Nick und Wank). Die Ampel ist das Herzstück: Sie muss beim Schieben eines Reglers sofort reagieren, sonst wird sie ignoriert.
+
+**Fertig, wenn:** Eine 3-Element-Frontflügelkaskade ist in der Oberfläche aufgebaut, der Validator meldet grün, und eine absichtlich zu hoch gesetzte Variante wird mit korrekter Regelnummer und Millimeterangabe abgelehnt — sichtbar an der Ampel, nicht nur im Log.
 
 ---
 
@@ -143,6 +197,8 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 4. Bodeneffekt: `h/c` als Parameter, Abtriebsverlauf über `h/c`, Balanceverschiebung über den Federungs-Envelope.
 5. Zielfunktion `J` mit Gewichten aus Rundenzeit-Sensitivitäten, **integriert über einen AoA- und Höhenbereich** — nicht über einen Punkt. Das war der explizite Fehler in der KTH-Arbeit.
 6. Vergleichsplot mehrerer Kandidaten.
+
+**UI dazu:** Ansicht **Aerodynamik** — AoA-Sweep auf Knopfdruck, Polare, Kandidatenvergleich in einer Tabelle mit Sortierung, h/c-Sensitivität. Rechenläufe müssen im Hintergrund laufen und die Oberfläche darf dabei nicht einfrieren; ein Fortschrittsbalken gehört dazu.
 
 **Fertig, wenn:** Ein Screening über mindestens fünf Profile (E423, S1223, LNV109A, NACA 7412, plus ein CST-Kandidat) läuft in unter einer Minute durch und liefert eine begründete Rangfolge mit dokumentierten Randbedingungen.
 
@@ -161,6 +217,8 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 4. **Creo-Skelettmodell** `AERO_SKELETON.PRT`: `CS_AERO`, Bodenebene, Radpositionen und die T-8.2-Grenzen als echte Bezugsebenen. Das Reglement wird damit im CAD sichtbar.
 5. Boundary Blend über die Sektionskurven, Verdicken, Verrundungen — als dokumentierte, wiederholbare Featurekette.
 6. Publish Geometry im Skelett, Copy Geometry in `FW_EL1.PRT`, `FW_EL2.PRT`, `FW_ENDPL.PRT`, Zusammenbau zu `AERO_FRONT.ASM`.
+
+**UI dazu:** Ansicht **Spannweite & 3D** — Verteilungskurven mit ziehbaren Stützstellen und 3D-Vorschau des Elements. Die Vorschau muss nicht schön sein, aber sie muss zeigen, ob der Flügel verdreht ist, **bevor** jemand Creo öffnet.
 
 **Fertig, wenn:** Der Frontflügel steht als Baugruppe in Creo, hängt ausschließlich am Skelett, und eine Änderung der Sehnenverteilung im Spec führt nach Neuimport zu einem korrekt regenerierten Modell.
 
@@ -183,13 +241,33 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 8. STEP-Export für CFD, benannt nach Spec-Hash.
 9. Ein CLI-Kommando: `aerostudio push --spec rsp27_front_v3.yaml`.
 
-**Fertig, wenn:** Änderung einer Zahl im YAML → ein Kommando → das Creo-8-Modell zeigt die Änderung, ohne dass jemand Creo angefasst hat. Die exportierte STEP trägt den richtigen Hash, und `aerostudio doctor` läuft grün durch.
+**UI dazu:** Die Ansicht **Creo** wird vollständig — Verbindungsstatus, Buttons *Push nach Creo* und *doctor*, Protokollfenster. Wichtig: Alles, was hier per Klick geht, muss auch als CLI-Kommando existieren, damit der DoE-Lauf in M8 denselben Weg nimmt.
+
+**Fertig, wenn:** Änderung einer Zahl — per Regler in der Oberfläche oder direkt im YAML — führt über einen Klick beziehungsweise ein Kommando dazu, dass das Creo-8-Modell die Änderung zeigt, ohne dass jemand Creo angefasst hat. Die exportierte STEP trägt den richtigen Hash, und `aerostudio doctor` läuft grün durch.
 
 **Risiko:** Mapkeys sind die einzige versionsfragile Stelle im System. Gegenmittel sind eingebaut: Mapkey-Definition pro Versionsprofil, Beschränkung auf den einen unvermeidbaren Anwendungsfall, und der Smoke-Test aus Punkt 6.
 
 ---
 
-## M6 — Ribbon-Plugin in Creo *(optional)*
+## M6 — Auslieferung an das Team
+
+**Ziel:** Ein Teammitglied, das nie eine Zeile Python gesehen hat, entwirft damit einen Flügel.
+
+**Aufgaben**
+1. **`Aero Studio.bat`** — Doppelklick, Umgebung fährt hoch, Oberfläche öffnet sich. Keine Konsole, keine virtuelle Umgebung, keine Pfadvariablen.
+2. Fehlerbehandlung durchgängig: jede Ausnahme wird in einen handlungsleitenden Satz übersetzt, technisches Detail nur auf Ausklappen.
+3. Undo über die Spec-Historie.
+4. Kurze Bedienungsanleitung mit Screenshots, im Repo neben dem Code.
+5. **Bedientest mit zwei Teammitgliedern, die das Tool noch nie gesehen haben** — ohne Hilfestellung, mit Beobachtung. Was sie nicht finden, wird geändert, nicht erklärt.
+6. Beispiel-Specs als Startpunkte (Frontflügel, Heckflügel) im Repo.
+
+**Fertig, wenn:** Zwei Personen ohne Vorkenntnis bauen jeweils in unter 30 Minuten einen regelkonformen Zwei-Element-Flügel und exportieren ihn nach Creo. Ohne Rückfrage.
+
+**Warum genau hier:** Vor M5 gäbe es nichts auszuliefern, was den ganzen Weg abdeckt. Nach M8 wäre es zu spät — dann hat sich die Bedienung bereits um Annahmen herum verfestigt, die nie jemand geprüft hat.
+
+---
+
+## M7 — Ribbon-Plugin in Creo *(optional)*
 
 **Ziel:** Das Team benutzt das Tool aus Creo heraus, ohne Python zu kennen.
 
@@ -205,11 +283,11 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 
 **Beim Umstieg auf eine neuere Creo-Version zu prüfen:** benötigte Java-Version (in Creo 8 ist es Java 11, das kann sich ändern) und ob sich die Ribbon-API verschoben hat.
 
-**Ehrliche Einschätzung:** Dieser Meilenstein ist reiner Komfort. Wenn die Zeit knapp wird, fällt er zuerst — nicht M5.
+**Ehrliche Einschätzung:** Dieser Meilenstein ist reiner Komfort — und seit die eigene Oberfläche gesetzt ist, noch weniger als vorher. Der Anwender arbeitet in Aero Studio; der Ribbon-Button spart ihm einen Fensterwechsel. Wenn die Zeit knapp wird, fällt M7 zuerst, danach M9. Niemals M5 oder M6.
 
 ---
 
-## M7 — Undertray, DoE und Optimierung
+## M8 — Undertray, DoE und Optimierung
 
 **Ziel:** Optimierungsläufe statt Handiterationen. Hier liegt der größte aerodynamische Hebel.
 
@@ -220,11 +298,13 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 4. Batch-Runner: Spec-Varianten → Creo → STEP → CFD-Warteschlange → Ergebnisse zurück in die Zielfunktion.
 5. DRS als zwei `aoa`-Zustände, exportiert als Zeilen einer Creo-Familientabelle.
 
+**UI dazu:** DoE-Konfiguration und Pareto-Front als eigene Ansicht; ein Punkt in der Front ist anklickbar und lädt die zugehörige Variante in den Kaskaden-Editor. Der Lauf selbst gehört auf die Kommandozeile, nicht in die Oberfläche — er dauert Stunden.
+
 **Fertig, wenn:** Ein DoE über mindestens 50 Varianten läuft ohne Handeingriff durch und liefert eine Pareto-Front.
 
 ---
 
-## M8 — Report und Scrutineering-Paket
+## M9 — Report und Scrutineering-Paket
 
 **Ziel:** Das, was am Ende in der Design-Jury und bei der Technical Inspection auf dem Tisch liegt.
 
@@ -243,16 +323,20 @@ Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, R
 
 ```
 M0 Umgebung
- └─ M1 Profilkern + IBL ────────────┐
-     ├─ M2 Kaskade + Regelvalidator │
-     │   └─ M3 2D-Aero              │
-     └─ M4 3D-Stapel + Skelett ◄────┘
-         └─ M5 CREOSON  ──► M6 Ribbon-Plugin (optional)
-             └─ M7 Undertray + DoE
-                 └─ M8 Report
+ └─ M1 Profilkern + IBL + UI-Grundgerüst ──┐
+     ├─ M2 Kaskade + Regelvalidator (+UI)  │
+     │   └─ M3 2D-Aero (+UI)               │
+     └─ M4 3D-Stapel + Skelett (+UI) ◄─────┘
+         └─ M5 CREOSON (+UI)
+             └─ M6 Auslieferung an das Team
+                 ├─ M7 Ribbon-Plugin (optional)
+                 └─ M8 Undertray + DoE
+                     └─ M9 Report
 ```
 
-**Kritischer Pfad: M0 → M1 → M4 → M5.** Alles andere ist parallelisierbar oder verschiebbar.
+**Kritischer Pfad: M0 → M1 → M4 → M5 → M6.** Alles andere ist parallelisierbar oder verschiebbar.
+
+Die UI wächst quer durch M1 bis M5 mit und wird in M6 ausgeliefert. Sie ist damit kein eigener Block am Ende, sondern ab dem ersten Meilenstein da — das ist die einzige Art, bei der Bedienungsfehler früh auffallen statt kurz vor dem Rollout.
 
 ---
 
