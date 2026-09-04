@@ -34,7 +34,7 @@ api_toolkits:
   # "otk_java_examples" bedeutet NICHT, dass die Bibliotheken installiert sind.
   # Entscheidend ist die Datei otk.jar. Bei Creo 8 liegt "Common Files" direkt
   # im Installationsordner, nicht unter dem Datecode.
-  pruefdatei: "<loadpoint>\Common Files\text\java\otk.jar"
+  pruefdatei: '<loadpoint>\Common Files\text\java\otk.jar'
   otk_jar_vorhanden: AUSFUELLEN   # true | false
   java_version: 11                # in Creo 8 ist Java 11 die unterstuetzte Version
 
