@@ -112,12 +112,19 @@ Die Anwender sind Teammitglieder, die Aerodynamik können und nicht Python. Dara
 - **Rückgängig auf Spec-Ebene.** Da der Zustand eine Datei ist, ist Undo ein Sprung zur vorherigen Version. Kostet fast nichts und rettet Nachmittage.
 - **Nichts Wichtiges nur über Tastenkürzel oder verstecktes Ziehen.** Alles per Regler oder Eingabefeld erreichbar; Ziehen ist die Abkürzung, nicht der einzige Weg.
 
-### Offene Entscheidung: die Technologie
+### Die Technologie: Dash im Browser — entschieden
 
-Die sieben Ansichten und das Zustandsprinzip gelten unabhängig davon. Unterschiedlich ist der Aufwand und wie sich direkte Manipulation anfühlt:
+Begründung: passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly aufbaut, ist am schnellsten gebaut, läuft auf jedem Rechner und lässt sich bei Bedarf auch übers Netz mitbenutzen. Daraus folgen fünf konkrete Umsetzungsregeln:
 
-- **Dash im Browser** *(Empfehlung)* — passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly aufbaut. Schnell gebaut, plattformunabhängig, ein Teammitglied kann die Oberfläche auch von einem anderen Rechner aus benutzen. Regler und Live-Plots sind die Stärke; Ziehen im Plot geht über editierbare Plotly-Formen, ist aber nicht so direkt wie in einer nativen Anwendung.
-- **PySide6-Desktopanwendung** — fühlt sich an wie ein echtes Konstruktionswerkzeug, flüssiges Ziehen von Stützstellen und Flaps, native Dateidialoge. Etwa zwei- bis dreifacher Aufwand für die Oberfläche, und die Auslieferung an die Teamrechner braucht ein Paketierungswerkzeug.
+**1. Callbacks bleiben dünn.** Ein Dash-Callback nimmt Eingaben entgegen, ruft eine Funktion aus `aerostudio.*` auf und gibt das Ergebnis zurück. Keine Fachlogik in der Oberflächenschicht. Das ist die Bedingung dafür, dass die UI später austauschbar bleibt und dass die Kommandozeile denselben Weg nimmt.
+
+**2. `dcc.Store` nur für flüchtigen Bedienzustand.** Aktiver Reiter, Auswahl, Zoomstand — ja. Konstruktionsdaten — nie. Die gehören ins Spec.
+
+**3. Lange Rechnungen als Background Callbacks.** AoA-Sweeps und DoE-Vorbereitung laufen als Dash-Background-Callback mit DiskCache, damit die Oberfläche nicht einfriert und ein Fortschrittsbalken möglich ist. Das muss ab M3 stehen, weil es die Struktur der Callbacks bestimmt und sich später schlecht nachrüsten lässt.
+
+**4. Ziehen über editierbare Plotly-Formen.** Flap-Position und Stützstellen der Spannweitenverteilung werden als Shapes mit `editable` gezeichnet und über `relayoutData` zurückgelesen. Das Ziehen bleibt dabei die Abkürzung — jeder Wert ist zusätzlich über Regler und Eingabefeld erreichbar. Eine variable Zahl von Elementen in der Kaskade wird über Pattern-Matching-Callbacks abgebildet.
+
+**5. Ein Bearbeiter pro Spec.** Der Dash-Server ist schnell auch von einem zweiten Rechner erreichbar — dann schreiben aber zwei Personen in dieselbe Datei. Aero Studio setzt beim Öffnen eine Sperrdatei neben das Spec und weist den zweiten Zugriff mit einem klaren Hinweis ab, statt Änderungen stillschweigend zu überschreiben. Ansehen darf jeder, ändern einer.
 
 ---
 
@@ -198,7 +205,7 @@ Die sieben Ansichten und das Zustandsprinzip gelten unabhängig davon. Unterschi
 5. Zielfunktion `J` mit Gewichten aus Rundenzeit-Sensitivitäten, **integriert über einen AoA- und Höhenbereich** — nicht über einen Punkt. Das war der explizite Fehler in der KTH-Arbeit.
 6. Vergleichsplot mehrerer Kandidaten.
 
-**UI dazu:** Ansicht **Aerodynamik** — AoA-Sweep auf Knopfdruck, Polare, Kandidatenvergleich in einer Tabelle mit Sortierung, h/c-Sensitivität. Rechenläufe müssen im Hintergrund laufen und die Oberfläche darf dabei nicht einfrieren; ein Fortschrittsbalken gehört dazu.
+**UI dazu:** Ansicht **Aerodynamik** — AoA-Sweep auf Knopfdruck, Polare, Kandidatenvergleich in einer Tabelle mit Sortierung, h/c-Sensitivität. Hier werden die **Background Callbacks** eingeführt (Dash mit DiskCache), damit die Oberfläche während eines Sweeps nicht einfriert und ein Fortschrittsbalken möglich ist. Das ist der Meilenstein, in dem das passieren muss — später nachgerüstet bedeutet, alle Rechen-Callbacks umzubauen.
 
 **Fertig, wenn:** Ein Screening über mindestens fünf Profile (E423, S1223, LNV109A, NACA 7412, plus ein CST-Kandidat) läuft in unter einer Minute durch und liefert eine begründete Rangfolge mit dokumentierten Randbedingungen.
 
