@@ -5,7 +5,7 @@
 # Fuer eine neuere Creo-Version wird eine Kopie dieser Datei angelegt und
 # ausgefuellt - der Code bleibt unveraendert.
 #
-# Felder mit AUSFUELLEN werden in M0 belegt.
+# Erhoben am 05.09.2026 mit setup/Pruefe-Umgebung.ps1 auf Rechner JANNIS.
 
 profile:
   id: creo8
@@ -14,29 +14,46 @@ profile:
 
 creo:
   version: "8"
-  datecode: AUSFUELLEN            # Hilfe -> Ueber Creo Parametric
-  loadpoint: AUSFUELLEN           # z.B. C:\Program Files\PTC\Creo 8.0.x.x
-  units_template: mmNs
-  # BEFUND M0: Ab Creo 7 ist mmns_part_solid aufgeteilt in _abs und _rel.
-  # Wir nehmen _abs, weil relative Genauigkeit mit der Modellgroesse skaliert
-  # und an 2-mm-Hinterkanten und 3-mm-Nasenradien zu grob rechnet.
-  vorlage: mmns_part_solid_abs
-  genauigkeit: "absolut, 0.01 mm"
+  datecode: "8.0.3.0"
+  loadpoint: 'C:\Program Files\PTC\Creo 8.0.3.0'
+
+  # Es wird die TEAM-Vorlage verwendet, nicht PTCs mmns_part_solid_abs.
+  # Grund: Die Aeroteile muessen spaeter in derselben Baugruppe leben wie der
+  # Rest des Fahrzeugs - gleiche Ebenenbenennung, gleicher Zeichnungsstandard,
+  # gleiche Parameter. Eine zweite Vorlagenfamilie einzufuehren erzeugt genau
+  # die Inkonsistenz, die man beim Zusammenbau dann teuer bezahlt.
+  vorlage: 'C:\gtstarter\8.0.0.0\stools-se\data\stools-se\library_dir\start_model_dir\sut_de_startt.prt'
+  vorlage_name: sut_de_startt.prt
+  vorlage_quelle: "gtstarter 8.0.0.0 / stools-se, deutsche Startmodelle der HS Pforzheim"
+
+  # Bereits korrekt in der config.pro gesetzt, nichts zu tun:
+  #   enable_absolute_accuracy yes
+  #   default_abs_accuracy     0.01
+  # Absolute Genauigkeit ist fuer uns Pflicht: relative Genauigkeit skaliert mit
+  # der Modellgroesse und rechnet an 2-mm-Hinterkanten und 3-mm-Nasenradien zu grob.
+  genauigkeit: absolut
+  genauigkeit_wert: 0.01
+  config_pro: 'C:\Users\janni\config.pro'
+  pro_unit_sys: mmks      # nur Rueckfallebene; die Vorlage traegt ihre eigenen Einheiten
+
   # Solange irgendwo Creo 8 laeuft, werden ALLE Modelldateien hier gespeichert.
   # Creo oeffnet aeltere Dateien, aber niemals neuere.
   speichert_modelldateien: true
 
+  # Creo legt Modelldateien versioniert ab: teil.prt.1, teil.prt.2, ...
+  # In der config.pro steht der versionslose Name, Creo loest ihn auf die
+  # hoechste vorhandene Version auf. Wer versionslos per Test-Path prueft,
+  # bekommt faelschlich "fehlt". Betrifft jeden Code, der Creo-Dateien sucht.
+  dateien_versioniert: true
+
 api_toolkits:
-  # Komponente "API Toolkits" der Creo-Installation. Kostenlos, gleicher Installer.
-  # Nur fuer M5 (CREOSON) und M7 (Ribbon-Plugin) noetig.
-  #
-  # BEFUND M0: Der Ordnername sagt nichts. Ein vorhandener Ordner
-  # "otk_java_examples" bedeutet NICHT, dass die Bibliotheken installiert sind.
-  # Entscheidend ist die Datei otk.jar. Bei Creo 8 liegt "Common Files" direkt
-  # im Installationsordner, nicht unter dem Datecode.
-  pruefdatei: '<loadpoint>\Common Files\text\java\otk.jar'
-  otk_jar_vorhanden: AUSFUELLEN   # true | false
-  java_version: 11                # in Creo 8 ist Java 11 die unterstuetzte Version
+  # BEFUND M0: Vorhanden, nichts nachzuinstallieren.
+  # Der Ordnername sagt nichts - ein vorhandener Ordner "otk_java_examples"
+  # beweist nicht, dass die Bibliotheken da sind. Entscheidend ist otk.jar.
+  # Bei Creo 8 liegt "Common Files" direkt im Installationsordner.
+  pruefdatei: 'C:\Program Files\PTC\Creo 8.0.3.0\Common Files\text\java\otk.jar'
+  otk_jar_vorhanden: true
+  java_version_creo: 11           # in Creo 8 ist Java 11 die unterstuetzte Version
 
 creoson:
   min_version: "2.8.0"            # frueher kein Creo-8-Support
@@ -44,12 +61,20 @@ creoson:
   # CREOSON mit falschen Annahmen.
   set_creo_version: "8"
 
+umgebung:
+  python: "3.10.11"
+  python_pfad: 'C:\Users\janni\AppData\Local\Programs\Python\Python310\python.exe'
+  # OFFEN fuer M5: System-Java ist 25, Creo 8 erwartet fuer J-Link Java 11.
+  # Ob CREOSON mit 25 laeuft, wird in M5 geprueft; notfalls JDK 11 daneben.
+  java_system: 25
+  java_konflikt_geklaert: OFFEN_BIS_M5
+
 koordinatensystem:
   name: CS_AERO
 
-  # BEFUND M0: Die deutsche Standardvorlage hat Y als Hochachse.
+  # BEFUND M0: Die Teamvorlage hat Y als Hochachse.
   # Ebenennamen XY_T_VORNE / XZ_T_OBEN / YZ_T_RECHTS, Standard-KS mit
-  # X seitlich, Y nach oben, Z in die Tiefe. Das ist normales Creo-Verhalten.
+  # X seitlich, Y nach oben, Z in die Tiefe. Normales Creo-Verhalten.
   #
   # Das Tool arbeitet dagegen mit Z als Hochachse, weil das gesamte Reglement
   # ueber Hoehen ueber Grund argumentiert (T 8.2: "lower than 500 mm from the
@@ -68,7 +93,7 @@ koordinatensystem:
   z: "nach oben, z = 0 auf der Bodenebene"
 
   # OFFEN bis M4: Wie CS_AERO im echten Fahrzeugmodell liegt, also welche
-  # Richtung im Auto "hinten" ist. Bis dahin genuegt es, dass z senkrecht steht.
+  # Richtung im Auto "hinten" ist. Bis dahin genuegt, dass z senkrecht steht.
   ausrichtung_im_fahrzeugmodell: OFFEN_BIS_M4
 
 mapkeys:
@@ -78,8 +103,8 @@ mapkeys:
   delete_import_feature: null     # erst in M5 noetig
 
 befunde:
-  # Ergebnisse der M0-Pruefung, damit spaetere Versionen dagegen vergleichen koennen.
-  ibl_kommentarzeilen_erlaubt: AUSFUELLEN   # true | false
-  masshaltigkeit_ok: AUSFUELLEN             # true | false
-  geprueft_am: AUSFUELLEN
-  geprueft_von: AUSFUELLEN
+  ibl_import_funktioniert: true             # 05.09.2026, Feature "Kurve Aus Datei"
+  ibl_kommentarzeilen_erlaubt: AUSFUELLEN
+  masshaltigkeit_ok: AUSFUELLEN
+  geprueft_am: "2026-09-05"
+  geprueft_von: "Jannis"
