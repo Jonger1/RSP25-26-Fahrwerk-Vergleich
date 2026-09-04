@@ -36,11 +36,30 @@ creoson:
 
 koordinatensystem:
   name: CS_AERO
-  # Achszuordnung Tool -> Creo. Wird in M0 beobachtet und hier festgeschrieben,
-  # endgueltig festgelegt in M4 bei der Integration ins Fahrzeugmodell.
-  x: AUSFUELLEN                   # Fahrzeug: nach hinten
-  y: AUSFUELLEN                   # Fahrzeug: nach rechts
-  z: AUSFUELLEN                   # Fahrzeug: nach oben
+
+  # BEFUND M0: Die deutsche Standardvorlage hat Y als Hochachse.
+  # Ebenennamen XY_T_VORNE / XZ_T_OBEN / YZ_T_RECHTS, Standard-KS mit
+  # X seitlich, Y nach oben, Z in die Tiefe. Das ist normales Creo-Verhalten.
+  #
+  # Das Tool arbeitet dagegen mit Z als Hochachse, weil das gesamte Reglement
+  # ueber Hoehen ueber Grund argumentiert (T 8.2: "lower than 500 mm from the
+  # ground"). Mit z = 0 auf der Bodenebene wird jede Hoehenpruefung trivial.
+  #
+  # Aufgeloest wird das NICHT im Exporter, sondern an genau einer Stelle:
+  # CS_AERO wird gegenueber dem Standard-KS um -90 Grad um X gedreht.
+  # Danach gilt:  unser z = Vorlage Y (oben), unser x = Vorlage X,
+  #               unser y = Vorlage -Z. Rechtshaendig.
+  vorlage_hochachse: "Y"
+  cs_aero_aus_standard_ks: "Drehung -90 Grad um X"
+
+  # Zuordnung Tool -> Fahrzeug. Steht fest, weil sie aus dem Reglement folgt.
+  x: "nach hinten"
+  y: "nach rechts"
+  z: "nach oben, z = 0 auf der Bodenebene"
+
+  # OFFEN bis M4: Wie CS_AERO im echten Fahrzeugmodell liegt, also welche
+  # Richtung im Auto "hinten" ist. Bis dahin genuegt es, dass z senkrecht steht.
+  ausrichtung_im_fahrzeugmodell: OFFEN_BIS_M4
 
 mapkeys:
   # In M0 aufgezeichnet. Einzige versionsfragile Stelle im ganzen System -

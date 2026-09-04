@@ -40,9 +40,26 @@ Zehn Sektionen in einer Datei — genau die Struktur, die später ein Flügelele
 1. **Datei → Neu → Teil → Volumenkörper**, Name `M0_TEST`.
 2. Haken bei „Standardschablone verwenden" **entfernen**, Vorlage **`mmns_part_solid`** wählen (Millimeter/Newton/Sekunde). Falls mehrere mmns-Varianten angeboten werden, ist die Wahl für M0 egal — Hauptsache Millimeter.
 3. Prüfen: **Datei → Vorbereiten → Modelleigenschaften → Einheiten** muss `millimeter Newton Second` zeigen.
-4. Koordinatensystem anlegen: **Modell → Koordinatensystem**, die drei Standardebenen als Referenzen wählen, im Reiter „Eigenschaften" umbenennen in **`CS_AERO`**.
+4. Koordinatensystem `CS_AERO` anlegen — **mit Drehung**, siehe unten.
 
-> Zur Achsrichtung: Für M0 reicht es, das Koordinatensystem im Ursprung anzulegen. **Welche Creo-Richtung unserem x, y und z entspricht, wird heute nur beobachtet und notiert, nicht festgelegt.** Die endgültige Zuordnung zum Fahrzeug gehört in M4, wenn das Skelett ins Fahrzeugmodell eingehängt wird. Dafür ist die Richtungsmarke in der Prüfkurve da.
+### Warum CS_AERO gedreht wird
+
+Beim ersten Durchlauf am 05.09.2026 kam heraus: Die deutsche Standardvorlage hat **Y als Hochachse** (Ebenen `XY_T_VORNE`, `XZ_T_OBEN`, `YZ_T_RECHTS`; Standard-KS mit X seitlich, Y nach oben, Z in die Tiefe). Das ist normales Creo-Verhalten, kein Fehler.
+
+Das Tool rechnet dagegen mit **Z als Hochachse**, weil das Reglement durchgehend über Höhen über Grund argumentiert — T 8.2 sagt „lower than 500 mm from the ground". Mit `z = 0` auf der Bodenebene wird jede Höhenprüfung zu einem Vergleich statt zu einer Koordinatentransformation. Diese Konvention bleibt.
+
+Aufgelöst wird der Unterschied **an genau einer Stelle**: bei CS_AERO. Nicht im Exporter — sonst steckt die Konvention an zwei Orten und driftet irgendwann auseinander.
+
+### CS_AERO anlegen
+
+1. **Modell → Koordinatensystem**.
+2. Als Referenz das vorhandene Standard-Koordinatensystem wählen.
+3. Reiter **Ausrichtung** → **Um Achsen drehen** → **X: −90**.
+4. Reiter **Eigenschaften** → Name **`CS_AERO`**.
+
+Danach gilt: unser z = Y der Vorlage (senkrecht), unser x = X der Vorlage, unser y = −Z der Vorlage. Rechtshändig, wie es sein muss.
+
+> **Noch offen bis M4:** wie CS_AERO im echten Fahrzeugmodell liegt, also welche Richtung im Auto „hinten" ist. Für M0 und M1 genügt, dass z senkrecht steht. Die Bindung ans Fahrzeug gehört dorthin, wo das Skelett eingehängt wird — heute würden wir sie raten.
 
 ---
 
@@ -75,15 +92,16 @@ Mit **Analyse → Messen**. Sollwerte auf drei Nachkommastellen, Toleranz ±0,01
 
 Zusätzlich per Augenschein:
 
-| # | Beobachtung | Notieren |
-|---|---|---|
-| 9 | In welche Creo-Richtung zeigt die 200-mm-Kante (unser +x)? | |
-| 10 | In welche Creo-Richtung zeigt die 50-mm-Kante (unser +z)? | |
-| 11 | In welche Creo-Richtung zeigt die Richtungsmarke (unser +y)? | |
-| 12 | Ist der Spline glatt, ohne Beulen oder Schlingen? | |
-| 13 | Hängen die vier Rechteckkanten sichtbar zusammen? | |
+| # | Beobachtung | Soll nach der CS_AERO-Drehung | Ist |
+|---|---|---|---|
+| 9 | Liegt das große Rechteck senkrecht (in der Seitenansicht)? | ja | |
+| 10 | Wölbt sich der Spline nach oben über das Rechteck? | ja, Scheitel 30 mm darüber | |
+| 11 | Zeigt die Richtungsmarke waagerecht zur Seite? | ja | |
+| 12 | Steht das kleine Rechteck seitlich versetzt, nicht darüber? | ja, 300 mm seitlich | |
+| 13 | Ist der Spline glatt, ohne Beulen oder Schlingen? | ja | |
+| 14 | Hängen die vier Rechteckkanten sichtbar zusammen? | ja | |
 
-→ Punkte 9 bis 11 unter `koordinatensystem:` in `creo8.yaml` eintragen.
+Die Punkte 9 bis 12 sind der eigentliche Test der Achszuordnung: **Vor** der Drehung liegt das Rechteck flach, der Spline hängt in die Tiefe, die Marke zeigt nach oben und das kleine Rechteck schwebt 300 mm darüber. **Nach** der Drehung ist es genau umgekehrt. Wenn du beide Zustände einmal gesehen hast, ist die Konvention bewiesen.
 
 ---
 
