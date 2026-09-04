@@ -13,7 +13,7 @@ Es gibt drei Ausbaustufen der Creo-Anbindung. Sie bauen aufeinander auf — wir 
 | Stufe | Was | PTC-Lizenz nötig? | Aufwand | Wann |
 |---|---|---|---|---|
 | **0 — Dateiübergabe** | Tool schreibt `.ibl`, du importierst von Hand (3 Klicks) | keine | — | ab M1 nutzbar |
-| **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | **keine** — CREOSON läuft ab Creo 3.0 ohne Zusatzlizenz auf dem kostenlosen J-Link | mittel | **M5, das realistische Ziel** |
+| **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | **keine** — CREOSON läuft ohne Zusatzlizenz auf dem kostenlosen J-Link; für **Creo 8 mindestens CREOSON 2.8.0** | mittel | **M5, das realistische Ziel** |
 | **2 — Echtes Ribbon-Plugin** | Eigener Reiter "Aero Studio" in Creo mit Buttons "Spec laden", "Update", "Regelcheck" | Ribbon-Buttons und Menüs: **kostenloses J-Link reicht.** Nur eingebettete PTC-Dialoge (uifc) brauchen die kostenpflichtige Object-TOOLKIT-Lizenz — ein normales Java-Swing-Fenster geht auch ohne | hoch | M6, optional |
 
 **Empfehlung: Stufe 1 als Zielbild, Stufe 2 nur wenn das Team es wirklich täglich benutzt.** Stufe 1 liefert 95 % des Nutzens (ein Klick in Python statt in Creo) bei einem Bruchteil des Aufwands. Ein Ribbon-Button ist Komfort, keine Funktion.
@@ -27,22 +27,67 @@ Daraus folgt die Aufteilung, die sich durch den ganzen Plan zieht:
 
 ---
 
+## Versionsstrategie: Creo 8 heute, neuere Versionen später
+
+Basis ist **Creo 8**. Ein späterer Umstieg auf Creo 9, 10, 11 oder neuer darf kein Umbauprojekt werden. Sechs Regeln, die das sicherstellen — sie gelten ab M0 und werden in jedem Meilenstein mitgeführt.
+
+**1. Creo-Modelle immer in der ältesten produktiv genutzten Version speichern.**
+Creo öffnet ältere Dateien problemlos, aber **niemals neuere**. Wer das Skelettmodell versehentlich einmal in Creo 11 speichert, sperrt damit jeden Creo-8-Rechner im Team dauerhaft aus — es gibt keinen Rückweg. Solange irgendwo Creo 8 läuft, werden `AERO_SKELETON.PRT` und alle Templates in Creo 8 gespeichert. Das gehört als Regel in die README und wird beim Umstieg bewusst und gemeinsam aufgehoben, nicht nebenbei.
+
+**2. Der Geometrieaustausch bleibt Klartext.**
+`.ibl` und `.pts` sind reine Textformate ohne Versionsbindung, diffbar in Git und in zehn Jahren noch lesbar. Das ist neben der Sauberkeit der zweite große Grund, IBL gegenüber jedem binären Weg zu bevorzugen: **Bei einem Creo-Upgrade migriert man nichts.** Die Dateien sind einfach weiter gültig.
+
+**3. Alles Versionsabhängige lebt in einer Adapterschicht.**
+Der Anwendungscode kennt keine Creo-Version. Was sich zwischen Versionen unterscheidet, steht in Profildateien:
+
+```
+aerostudio/creo/profiles/
+├── creo8.yaml     # Loadpoint-Muster, Mapkey-Strings, creoson_version: "8", java: 11
+├── creo9.yaml
+├── creo10.yaml
+└── creo11.yaml
+```
+
+Ein neues Profil anzulegen kostet einen Nachmittag. Verstreute `if creo_version == 8`-Abfragen im Code kosten jedes Mal eine Woche.
+
+**4. Versionserkennung zur Laufzeit, mit ehrlichem Fallback.**
+Das Tool ermittelt die laufende Creo-Version und lädt das passende Profil. Ist die Version unbekannt, wird **nicht geraten** — das Tool fällt auf Stufe 0 zurück (Dateien schreiben, Handimport) und sagt klar, dass für diese Version noch kein Profil existiert. Ein falsch abgefeuerter Mapkey in einer unbekannten Creo-Version kann Geometrie zerstören; eine Fehlermeldung kann das nicht.
+
+**5. Mapkeys auf das Minimum begrenzen und aktiv absichern.**
+Mapkeys zeichnen Klickfolgen auf und brechen, wenn PTC das Ribbon umbaut — sie sind die einzige wirklich versionsfragile Stelle im ganzen System. Deshalb: **Nichts über Mapkey, was auch über Parameter und Relations geht.** Mapkey ausschließlich für den Kurven-Re-Import. Dazu ein Smoke-Test, der nach jedem Creo-Update in zwei Minuten sagt, ob der Weg noch funktioniert.
+
+**6. Nur Funktionen nutzen, die es in Creo 8 schon gibt.**
+Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, Relations — alles seit vielen Versionen stabil. Keine Abhängigkeit von Neuerungen aus Creo 9+, damit der Plan nicht heimlich eine Upgrade-Pflicht erzeugt.
+
+### Versionsmatrix
+
+| | Creo 8 (heute) | Creo 9/10 | Creo 11+ |
+|---|---|---|---|
+| IBL-Import (Get Data → Import → Curve) | ja | ja | ja |
+| CREOSON | ab 2.8.0, `creo.set_creo_version("8")` **zwingend zu Sessionbeginn** | ja | Profil beim Umstieg prüfen |
+| J-Link / OTK Java | enthalten, **Java 11** | Java-Version beim Umstieg prüfen | dito |
+| Mapkeys | pro Version eigene Datei | pro Version eigene Datei | pro Version eigene Datei |
+| Modelldateien speichern | **hier speichern, solange Creo 8 im Einsatz ist** | nur lesen | nur lesen |
+
+---
+
 ## M0 — Umgebung und Machbarkeitsnachweis
 
 **Ziel:** Bevor eine Zeile Anwendungscode entsteht, ist bewiesen, dass der Creo-Weg trägt.
 
 **Aufgaben**
-1. Creo-Version und Datecode feststellen.
-2. Prüfen, ob bei der Creo-Installation die Komponente **API Toolkits** mitinstalliert wurde. Erkennbar am Ordner `<creo_loadpoint>\<datecode>\Common Files\otk\otk_java` bzw. `otk_java_free`. Falls nicht: nachinstallieren (kostenlos, gleiche CD/Installer).
-3. Creo-Starttemplate anlegen: Einheiten **mmNs**, Koordinatensystem `CS_AERO` (Ursprung Vorderachsmitte/Boden, x nach hinten, y nach rechts, z nach oben), Bodenebene.
+1. Creo-8-Datecode feststellen (Hilfe → Über Creo Parametric) und in `creo8.yaml` eintragen.
+2. Prüfen, ob bei der Installation die Komponente **API Toolkits** mitinstalliert wurde. Erkennbar am Ordner `<creo_loadpoint>\<datecode>\Common Files\otk\otk_java` bzw. `otk_java_free`. Falls nicht: nachinstallieren — kostenlos, gleicher Installer. Nur für M5/M6 nötig, aber jetzt zu klären ist billiger als später.
+3. Creo-Starttemplate anlegen und **in Creo 8 speichern**: Einheiten **mmNs**, Koordinatensystem `CS_AERO` (Ursprung Vorderachsmitte/Boden, x nach hinten, y nach rechts, z nach oben), Bodenebene.
 4. Eine handgeschriebene Test-IBL mit einem bekannten Rechteck importieren (Model → Get Data → Import → Import type: Curve → Placement: `CS_AERO`) und in Creo **nachmessen**.
-5. Denselben Import als **Mapkey aufzeichnen** und abspielen.
+5. Denselben Import als **Mapkey aufzeichnen**, abspielen und den Mapkey-String in `creo8.yaml` ablegen.
+6. Anlegen der Adapterstruktur `creo/profiles/` mit `creo8.yaml` als erstem und vorerst einzigem Profil.
 
-**Fertig, wenn:** Eine Kurve mit bekannten Sollmaßen sitzt in Creo auf ±0,01 mm richtig, und der Mapkey wiederholt den Import ohne Handeingriff.
+**Fertig, wenn:** Eine Kurve mit bekannten Sollmaßen sitzt in Creo 8 auf ±0,01 mm richtig, der Mapkey wiederholt den Import ohne Handeingriff, und `creo8.yaml` enthält Datecode, Loadpoint, Mapkey-String und Java-Version.
 
 **Risiko:** Einheitenverwechslung (Template auf Zoll), falsches KS. Beides hier billig zu finden, in M4 teuer.
 
-**Was ich von dir brauche:** Creo-Version, und ob du auf dem Rechner Software nachinstallieren darfst.
+**Was ich von dir brauche:** den Creo-8-Datecode, und ob du auf dem Rechner Software nachinstallieren darfst.
 
 ---
 
@@ -128,17 +173,19 @@ Daraus folgt die Aufteilung, die sich durch den ganzen Plan zieht:
 **Ziel:** Ein Kommando. Spec rein, aktualisiertes Creo-Modell und STEP für CFD raus.
 
 **Aufgaben**
-1. CREOSON-Server aufsetzen, Verbindung aus Python über creopyson prüfen.
-2. Layoutparameter als **Creo-Parameter mit Relations** im Skelett anlegen (`FW_E1_CHORD`, `FW_E2_AOA`, `FW_E2_GAP`, …).
-3. `bridge.py`: Modell öffnen, Parameter setzen, regenerieren, exportieren.
-4. **Mapkey-Generator** für den Ablauf "altes Import-Feature löschen → IBL neu importieren auf `CS_AERO`", abgespielt über `interface.mapkey`.
-5. `AERO_SPEC_HASH` als Creo-Parameter setzen → jedes CAD-Modell ist eindeutig einem Git-Stand zugeordnet.
-6. STEP-Export für CFD, benannt nach Spec-Hash.
-7. Ein CLI-Kommando: `aerostudio push --spec rsp27_front_v3.yaml`.
+1. CREOSON-Server ab **Version 2.8.0** aufsetzen (davor kein Creo-8-Support), Verbindung aus Python über creopyson prüfen.
+2. **`creo.set_creo_version("8")` zu Sessionbeginn** — bei Creo 7 und 8 zwingend, sonst arbeitet CREOSON mit falschen Annahmen. Der Wert kommt aus dem Versionsprofil, nicht aus dem Code.
+3. Layoutparameter als **Creo-Parameter mit Relations** im Skelett anlegen (`FW_E1_CHORD`, `FW_E2_AOA`, `FW_E2_GAP`, …). Alles, was hierüber läuft, ist versionsunkritisch und regeneriert von selbst.
+4. `bridge.py`: Modell öffnen, Parameter setzen, regenerieren, exportieren.
+5. **Mapkey-Generator** für den Ablauf "altes Import-Feature löschen → IBL neu importieren auf `CS_AERO`", abgespielt über `interface.mapkey`, mit dem Mapkey-String aus `creo8.yaml`.
+6. **Smoke-Test** `aerostudio doctor`: prüft in unter zwei Minuten Creo-Version, CREOSON-Verbindung, Mapkey-Funktion und Import-Ergebnis. Das ist das Werkzeug, das nach einem künftigen Creo-Upgrade als Erstes läuft.
+7. `AERO_SPEC_HASH` als Creo-Parameter setzen → jedes CAD-Modell ist eindeutig einem Git-Stand zugeordnet.
+8. STEP-Export für CFD, benannt nach Spec-Hash.
+9. Ein CLI-Kommando: `aerostudio push --spec rsp27_front_v3.yaml`.
 
-**Fertig, wenn:** Änderung einer Zahl im YAML → ein Kommando → das Creo-Modell zeigt die Änderung, ohne dass jemand Creo angefasst hat. Und die exportierte STEP trägt den richtigen Hash.
+**Fertig, wenn:** Änderung einer Zahl im YAML → ein Kommando → das Creo-8-Modell zeigt die Änderung, ohne dass jemand Creo angefasst hat. Die exportierte STEP trägt den richtigen Hash, und `aerostudio doctor` läuft grün durch.
 
-**Risiko:** Mapkeys sind versionsabhängig und brechen bei Creo-Updates. Gegenmittel: Mapkey-Definition in einer eigenen Datei pro Creo-Version, plus ein Selbsttest, der nach jedem Creo-Update anschlägt.
+**Risiko:** Mapkeys sind die einzige versionsfragile Stelle im System. Gegenmittel sind eingebaut: Mapkey-Definition pro Versionsprofil, Beschränkung auf den einen unvermeidbaren Anwendungsfall, und der Smoke-Test aus Punkt 6.
 
 ---
 
@@ -147,13 +194,16 @@ Daraus folgt die Aufteilung, die sich durch den ganzen Plan zieht:
 **Ziel:** Das Team benutzt das Tool aus Creo heraus, ohne Python zu kennen.
 
 **Aufgaben**
-1. J-Link-Anwendung (Java), registriert über `protk.dat` in den Auxiliary Applications, `STARTUP` auf `spawn` oder `dll`.
+1. J-Link-Anwendung in **Java 11** (das ist die für Creo 8 unterstützte Java-Version), registriert über `protk.dat` in den Auxiliary Applications, `STARTUP` auf `spawn` oder `dll`.
 2. Eigener Ribbon-Reiter "Aero Studio" mit den Befehlen *Spec laden*, *Update aus Spec*, *Regelcheck*, *STEP für CFD*.
-3. Die Buttons rufen die bestehende Python-CLI aus M5 — die Fachlogik bleibt in Python, das Plugin ist nur Bedienoberfläche.
+3. Die Buttons rufen die bestehende Python-CLI aus M5 — **die Fachlogik bleibt vollständig in Python, das Plugin ist eine dünne Bedienoberfläche.** Genau deshalb ist ein späteres Creo-Upgrade hier billig: Es trifft nur ein paar hundert Zeilen Java, nicht das Tool.
 4. Ausgabe in einem Swing-Fenster (funktioniert mit dem kostenlosen J-Link; eingebettete PTC-Dialoge über uifc bräuchten die kostenpflichtige Object-TOOLKIT-Lizenz).
-5. Installationsanleitung für die Teamrechner.
+5. Gegen die otk-JAR der **ältesten** im Team eingesetzten Creo-Version kompilieren, damit dieselbe Plugin-Datei auf allen Rechnern läuft.
+6. Installationsanleitung für die Teamrechner.
 
 **Fertig, wenn:** Auf einem zweiten Rechner installiert ein Teammitglied das Plugin nach Anleitung und aktualisiert den Flügel per Klick.
+
+**Beim Umstieg auf eine neuere Creo-Version zu prüfen:** benötigte Java-Version (in Creo 8 ist es Java 11, das kann sich ändern) und ob sich die Ribbon-API verschoben hat.
 
 **Ehrliche Einschätzung:** Dieser Meilenstein ist reiner Komfort. Wenn die Zeit knapp wird, fällt er zuerst — nicht M5.
 
@@ -212,6 +262,18 @@ M0 Umgebung
 - Jeder Meilenstein endet mit einem **Nachweis in Creo**, nicht mit "Code läuft durch".
 - Wenn ein "Fertig, wenn"-Kriterium nicht erfüllt ist, wird der Meilenstein nicht abgehakt, sondern der Plan angepasst.
 - Regelstand wird bei jedem Meilenstein mitgeführt: Sobald die FS Rules 2027 erscheinen, kommt eine `rules_2027.yaml` dazu und alle Designs laufen erneut durch den Validator.
+- **Zwei Dinge sind in diesem Projekt versioniert und dürfen nie hartcodiert werden: das Reglement und die Creo-Version.** Beides sind Konfigurationsdaten, kein Code. Wer das durchhält, übersteht sowohl die Rules 2027 als auch das nächste Creo-Upgrade ohne Umbau.
+
+### Was ein späteres Creo-Upgrade konkret kostet
+
+| Betroffen | Aufwand | Warum so wenig |
+|---|---|---|
+| `.ibl` / `.pts`-Dateien | **null** | Klartext, versionsunabhängig |
+| Python-Tool (M1–M4, M7, M8) | **null** | kennt Creo überhaupt nicht |
+| Neues Versionsprofil `creoNN.yaml` | ein Nachmittag | Datecode, Loadpoint, Mapkey neu aufzeichnen |
+| CREOSON-Anbindung (M5) | gering | Versionsstring anpassen, `aerostudio doctor` laufen lassen |
+| Skelett- und Bauteilmodelle | einmalig bewusst | Creo öffnet sie; erst beim vollständigen Umstieg neu speichern — danach gibt es keinen Weg zurück zu Creo 8 |
+| Ribbon-Plugin (M6, optional) | ein bis zwei Tage | Java-Version und Ribbon-API prüfen, neu kompilieren |
 
 ---
 
@@ -223,5 +285,7 @@ M0 Umgebung
 - [CS35654 — Synchrone Toolkit-Anwendung beim Start registrieren](https://www.ptc.com/en/support/article/CS35654)
 - [CS60620 — Wann ist eine TOOLKIT-Lizenz erforderlich?](https://www.ptc.com/en/support/article/CS60620)
 - [CREOSON — Voraussetzungen und Funktionsumfang](https://www.creoson.com/?page_id=5) — ab Creo 3.0, keine Zusatzlizenz
+- [CREOSON Releases auf GitHub](https://github.com/SimplifiedLogic/creoson/releases) — Creo-8-Unterstützung ab 2.8.0; bei Creo 7/8 ist `creo.set_creo_version` zu Sessionbeginn erforderlich
 - [creopyson `interface` — u. a. `mapkey`](https://creopyson.readthedocs.io/en/latest/_modules/creopyson/interface.html)
+- [Compatibility with J-Link (PTC Help)](https://support.ptc.com/help/creo_toolkit/otk_java_pma/r11.0/usascii/creo_toolkit/user_guide/Compatibility_with_J_Link.html) — Java-basierte Anpassung in Creo 8 mit Java 11
 - [To Edit the Definition of Imported Datum Curves (PTC Help)](https://support.ptc.com/help/creo/creo_pma/r11.0/usascii/part_modeling/part_modeling/To_Edit_the_Definition_of_Imported_Datum_Curves.html) — öffnet den Import DataDoctor, kein Neueinlesen der Datei
