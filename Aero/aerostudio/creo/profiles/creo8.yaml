@@ -17,6 +17,11 @@ creo:
   datecode: AUSFUELLEN            # Hilfe -> Ueber Creo Parametric
   loadpoint: AUSFUELLEN           # z.B. C:\Program Files\PTC\Creo 8.0.x.x
   units_template: mmNs
+  # BEFUND M0: Ab Creo 7 ist mmns_part_solid aufgeteilt in _abs und _rel.
+  # Wir nehmen _abs, weil relative Genauigkeit mit der Modellgroesse skaliert
+  # und an 2-mm-Hinterkanten und 3-mm-Nasenradien zu grob rechnet.
+  vorlage: mmns_part_solid_abs
+  genauigkeit: "absolut, 0.01 mm"
   # Solange irgendwo Creo 8 laeuft, werden ALLE Modelldateien hier gespeichert.
   # Creo oeffnet aeltere Dateien, aber niemals neuere.
   speichert_modelldateien: true
@@ -24,8 +29,13 @@ creo:
 api_toolkits:
   # Komponente "API Toolkits" der Creo-Installation. Kostenlos, gleicher Installer.
   # Nur fuer M5 (CREOSON) und M7 (Ribbon-Plugin) noetig.
-  installiert: AUSFUELLEN         # true | false
-  otk_java_free_pfad: AUSFUELLEN  # <loadpoint>\<datecode>\Common Files\otk\otk_java_free
+  #
+  # BEFUND M0: Der Ordnername sagt nichts. Ein vorhandener Ordner
+  # "otk_java_examples" bedeutet NICHT, dass die Bibliotheken installiert sind.
+  # Entscheidend ist die Datei otk.jar. Bei Creo 8 liegt "Common Files" direkt
+  # im Installationsordner, nicht unter dem Datecode.
+  pruefdatei: "<loadpoint>\Common Files\text\java\otk.jar"
+  otk_jar_vorhanden: AUSFUELLEN   # true | false
   java_version: 11                # in Creo 8 ist Java 11 die unterstuetzte Version
 
 creoson:

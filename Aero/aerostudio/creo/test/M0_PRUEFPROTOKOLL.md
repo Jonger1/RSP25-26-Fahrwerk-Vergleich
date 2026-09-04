@@ -32,17 +32,31 @@ Zehn Sektionen in einer Datei — genau die Struktur, die später ein Flügelele
 
 1. Creo 8 starten, **Hilfe → Über Creo Parametric**. **Datecode notieren.**
 2. **Installationspfad notieren**, typischerweise `C:\Program Files\PTC\Creo 8.0.x.x`.
-3. Dort nachsehen, ob der Ordner `<datecode>\Common Files\otk\otk_java_free` existiert.
-   - **Ja** → Komponente „API Toolkits" ist installiert, M5 und M7 später ohne Nachinstallation möglich.
-   - **Nein** → für heute irrelevant. Für M5 über denselben Installer nachinstallieren, kostenlos.
+3. Prüfen, ob diese **Datei** existiert:
+   ```
+   <Installationspfad>\Common Files\text\java\otk.jar
+   ```
+   Bei Creo 8 liegt `Common Files` **direkt** im Installationsordner, nicht unter dem Datecode.
+
+   - **Ja** → J-Link nutzbar, M5 und M7 später ohne Nachinstallation möglich.
+   - **Nein** → für heute irrelevant. Für M5 die Komponente „API Toolkits" über denselben Installer nachinstallieren, kostenlos.
+
+   > Der Ordnername allein sagt nichts. Ein vorhandener `otk_java_examples`-Ordner bedeutet **nicht**, dass die Bibliotheken da sind — es gibt Installationen, in denen die Ordnerstruktur steht, aber die JAR fehlt. Entscheidend ist `otk.jar`.
 
 ---
 
 ## Schritt 2 — Testteil und CS_AERO anlegen
 
 1. **Datei → Neu → Teil → Volumenkörper**, Name `M0_TEST`.
-2. Haken bei „Standardschablone verwenden" **entfernen**, Vorlage **`mmns_part_solid`** wählen.
-3. Prüfen: **Datei → Vorbereiten → Modelleigenschaften → Einheiten** zeigt `millimeter Newton Second`.
+2. Haken bei „Standardschablone verwenden" **entfernen**, Vorlage **`mmns_part_solid_abs`** wählen.
+
+   Ab Creo 7 ist `mmns_part_solid` in zwei Varianten aufgeteilt: `_abs` (absolute Genauigkeit) und `_rel` (relative Genauigkeit). **Wir nehmen `_abs`**, und das ist keine Geschmacksfrage: Bei relativer Genauigkeit skaliert die Toleranz mit der Modellgröße. Ein Flügel ist rund 1400 mm breit, hat aber eine 2 mm dicke Hinterkante und 3 mm Nasenradien. Relative Genauigkeit rechnet an genau diesen Stellen zu grob und lässt später Verrundungen und Boundary Blends scheitern — ein Fehlerbild, das erst in M4 auftaucht und dann schwer zuzuordnen ist.
+
+   Steht in der Liste nichts mit `mmns`, ist die Vorlagensammlung angepasst. Dann eine beliebige metrische Vorlage nehmen und mit Punkt 3 die Einheiten von Hand richtigstellen.
+
+3. Prüfen: **Datei → Vorbereiten → Modelleigenschaften → Einheiten** zeigt `millimeter Newton Second (mmNs)`. Falls nicht: **ändern**, und im Dialog **„Maße interpretieren"** wählen (bei einem leeren Teil ohne Geometrie ist die Wahl folgenlos, aber sie wird zur Gewohnheit).
+
+   Im selben Dialog unter **Genauigkeit** prüfen, dass **absolut** eingestellt ist, Wert 0,01 mm. Fehlt die Umschaltmöglichkeit, muss in der `config.pro` die Option `enable_absolute_accuracy` auf `yes` stehen.
 4. **Modell → Koordinatensystem**
 5. Als Referenz das vorhandene Standard-Koordinatensystem wählen.
 6. Reiter **Ausrichtung** → **Um Achsen drehen** → **X: −90**
