@@ -2,10 +2,9 @@
 
 **Ziel:** Beweisen, dass eine Kurve aus dem Tool maßhaltig und wiederholbar in Creo 8 landet. Solange das nicht bewiesen ist, ist alles ab M1 Spekulation.
 
-Dauer etwa 45 Minuten. Ergebnisse wandern nach [`../profiles/creo8.yaml`](../profiles/creo8.yaml).
+Rechner geprüft am 05.09.2026: Creo 8.0.3.0, alles Nötige vorhanden, **nichts zu installieren**. Es fehlen nur noch die Schritte, die in Creo selbst passieren müssen — Dauer etwa 30 Minuten.
 
-**Dateien** liegen in diesem Ordner:
-`...\0_Fahrwerk_Claude\Aero\aerostudio\creo\test\`
+**Dateien** in diesem Ordner:
 - `M0_pruefkurve.ibl` — die Prüfkurve
 - `M0_pruefkurve_kommentiert.ibl` — gleiche Geometrie mit Kommentarzeilen
 
@@ -24,47 +23,50 @@ Bewusst so gebaut, dass jeder mögliche Fehler ohne Messen auffällt:
 
 Zehn Sektionen in einer Datei — genau die Struktur, die später ein Flügelelement mit mehreren Spannweitenstationen hat.
 
-**Fehlersignaturen:** Zoll- statt Millimetervorlage → alles 25,4-fach zu groß. x und z vertauscht → das Rechteck ist 50 lang und 200 hoch.
+**Fehlersignatur Einheiten:** Wäre die Vorlage zollbasiert, erschiene das Rechteck 25,4-fach zu groß.
 
 ---
 
-## Schritt 1 — Umgebung erfassen
+## Schritt 1 — Umgebung *(auf diesem Rechner erledigt)*
 
-1. Creo 8 starten, **Hilfe → Über Creo Parametric**. **Datecode notieren.**
-2. **Installationspfad notieren**, typischerweise `C:\Program Files\PTC\Creo 8.0.x.x`.
-3. Prüfen, ob diese **Datei** existiert:
-   ```
-   <Installationspfad>\Common Files\text\java\otk.jar
-   ```
-   Bei Creo 8 liegt `Common Files` **direkt** im Installationsordner, nicht unter dem Datecode.
+```
+powershell -ExecutionPolicy Bypass -File ..\..\setup\Pruefe-Umgebung.ps1
+```
 
-   - **Ja** → J-Link nutzbar, M5 und M7 später ohne Nachinstallation möglich.
-   - **Nein** → für heute irrelevant. Für M5 die Komponente „API Toolkits" über denselben Installer nachinstallieren, kostenlos.
+Ergebnis vom 05.09.2026:
 
-   > Der Ordnername allein sagt nichts. Ein vorhandener `otk_java_examples`-Ordner bedeutet **nicht**, dass die Bibliotheken da sind — es gibt Installationen, in denen die Ordnerstruktur steht, aber die JAR fehlt. Entscheidend ist `otk.jar`.
+| | |
+|---|---|
+| Creo | 8.0.3.0, `C:\Program Files\PTC\Creo 8.0.3.0` |
+| `otk.jar` | vorhanden → J-Link installiert, M5 und M7 später ohne Nachinstallation |
+| Teilevorlage | `sut_de_startt.prt` (gtstarter / stools-se) |
+| Genauigkeit | absolut, 0,01 mm — bereits korrekt in der `config.pro` |
+| Python | 3.10.11 |
+| Java | 25 — Creo 8 erwartet für J-Link Java 11, zu klären in M5 |
+
+Auf einem anderen Rechner das Skript erneut laufen lassen, bevor es weitergeht.
 
 ---
 
 ## Schritt 2 — Testteil und CS_AERO anlegen
 
 1. **Datei → Neu → Teil → Volumenkörper**, Name `M0_TEST`.
-2. Haken bei „Standardschablone verwenden" **entfernen**, Vorlage **`mmns_part_solid_abs`** wählen.
+2. **Standardschablone verwenden lassen** — also den Haken **drin** lassen.
 
-   Ab Creo 7 ist `mmns_part_solid` in zwei Varianten aufgeteilt: `_abs` (absolute Genauigkeit) und `_rel` (relative Genauigkeit). **Wir nehmen `_abs`**, und das ist keine Geschmacksfrage: Bei relativer Genauigkeit skaliert die Toleranz mit der Modellgröße. Ein Flügel ist rund 1400 mm breit, hat aber eine 2 mm dicke Hinterkante und 3 mm Nasenradien. Relative Genauigkeit rechnet an genau diesen Stellen zu grob und lässt später Verrundungen und Boundary Blends scheitern — ein Fehlerbild, das erst in M4 auftaucht und dann schwer zuzuordnen ist.
+   > Wir nehmen bewusst die **Teamvorlage** `sut_de_startt.prt`, nicht PTCs `mmns_part_solid_abs`. Die Aeroteile müssen später in derselben Baugruppe leben wie der Rest des Fahrzeugs: gleiche Ebenenbenennung, gleicher Zeichnungsstandard, gleiche Parameter. Eine zweite Vorlagenfamilie erzeugt genau die Inkonsistenz, die man beim Zusammenbau teuer bezahlt. Die absolute Genauigkeit von 0,01 mm, die wir brauchen, steht in eurer `config.pro` ohnehin schon.
 
-   Steht in der Liste nichts mit `mmns`, ist die Vorlagensammlung angepasst. Dann eine beliebige metrische Vorlage nehmen und mit Punkt 3 die Einheiten von Hand richtigstellen.
+3. **Datei → Vorbereiten → Modelleigenschaften → Einheiten** kontrollieren. Es muss ein **Millimeter**-System sein (`mmNs` oder `mmKs` — für die Geometrie ist beides gleich, entscheidend ist die Längeneinheit).
 
-3. Prüfen: **Datei → Vorbereiten → Modelleigenschaften → Einheiten** zeigt `millimeter Newton Second (mmNs)`. Falls nicht: **ändern**, und im Dialog **„Maße interpretieren"** wählen (bei einem leeren Teil ohne Geometrie ist die Wahl folgenlos, aber sie wird zur Gewohnheit).
+   Das ist die einzige Annahme, die von außen nicht prüfbar war. Steht dort Zoll: melden, nicht selbst umstellen.
 
-   Im selben Dialog unter **Genauigkeit** prüfen, dass **absolut** eingestellt ist, Wert 0,01 mm. Fehlt die Umschaltmöglichkeit, muss in der `config.pro` die Option `enable_absolute_accuracy` auf `yes` stehen.
 4. **Modell → Koordinatensystem**
-5. Als Referenz das vorhandene Standard-Koordinatensystem wählen.
+5. Als Referenz das vorhandene **Standard-Koordinatensystem** wählen.
 6. Reiter **Ausrichtung** → **Um Achsen drehen** → **X: −90**
 7. Reiter **Eigenschaften** → Name **`CS_AERO`** → bestätigen.
 
 ### Warum die Drehung
 
-Beim ersten Durchlauf am 05.09.2026 zeigte sich: Die deutsche Standardvorlage hat **Y als Hochachse** (Ebenen `XY_T_VORNE`, `XZ_T_OBEN`, `YZ_T_RECHTS`). Normales Creo-Verhalten, kein Fehler.
+Die Teamvorlage hat **Y als Hochachse** (Ebenen `XY_T_VORNE`, `XZ_T_OBEN`, `YZ_T_RECHTS`). Normales Creo-Verhalten, kein Fehler.
 
 Das Tool rechnet mit **Z als Hochachse**, weil das Reglement durchgehend über Höhen über Grund argumentiert — T 8.2 sagt „lower than 500 mm from the ground". Mit `z = 0` auf der Bodenebene wird jede Höhenprüfung ein Vergleich statt einer Koordinatentransformation. Diese Konvention bleibt.
 
@@ -83,7 +85,7 @@ Nach der Drehung gilt: unser z = Y der Vorlage (senkrecht), unser x = X der Vorl
 3. Unter **Importtyp** → **Kurve** wählen, bestätigen.
 4. Reiter **Platzierung** → Sammler für das Koordinatensystem anklicken → **`CS_AERO`** wählen.
 
-   Das ist der entscheidende Klick. Ohne ihn landet alles auf dem Standard-KS und liegt gekippt.
+   **Das ist der entscheidende Klick.** Ohne ihn landet alles auf dem Standard-KS und liegt gekippt.
 5. Bestätigen.
 
 Bei Fehlern: Meldung **wörtlich** notieren.
@@ -94,14 +96,14 @@ Bei Fehlern: Meldung **wörtlich** notieren.
 
 | # | Beobachtung | Soll |
 |---|---|---|
-| 1 | Großes Rechteck | steht senkrecht, in der Seitenansicht sichtbar |
-| 2 | Spline | wölbt sich nach oben, Scheitel 30 mm über der Oberkante |
-| 3 | Richtungsmarke | zeigt waagerecht zur Seite |
-| 4 | Kleines Rechteck | 300 mm seitlich versetzt, nicht darüber |
+| 1 | Großes Rechteck | steht **senkrecht**, in der Seitenansicht sichtbar |
+| 2 | Spline | wölbt sich **nach oben**, Scheitel 30 mm über der Oberkante |
+| 3 | Richtungsmarke | zeigt **waagerecht zur Seite** |
+| 4 | Kleines Rechteck | **300 mm seitlich** versetzt, nicht darüber |
 | 5 | Spline glatt, ohne Beulen oder Schlingen? | ja |
 | 6 | Vier Rechteckkanten sichtbar zusammenhängend? | ja |
 
-Zum Vergleich: Bei einem Import auf das **Standard-KS** liegt das Rechteck flach, der Spline hängt in die Tiefe, die Marke zeigt nach oben und das kleine Rechteck schwebt 300 mm darüber. Wer beide Zustände einmal gesehen hat, hat die Konvention bewiesen statt behauptet.
+Zum Vergleich: Bei einem Import auf das **Standard-KS** liegt das Rechteck flach, der Spline hängt in die Tiefe, die Marke zeigt nach oben und das kleine Rechteck schwebt 300 mm darüber — so sah es beim ersten Versuch am 05.09.2026 aus. Wer beide Zustände einmal gesehen hat, hat die Konvention bewiesen statt behauptet.
 
 ---
 
@@ -138,10 +140,10 @@ Ein zweites Mal importieren, diesmal `M0_pruefkurve_kommentiert.ibl`. Gleiche Ge
 Der Baustein, aus dem in M5 die Automatisierung wird.
 
 1. **Werkzeuge → Mapkeys** (falls dort nicht zu finden: Datei → Optionen → Umgebung).
-2. **Neu**, Kürzel z. B. `aeroimp`, Name „Aero Studio: IBL importieren".
+2. **Neu**, Kürzel `aeroimp`, Name „Aero Studio: IBL importieren".
 3. **Aufzeichnen** starten, Schritt 3 komplett durchführen, **Stopp**.
 4. Speichern, dann auf einem **frischen Teil abspielen** und prüfen, ob die Kurven wieder korrekt sitzen.
-5. Mapkey-Text aus der `config.pro` herauskopieren.
+5. Mapkey-Text aus der `config.pro` herauskopieren (`C:\Users\janni\config.pro`).
 
 **Erwartete Schwierigkeit:** Der Dateiname steckt in der aufgezeichneten Klickfolge mit drin. Für M5 brauchen wir entweder einen festen Dateinamen, den das Tool immer überschreibt, oder eine Mapkey-Variante, die den Dialog offen lässt. Was in Creo 8 davon geht, findet sich hier heraus. **Klappt es nicht auf Anhieb, ist das kein Rückschlag** — es ist die Information, auf der M5 aufbaut.
 
@@ -149,23 +151,24 @@ Der Baustein, aus dem in M5 die Automatisierung wird.
 
 ## Was am Ende zurückkommt
 
-1. Datecode und Installationspfad (Schritt 1)
-2. `otk_java_free` vorhanden? (Schritt 1)
-3. Die sechs Sichtprüfungen (Schritt 4)
-4. Die acht Messwerte (Schritt 5)
-5. Kommentierte Datei importierbar? (Schritt 6)
-6. Mapkey-Text und ob das Abspielen funktioniert (Schritt 7)
-7. Alles, was unerwartet war — Fehlermeldungen bitte wörtlich
+1. Einheiten der Teamvorlage (Schritt 2, Punkt 3)
+2. Die sechs Sichtprüfungen (Schritt 4)
+3. Die acht Messwerte (Schritt 5)
+4. Kommentierte Datei importierbar? (Schritt 6)
+5. Mapkey-Text und ob das Abspielen funktioniert (Schritt 7)
+6. Alles, was unerwartet war — Fehlermeldungen bitte wörtlich
 
 ---
 
 ## Abnahme M0
 
+- [x] Umgebung geprüft, nichts zu installieren
+- [x] IBL-Import funktioniert grundsätzlich
+- [x] Achskonvention verstanden und in `creo8.yaml` festgeschrieben
 - [ ] Alle acht Messungen innerhalb ±0,01 mm
 - [ ] Spline glatt und durch seine Stützpunkte
-- [ ] Achszuordnung durch CS_AERO bestätigt
 - [ ] Verhalten bei Kommentarzeilen geklärt
 - [ ] Mapkey wiederholt den Import ohne Handeingriff
-- [ ] `creo8.yaml` enthält keine `AUSFUELLEN`-Einträge mehr
+- [ ] `creo8.yaml` ohne offene Einträge außer `OFFEN_BIS_M4` und `OFFEN_BIS_M5`
 
 Was nicht klappt, wird nicht weggelassen, sondern notiert — davon hängt der Zuschnitt von M1 und M5 ab.
