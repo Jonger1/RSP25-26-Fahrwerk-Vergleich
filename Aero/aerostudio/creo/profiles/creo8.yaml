@@ -1,0 +1,56 @@
+# Versionsprofil Creo 8
+#
+# Alles, was von der Creo-Version abhaengt, steht hier und nirgendwo sonst.
+# Der Anwendungscode kennt keine Creo-Version, er laedt dieses Profil.
+# Fuer eine neuere Creo-Version wird eine Kopie dieser Datei angelegt und
+# ausgefuellt - der Code bleibt unveraendert.
+#
+# Felder mit AUSFUELLEN werden in M0 belegt.
+
+profile:
+  id: creo8
+  label: "Creo Parametric 8.0"
+  status: aktiv          # aktiv | veraltet | ungeprueft
+
+creo:
+  version: "8"
+  datecode: AUSFUELLEN            # Hilfe -> Ueber Creo Parametric
+  loadpoint: AUSFUELLEN           # z.B. C:\Program Files\PTC\Creo 8.0.x.x
+  units_template: mmNs
+  # Solange irgendwo Creo 8 laeuft, werden ALLE Modelldateien hier gespeichert.
+  # Creo oeffnet aeltere Dateien, aber niemals neuere.
+  speichert_modelldateien: true
+
+api_toolkits:
+  # Komponente "API Toolkits" der Creo-Installation. Kostenlos, gleicher Installer.
+  # Nur fuer M5 (CREOSON) und M7 (Ribbon-Plugin) noetig.
+  installiert: AUSFUELLEN         # true | false
+  otk_java_free_pfad: AUSFUELLEN  # <loadpoint>\<datecode>\Common Files\otk\otk_java_free
+  java_version: 11                # in Creo 8 ist Java 11 die unterstuetzte Version
+
+creoson:
+  min_version: "2.8.0"            # frueher kein Creo-8-Support
+  # Bei Creo 7 und 8 zwingend zu Sessionbeginn aufzurufen, sonst arbeitet
+  # CREOSON mit falschen Annahmen.
+  set_creo_version: "8"
+
+koordinatensystem:
+  name: CS_AERO
+  # Achszuordnung Tool -> Creo. Wird in M0 beobachtet und hier festgeschrieben,
+  # endgueltig festgelegt in M4 bei der Integration ins Fahrzeugmodell.
+  x: AUSFUELLEN                   # Fahrzeug: nach hinten
+  y: AUSFUELLEN                   # Fahrzeug: nach rechts
+  z: AUSFUELLEN                   # Fahrzeug: nach oben
+
+mapkeys:
+  # In M0 aufgezeichnet. Einzige versionsfragile Stelle im ganzen System -
+  # deshalb hier isoliert und durch "aerostudio doctor" abgesichert.
+  import_curve: AUSFUELLEN
+  delete_import_feature: null     # erst in M5 noetig
+
+befunde:
+  # Ergebnisse der M0-Pruefung, damit spaetere Versionen dagegen vergleichen koennen.
+  ibl_kommentarzeilen_erlaubt: AUSFUELLEN   # true | false
+  masshaltigkeit_ok: AUSFUELLEN             # true | false
+  geprueft_am: AUSFUELLEN
+  geprueft_von: AUSFUELLEN

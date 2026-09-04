@@ -1,0 +1,64 @@
+! RSP Aero Studio - M0 Pruefkurve, kommentierte Variante
+! Zweck: pruefen, ob Creo 8 Kommentarzeilen in einer IBL akzeptiert.
+! Geometrie identisch zu M0_pruefkurve.ibl
+! AERO_SPEC_HASH: 0000000000000000000000000000000000000000
+! Einheiten: mm
+open
+arclength
+
+! Grosses Rechteck 200 x 50 bei y = 0, Sektionen 1 bis 4
+begin section ! 1
+        begin curve
+    1     0.000000     0.000000     0.000000
+    2   200.000000     0.000000     0.000000
+
+begin section ! 2
+        begin curve
+    1   200.000000     0.000000     0.000000
+    2   200.000000     0.000000    50.000000
+
+begin section ! 3
+        begin curve
+    1   200.000000     0.000000    50.000000
+    2     0.000000     0.000000    50.000000
+
+begin section ! 4
+        begin curve
+    1     0.000000     0.000000    50.000000
+    2     0.000000     0.000000     0.000000
+
+! Spline-Test, Scheitel bei x = 100 / z = 80
+begin section ! 5
+        begin curve
+    1     0.000000     0.000000    50.000000
+    2    50.000000     0.000000    70.000000
+    3   100.000000     0.000000    80.000000
+    4   150.000000     0.000000    70.000000
+    5   200.000000     0.000000    50.000000
+
+! Kleines Rechteck 100 x 25 bei y = 300, Sektionen 6 bis 9
+begin section ! 6
+        begin curve
+    1     0.000000   300.000000     0.000000
+    2   100.000000   300.000000     0.000000
+
+begin section ! 7
+        begin curve
+    1   100.000000   300.000000     0.000000
+    2   100.000000   300.000000    25.000000
+
+begin section ! 8
+        begin curve
+    1   100.000000   300.000000    25.000000
+    2     0.000000   300.000000    25.000000
+
+begin section ! 9
+        begin curve
+    1     0.000000   300.000000    25.000000
+    2     0.000000   300.000000     0.000000
+
+! Richtungsmarke: 150 mm entlang +y
+begin section ! 10
+        begin curve
+    1     0.000000     0.000000     0.000000
+    2     0.000000   150.000000     0.000000
