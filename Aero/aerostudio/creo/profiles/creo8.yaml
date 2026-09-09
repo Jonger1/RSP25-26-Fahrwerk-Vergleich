@@ -103,8 +103,51 @@ mapkeys:
   delete_import_feature: null     # erst in M5 noetig
 
 befunde:
-  ibl_import_funktioniert: true             # 05.09.2026, Feature "Kurve Aus Datei"
+  ibl_import_funktioniert: true
+  masshaltigkeit_ok: true
   ibl_kommentarzeilen_erlaubt: AUSFUELLEN
-  masshaltigkeit_ok: AUSFUELLEN
-  geprueft_am: "2026-09-05"
+  cs_aero_import_geprueft: AUSFUELLEN       # Import lief bisher ueber Datei->Oeffnen
+  geprueft_am: "2026-09-09"
   geprueft_von: "Jannis"
+
+  # Gemessen am 09.09.2026, alle Sollwerte exakt getroffen:
+  #   grosses Rechteck   200.000 x  50.000 mm
+  #   kleines Rechteck   100.000 x  25.000 mm
+  #   Querabstand        300.000 mm
+  #   Segmentluecke        0.000 mm  -> Sektionen haengen sauber zusammen
+  masse:
+    rechteck_gross: [200.000, 50.000]
+    rechteck_klein: [100.000, 25.000]
+    querabstand: 300.000
+    segmentluecke: 0.000
+
+  # Eine .ibl laesst sich in Creo per Datei -> Oeffnen direkt als neues Teil
+  # oeffnen. Bequem zum Nachmessen, aber ohne Kontrolle ueber das
+  # Koordinatensystem - das Teil bekommt das Standard-KS der Vorlage.
+  # Fuer den Arbeitsablauf ist deshalb Modell -> Daten abrufen -> Importieren
+  # noetig, nur dort laesst sich CS_AERO waehlen.
+  ibl_per_datei_oeffnen_moeglich: true
+
+spline:
+  # BEFUND M0, der wichtigste des Meilensteins.
+  # Creo baut aus einer IBL-Sektion einen interpolierenden kubischen Spline
+  # mit not-a-knot-Randbedingung, parametrisiert ueber die kumulierte
+  # Sehnenlaenge. Nachgewiesen an der Splinesektion der Pruefkurve:
+  #   Creo gemessen            210.184  mm
+  #   Python not-a-knot        210.1857 mm
+  #   Abweichung                 1.7    um
+  # Damit ist die Kurve, die Creo bauen wird, in Python exakt vorhersagbar.
+  typ: "kubisch, interpolierend, not-a-knot"
+  parametrisierung: "kumulierte Sehnenlaenge"
+  nachweis_creo_mm: 210.184
+  nachweis_python_mm: 210.1857
+  nachweis_skript: creo/test/spline_verifikation.py
+
+  # Konsequenz fuer M1: Die Punktzahl pro Profilkurve wird berechnet, nicht
+  # geschaetzt. Fuer NACA 4412 bei 250 mm Sehne genuegen 34 Punkte je Flaeche,
+  # um unter der halben Modellgenauigkeit zu bleiben; ab etwa 40 Punkten
+  # bringt mehr nichts. Der frueher angenommene Bereich 60-120 war zu
+  # konservativ. Weniger Punkte sind in Creo strikt besser.
+  punktzahl_wird_berechnet: true
+  punktzahl_richtwert: 40
+  punktzahl_toleranz_mm: 0.005
