@@ -106,6 +106,23 @@ class Befund:
         return text
 
 
+@dataclass
+class Zone:
+    """Ein Abschnitt der Sehne mit gleichem Laminataufbau."""
+
+    art: str        # "vollmaterial" | "schale" | "sandwich"
+    von: float      # Sehnenanteil, 0 bis 1
+    bis: float
+
+    @property
+    def laenge(self) -> float:
+        return self.bis - self.von
+
+    def __str__(self) -> str:
+        return (f"  {self.art:<13}{self.von*100:6.1f} % .. {self.bis*100:5.1f} %"
+                f"   ({self.laenge*100:4.1f} % der Sehne)")
+
+
 # --------------------------------------------------------------------- Profil
 
 @dataclass
@@ -406,6 +423,40 @@ class Profil:
 
     # -------------------------------------------------------------- Pruefungen
 
+    def laminatzonen(self, fertigung, sehne_mm: float, n: int = 2001) -> list[Zone]:
+        """Teilt die Sehne nach dem moeglichen Laminataufbau auf.
+
+        Eine Fluegelschale ist nicht ueberall gleich gebaut. Nach vorne und nach
+        hinten laeuft das Profil zusammen; irgendwann passt kein Kern mehr
+        hinein, und ganz aussen passt nicht einmal mehr eine Schale. Genau so
+        wird das Bauteil auch laminiert - der Kern wird eingelegt, wo Platz ist,
+        und weggelassen, wo es eng wird.
+
+        Drei Zonen, von der Dicke her unterschieden:
+          sandwich       Dicke >= 2 Haeute + Kern
+          schale         Dicke >= 2 Haeute
+          vollmaterial   alles darunter
+        """
+        x, d = self.dickenverlauf(n)
+        dicke_mm = d * float(sehne_mm)
+
+        def art(t: float) -> str:
+            if fertigung.kern > 0 and t >= fertigung.dicke_sandwich:
+                return "sandwich"
+            if t >= fertigung.dicke_schale:
+                return "schale"
+            return "vollmaterial"
+
+        arten = [art(t) for t in dicke_mm]
+        zonen: list[Zone] = []
+        beginn = 0
+        for i in range(1, len(arten) + 1):
+            if i == len(arten) or arten[i] != arten[beginn]:
+                zonen.append(Zone(arten[beginn], float(x[beginn]),
+                                  float(x[min(i, len(x) - 1)])))
+                beginn = i
+        return zonen
+
     def pruefe_fertigung(self, fertigung, sehne_mm: float) -> list[Befund]:
         """Prueft das Profil gegen Reglement und Fertigungsgrenzen.
 
@@ -429,23 +480,32 @@ class Profil:
                         f"strenger Messung im Scrutineering ist das die "
                         f"Angriffsflaeche. Dickere Haut oder Klebespalt hilft."))
 
-            # Ab wo ist das Profil zu duenn fuer den Sandwichaufbau?
-            # Dahinter ist das Bauteil Vollmaterial. Gesucht wird von HINTEN:
-            # an der Nase ist die Dicke ebenfalls null, ein Vorwaertssuchen
-            # findet also immer x = 0 und meldet Unsinn.
-            x, d = self.dickenverlauf(801)
-            dick_genug = np.where(d * sehne_mm >= fertigung.dicke_min)[0]
-            voll_ab = float(x[dick_genug[-1]]) if len(dick_genug) else 0.0
+            # Ab wo ist das Profil zu duenn fuer eine Schale? Dahinter ist das
+            # Bauteil Vollmaterial. Gesucht wird von HINTEN: an der Nase ist die
+            # Dicke ebenfalls null, ein Vorwaertssuchen findet also immer x = 0.
+            zonen = self.laminatzonen(fertigung, sehne_mm)
+            hinten = [z for z in zonen if z.art == "vollmaterial" and z.bis > 0.5]
+            voll_ab = hinten[0].von if hinten else 1.0
             befunde.append(Befund(
                 "Vollmaterial ab", voll_ab >= fertigung.verklebung_beginn_max - 1e-9,
                 voll_ab * 100.0, fertigung.verklebung_beginn_max * 100.0,
                 einheit="% Sehne",
                 hinweis=f"Hinter dieser Stelle ist das Profil duenner als die "
-                        f"{fertigung.dicke_min:g} mm, die der Aufbau braucht - dort "
-                        f"wird das Bauteil Vollmaterial. Je frueher das beginnt, "
-                        f"desto schwerer wird der Fluegel. Duennere Haut, kein "
-                        f"Kern oder ein dickeres Profil verschiebt die Stelle "
-                        f"nach hinten."))
+                        f"{fertigung.dicke_schale:g} mm, die zwei Haeute brauchen. "
+                        f"Je frueher das beginnt, desto schwerer wird der Fluegel. "
+                        f"Duennere Haut oder ein dickeres Profil verschiebt die "
+                        f"Stelle nach hinten."))
+
+            # Lohnt sich der Kern ueberhaupt?
+            if fertigung.kern > 0:
+                anteil = sum(z.laenge for z in zonen if z.art == "sandwich")
+                befunde.append(Befund(
+                    "Sandwichanteil", anteil >= 0.30, anteil * 100.0, 30.0,
+                    einheit="% Sehne", stufe="hinweis",
+                    hinweis=f"Ein {fertigung.kern:g} mm dicker Kern passt nur auf "
+                            f"diesem Teil der Sehne hinein. Bei wenig Anteil lohnt "
+                            f"der Aufwand kaum - duennerer Kern oder ganz weglassen."))
+
         else:
             hk = self.hinterkante_dicke * sehne_mm
             befunde.append(Befund(

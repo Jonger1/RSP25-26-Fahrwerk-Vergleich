@@ -158,14 +158,48 @@ def test_vollmaterial_wird_von_hinten_gesucht():
     assert befund.ist > 80.0
 
 
-def test_duennerer_aufbau_verschiebt_das_vollmaterial_nach_hinten():
-    """Ohne Kern bleibt das Bauteil laenger Schale."""
+def test_kern_beeinflusst_die_baubarkeit_nicht():
+    """Team-Entscheidung: Der Kern wird nur dort eingelegt, wo er hinpasst.
+
+    Damit haengt die Frage, ob sich das Bauteil ueberhaupt bauen laesst, nur
+    noch an den zwei Haeuten - die Kerndicke verschiebt sie nicht mehr. Vorher
+    hat ein dickerer Kern Profile blockiert, die in Wirklichkeit problemlos
+    baubar sind, weil man den Kern hinten einfach weglaesst.
+    """
     p = Profil.aus_dat(_katalog("s1223.dat"))
-    mit = {b.pruefung: b.ist for b in p.pruefe_fertigung(
-        Fertigung(wandstaerke=0.6, kern=2.0), 250.0)}["Vollmaterial ab"]
-    ohne = {b.pruefung: b.ist for b in p.pruefe_fertigung(
-        Fertigung(wandstaerke=0.6, kern=0.0), 250.0)}["Vollmaterial ab"]
-    assert ohne > mit
+    werte = [
+        {b.pruefung: b.ist for b in p.pruefe_fertigung(
+            Fertigung(wandstaerke=0.6, kern=k), 250.0)}["Vollmaterial ab"]
+        for k in (0.0, 3.0, 8.0)
+    ]
+    assert werte[0] == pytest.approx(werte[1]) == pytest.approx(werte[2])
+
+
+def test_dickerer_kern_verkleinert_die_sandwichzone():
+    """Je dicker der Kern, desto weniger Sehne bietet ihm Platz."""
+    p = Profil.aus_dat(_katalog("e423.dat"))
+    anteile = []
+    for kern in (2.0, 5.0, 10.0):
+        f = Fertigung(wandstaerke=0.6, kern=kern)
+        zonen = p.laminatzonen(f, 250.0)
+        anteile.append(sum(z.laenge for z in zonen if z.art == "sandwich"))
+    assert anteile == sorted(anteile, reverse=True)
+
+
+def test_zonen_decken_die_sehne_lueckenlos_ab():
+    """Die Zonen muessen aneinander anschliessen - sonst fehlt Bauteil."""
+    p = Profil.aus_dat(_katalog("fx63137.dat"))
+    zonen = p.laminatzonen(Fertigung(wandstaerke=0.6, kern=3.0), 250.0)
+    assert zonen[0].von == pytest.approx(0.0, abs=1e-6)
+    assert zonen[-1].bis == pytest.approx(1.0, abs=1e-3)
+    for vorher, danach in zip(zonen, zonen[1:]):
+        assert danach.von == pytest.approx(vorher.bis, abs=1e-6)
+
+
+def test_ohne_kern_gibt_es_keine_sandwichzone():
+    p = Profil.aus_dat(_katalog("e423.dat"))
+    zonen = p.laminatzonen(Fertigung(wandstaerke=0.6, kern=0.0), 250.0)
+    assert not any(z.art == "sandwich" for z in zonen)
 
 
 def test_dieselbe_form_kann_an_der_sehne_scheitern():
@@ -181,8 +215,16 @@ def test_dieselbe_form_kann_an_der_sehne_scheitern():
 
 
 def test_mindestdicke_folgt_aus_dem_aufbau():
-    assert Fertigung(wandstaerke=0.6, kern=2.0).dicke_min == pytest.approx(3.2)
-    assert Fertigung(wandstaerke=1.5).dicke_min == pytest.approx(3.0)
+    """Bei zonenweisem Kern binden nur die Haeute, sonst Haeute plus Kern."""
+    zonal = Fertigung(wandstaerke=0.6, kern=2.0, kern_zonenweise=True)
+    assert zonal.dicke_schale == pytest.approx(1.2)
+    assert zonal.dicke_sandwich == pytest.approx(3.2)
+    assert zonal.dicke_min == pytest.approx(1.2)
+
+    durchgehend = Fertigung(wandstaerke=0.6, kern=2.0, kern_zonenweise=False)
+    assert durchgehend.dicke_min == pytest.approx(3.2)
+
+    assert Fertigung(wandstaerke=1.5, kern=0.0).dicke_min == pytest.approx(3.0)
     assert Fertigung(dicke_min_ueberschreibung=1.8).dicke_min == pytest.approx(1.8)
 
 

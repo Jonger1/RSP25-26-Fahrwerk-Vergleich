@@ -49,7 +49,14 @@ class Fertigung(BaseModel):
         description="Dicke EINER Laminathaut in mm.")
     kern: float = Field(
         default=0.0, ge=0.0,
-        description="Kerndicke bei Sandwichaufbau in mm. 0 = kein Kern.")
+        description="Kerndicke in mm. 0 = kein Kern, reine Schale.")
+    kern_zonenweise: bool = Field(
+        default=True,
+        description="Kern nur dort einlegen, wo das Profil dick genug ist. "
+                    "Wo es zusammenlaeuft, bleibt reine Schale, ganz hinten "
+                    "Vollmaterial. Das ist der reale Aufbau einer Fluegelschale "
+                    "- und es entkoppelt die Kerndicke von der Frage, ob sich "
+                    "das Bauteil ueberhaupt bauen laesst.")
 
     dicke_min_ueberschreibung: Optional[float] = Field(
         default=None, gt=0.0,
@@ -93,22 +100,35 @@ class Fertigung(BaseModel):
         return 2.0 * self.wandstaerke + self.klebespalt
 
     @property
-    def dicke_min(self) -> float:
-        """Kleinste zulaessige lokale Profildicke in mm.
+    def dicke_schale(self) -> float:
+        """Dicke, ab der eine reine Schale ohne Kern moeglich ist: zwei Haeute."""
+        return 2.0 * self.wandstaerke
 
-        Zwei Haeute plus Kern - das ist die Dicke, unter der sich das Bauteil
-        nicht mehr laminieren laesst, unabhaengig davon, was die Aerodynamik
-        gerne haette.
+    @property
+    def dicke_sandwich(self) -> float:
+        """Dicke, ab der ein Sandwich moeglich ist: zwei Haeute plus Kern."""
+        return 2.0 * self.wandstaerke + self.kern
+
+    @property
+    def dicke_min(self) -> float:
+        """Kleinste Dicke, bei der sich das Bauteil ueberhaupt noch bauen laesst.
+
+        Bei zonenweisem Kern sind das zwei Haeute - der Kern entfaellt einfach
+        dort, wo das Profil zusammenlaeuft. Wer den Kern durchgehend haben will,
+        setzt kern_zonenweise auf false; dann bindet die Sandwichdicke.
         """
         if self.dicke_min_ueberschreibung is not None:
             return self.dicke_min_ueberschreibung
-        return 2.0 * self.wandstaerke + self.kern
+        return self.dicke_schale if self.kern_zonenweise else self.dicke_sandwich
 
     def beschreibung(self) -> str:
         if self.dicke_min_ueberschreibung is not None:
             herkunft = "gesetzt"
+        elif self.kern > 0 and self.kern_zonenweise:
+            herkunft = (f"2 x {self.wandstaerke:g} Haut, "
+                        f"{self.kern:g} Kern zonenweise")
         elif self.kern > 0:
-            herkunft = f"2 x {self.wandstaerke:g} Haut + {self.kern:g} Kern"
+            herkunft = f"2 x {self.wandstaerke:g} Haut + {self.kern:g} Kern durchgehend"
         else:
             herkunft = f"2 x {self.wandstaerke:g} Haut"
         hk = (f"Hinterkante {self.hinterkante_gebaut:g} mm aus Verklebung"
