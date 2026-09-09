@@ -1,0 +1,140 @@
+# FS Rules 2027 - ENTWURF
+#
+# ===================================================================
+#  ACHTUNG: DRAFT ONLY - SUBJECT TO CHANGES
+#  Quelle: FSG Academy, 25.10.2025, Anhang "Outlook for 2027 -
+#          Aerodynamics", https://fsg.one/academy
+#  Der endgueltige Regeltext ist noch nicht veroeffentlicht.
+# ===================================================================
+#
+# Diese Datei existiert, damit sich beide Regelstaende gegeneinander
+# pruefen lassen. Der Validator laeuft ueber BEIDE und meldet getrennt,
+# damit sichtbar wird, welche Auslegung 2026 noch zulaessig waere, 2027
+# aber nicht mehr.
+#
+# Alle Laengen in mm. Bezugsebene z = 0 ist der Boden.
+
+meta:
+  version: "2027-draft"
+  quelle: "FSG Academy 25.10.2025, Appendix: Outlook for 2027 - Aerodynamics"
+  status: entwurf
+  verbindlich: false
+  eingearbeitet_am: "2026-09-09"
+
+# --------------------------------------------------- T 2.1 Offene Raeder
+t2_1_3:
+  beschreibung: >
+    Keep-out-Zone: zwei Linien, senkrecht 75 mm vor und 75 mm hinter dem
+    Aussendurchmesser der Vorder- und Hinterreifen in der Seitenansicht,
+    Lenkung geradeaus. Lateral von der Aussen- bis zur Innenebene des
+    Rad/Reifen-Verbunds. Die Rad/Reifen-Ansicht von der Seite muss frei sein.
+  abstand_vor_reifen: 75
+  abstand_hinter_reifen: 75
+
+  # NEU GEGENUEBER 2026:
+  # "The keep-out-zone at the rear tires extends up to 700 mm above the ground."
+  # Bisher war die Zone in der Hoehe nicht begrenzt beschrieben. Die 700 mm
+  # setzen jetzt eine klare Obergrenze - und treffen damit alles, was seitlich
+  # neben dem Hinterrad sitzt.
+  hoehe_hinterreifen: 700
+  neu_2027: true
+
+t2_1_4:
+  # KOMPLETT NEU IN 2027.
+  beschreibung: >
+    Kein Fahrzeugteil vor der Vertikalebene durch die Vorderkante der
+    Vorderreifen darf in eine variable Keep-out-Zone ragen. Diese besteht aus
+    zwei unabhaengigen, sich nicht schneidenden Quadern von 75 mm x 250 mm x
+    unendlicher Laenge. Die unendlich langen Kanten zeigen geradeaus, zwei von
+    ihnen beruehren den Boden. Die Quader duerfen nicht ueber den aeussersten
+    Punkt des Vorderrads hinausragen.
+  quader_breite: 75
+  quader_hoehe: 250
+  neu_2027: true
+  # Bedeutung fuer uns: Der Frontfluegel muss die beiden bodennahen Quader
+  # freihalten. Das ist die Zone, in der ein durchgehendes unteres Element
+  # bisher am meisten Abtrieb geholt hat.
+
+# ----------------------------------------- T 8.2 Aerodynamische Anbauteile
+t8_2_1:
+  beschreibung: Hoehenbeschraenkungen
+
+  vor_vorderreifen:
+    # GEAENDERT: 2026 waren es 250 mm, und der Bezug war die Vorderachse
+    # zusammen mit einer Bedingung ueber den innersten Radpunkt.
+    # 2027: schlicht 350 mm, bezogen auf die VORDERKANTE der Vorderreifen.
+    bezug: "Vertikalebene durch die Vorderkante der Vorderreifen"
+    max_hoehe: 350
+    alt_2026: 250
+    geaendert_2027: true
+
+  hinter_kopfstuetze:
+    bezug: >
+      Vertikalebene durch den hintersten Punkt der Vorderflaeche der
+      Kopfstuetzenaufnahme, ohne Polster, in hinterster Einstellposition
+    max_hoehe: 1100
+    # NEU: eine UNTERGRENZE. 2026 gab es nur die 1100 mm nach oben.
+    min_hoehe: 700
+    min_hoehe_neu_2027: true
+    # Bedeutung: Der Heckfluegel muss ueber 700 mm liegen. Tief angesetzte
+    # Heckfluegel und alles, was zwischen Kopfstuetzenebene und 700 mm sitzt,
+    # sind damit unzulaessig.
+
+  alle_uebrigen:
+    # NEU IN 2027.
+    beschreibung: >
+      Alle uebrigen aerodynamischen Anbauteile muessen unterhalb der virtuellen
+      Ebene durch die obersten Punkte der vier Reifen liegen.
+    bezug: "Ebene durch die obersten Punkte der vier Reifen"
+    neu_2027: true
+    # Bedeutung: Zwischen Vorderreifen und Kopfstuetzenebene ist die Bauhoehe
+    # auf Reifenoberkante begrenzt - bei 16-Zoll-Reifen also rund 406 mm.
+
+t8_2_2:
+  beschreibung: Breitenbeschraenkungen
+
+  unterhalb_reifenoberkante:
+    # 2026 lautete die Schwelle 500 mm Hoehe und "hinter der Vorderachse".
+    # 2027: Schwelle ist die Reifenoberkante, Bezug die Vorderkante des
+    # Vorderreifens.
+    bedingung: >
+      niedriger als die obersten Punkte der vier Reifen und weiter hinten als
+      die Vertikalebene durch die Vorderkante des Vorderreifens
+    grenze: "Vertikalebene am aeussersten Punkt von Vorder- und Hinterrad"
+    geaendert_2027: true
+
+  oberhalb_reifenoberkante:
+    bedingung: "hoeher als die Oberkante der Reifen"
+    grenze: "nicht ausserhalb des aeussersten Punktes des Hinterrads"
+    # 2026 stand hier "innerster Punkt des Hinterrads" bei ueber 500 mm.
+    # 2027 ist es der AEUSSERSTE Punkt - also deutlich mehr Breite fuer den
+    # Heckfluegel. Das ist die einzige Lockerung im ganzen Entwurf.
+    alt_2026: "innerster Punkt des Hinterrads"
+    geaendert_2027: true
+
+t8_2_3:
+  beschreibung: Laengenbeschraenkungen
+  max_hinter_hinterreifen: 250
+  max_vor_vorderreifen: 700
+  # Unveraendert gegenueber 2026.
+
+t8_2_4:
+  beschreibung: >
+    Alle Beschraenkungen gelten mit geradeaus stehenden Raedern und bei jedem
+    Federungssetup, mit oder ohne Fahrer im Fahrzeug.
+  # Unveraendert. Das ist die Regel, wegen der der Validator ueber den
+  # gesamten Fahrzustands-Envelope rechnen muss und nicht nur statisch.
+  ueber_envelope: true
+
+# ---------------------------------------------------- Uebernommen aus 2026
+# Diese Regeln standen nicht im Academy-Anhang und gelten bis zum Beweis des
+# Gegenteils unveraendert weiter.
+uebernommen_aus_2026:
+  t2_2_1_bodenfreiheit_min: 30
+  t2_2_2_schleifschuerzen_verboten: true
+  t2_4_1_radius_vorwaerts: 3
+  t2_4_1_radius_uebrige: 1
+  t8_3_1_last: 200          # N, verteilt auf min. 225 cm2
+  t8_3_1_verformung_max: 10 # mm
+  t8_3_2_last: 50           # N, beliebige Richtung
+  t8_3_2_verformung_max: 25 # mm

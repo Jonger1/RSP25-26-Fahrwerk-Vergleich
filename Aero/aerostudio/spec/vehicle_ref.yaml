@@ -29,12 +29,17 @@ raeder:
   # Bestaetigt durch die Kinematikexporte: die Spurkennlinien laufen in der
   # Konstruktionslage exakt durch 1200.0 bzw. 1180.0 mm.
 
+  # 16 Zoll Aussendurchmesser, 7.5 Zoll Breite, vorne und hinten gleich.
+  # Umgerechnet: 16 x 25.4 = 406.4 mm, 7.5 x 25.4 = 190.5 mm.
+  # ANNAHME: das ist der UNBELASTETE Durchmesser. Unter Last ist der
+  # Abrollradius kleiner; fuer die Laengengrenzen aus T 8.2.3 zaehlt aber die
+  # Reifenkontur, nicht der Abrollradius - deshalb hier unkritisch.
   reifen_vorne:
-    durchmesser: AUSFUELLEN           # bei Fahrzeugmasse, nicht unbelastet
-    breite: AUSFUELLEN
+    durchmesser: 406.4
+    breite: 190.5
   reifen_hinten:
-    durchmesser: AUSFUELLEN
-    breite: AUSFUELLEN
+    durchmesser: 406.4
+    breite: 190.5
 
   # Aus Spurweite und Reifenbreite rechnet das Werkzeug die innersten und
   # äußersten Punkte selbst aus. Nur eintragen, falls die Felgen asymmetrisch
@@ -47,13 +52,22 @@ raeder:
 # der Kopfstützenaufnahme, ohne Polster, in HINTERSTER Einstellposition.
 # Davor gilt 500 mm Höhengrenze, dahinter 1100 mm.
 cockpit:
-  kopfstuetze_x_hinterste_position: AUSFUELLEN
+  # Aus dem Fahrzeugmodell abgelesen. Helmmittelpunkt liegt bei X = -1019.11,
+  # Z = 702.949 im CAD-Koordinatensystem des Autos.
+  # Soll laut Team VARIABEL bleiben - die Kopfstuetzenlage aendert sich noch.
+  kopfstuetze_x_hinterste_position: 1000     # gerundet, im Werkzeug-KS
+  kopfstuetze_variabel: true
+  kopfstuetze_z_helm: 703                    # nur informativ
 
 # ------------------------------------------------ Frontstruktur (T 3.20)
 # Aeroteile dürfen vor die Anti-Intrusion-Platte ragen, ihr Anbindungspunkt
 # ans Chassis muss aber dahinter liegen.
 frontstruktur:
-  aip_x: AUSFUELLEN                   # Lage der Anti-Intrusion-Platte
+  # Eckpunkt der AIP im CAD: X = 514.000, Y = 103.127, Z = 463.353
+  # Im CAD ist +X nach VORNE, die Platte liegt also 514 mm VOR der Vorderachse.
+  # Im Werkzeug-KS (x nach hinten) entspricht das -514.
+  aip_x: -514
+  aip_z: 463
   frontschott_x: AUSFUELLEN
 
 # ------------------------------------------------------------ Fahrwerk
@@ -61,7 +75,11 @@ frontstruktur:
 # T 8.2:   alle Grenzen gelten "with any suspension setup, with or without
 #          a driver" - deshalb reicht die statische Lage nicht.
 fahrwerk:
-  bodenfreiheit_statisch: AUSFUELLEN
+  # 40 mm, soll aber einstellbar bleiben - das Reglement fordert nur
+  # mindestens 30 mm (T 2.2.1), der Rest ist Auslegung.
+  bodenfreiheit_statisch: 40
+  bodenfreiheit_variabel: true
+  bodenfreiheit_min_regel: 30
 
   # Zeigt auf eure vorhandenen Kinematikexporte. Das Werkzeug liest daraus
   # den Federungs-Envelope und prüft die Regeln über den gesamten Bereich.
@@ -86,5 +104,36 @@ fahrwerk:
   ersatzwerte:
     radhub_einfedern: AUSFUELLEN      # positiv, in mm
     radhub_ausfedern: AUSFUELLEN
-    nickwinkel_max: AUSFUELLEN        # Bremsen und Beschleunigen
+    # OFFEN: soll berechnet werden. Dafuer fehlen mir noch Fahrzeugmasse,
+    # Schwerpunkthoehe und maximale Verzoegerung - siehe offene_punkte unten.
+    nickwinkel_max: BERECHNEN
     wankwinkel_max: AUSFUELLEN
+
+# ------------------------------------------------- CAD-Koordinatensystem
+# BEFUND 09.09.2026 aus dem Fahrzeugmodell:
+#   +X zeigt nach VORNE   (AIP bei +514, Helm bei -1019)
+#   +Z zeigt nach OBEN    (Helm bei 703, AIP bei 463 - passt zu Hoehen ueber Grund)
+#   Ursprung in der Vorderachsmitte, z = 0 auf der Bodenebene
+#
+# Das Werkzeug rechnet bisher mit x nach HINTEN. Beide Konventionen sind
+# gueltig, aber sie unterscheiden sich im Vorzeichen von x. Solange das an
+# einer einzigen Stelle umgerechnet wird, ist das unkritisch - genau wie schon
+# bei der Y/Z-Frage beim IBL-Export.
+#
+# ZU KLAEREN: Zeigt +Y im Fahrzeugmodell nach links oder nach rechts?
+# Bei +X vorne und +Z oben muss +Y nach LINKS zeigen, damit das
+# Koordinatensystem rechtshaendig ist (ISO 8855). Bitte einmal bestaetigen.
+cad_konvention:
+  x: "nach vorne"
+  z: "nach oben, z = 0 Bodenebene"
+  y: PRUEFEN
+  ursprung: "Vorderachsmitte"
+
+# ------------------------------------------------------- Offene Punkte
+offene_punkte:
+  # Fuer die Berechnung des Nickwinkels:
+  fahrzeugmasse_mit_fahrer: AUSFUELLEN     # kg
+  schwerpunkthoehe: AUSFUELLEN             # mm ueber Boden
+  verzoegerung_max: AUSFUELLEN             # g, aus Bremsauslegung oder Messung
+  # Damit und mit den Federraten aus den Kinematikexporten laesst sich der
+  # Nickwinkel ausrechnen. Ohne diese drei Werte nicht.

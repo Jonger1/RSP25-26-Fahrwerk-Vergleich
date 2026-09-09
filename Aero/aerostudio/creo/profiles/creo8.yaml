@@ -120,14 +120,30 @@ export:
 mapkeys:
   # In M0 aufgezeichnet. Einzige versionsfragile Stelle im ganzen System -
   # deshalb hier isoliert und durch "aerostudio doctor" abgesichert.
-  import_curve: AUSFUELLEN
-  delete_import_feature: null     # erst in M5 noetig
+  # HINFAELLIG. Am 09.09.2026 hat sich gezeigt, dass die Creo Student Edition
+  # gar keine Zusatzprogramme laedt - siehe befunde.plugin_laedt.
+  # Der Import bleibt manuell: Modell -> Daten abrufen -> Importieren, vier
+  # Klicks. Das funktioniert und braucht keine Lizenz.
+  import_curve: ENTFAELLT
+  delete_import_feature: ENTFAELLT
 
 befunde:
   ibl_import_funktioniert: true
   masshaltigkeit_ok: true
   ibl_kommentarzeilen_erlaubt: AUSFUELLEN
-  direktimport_geprueft: AUSFUELLEN         # vorgedrehte .ibl ohne eigenes KS
+  direktimport_geprueft: true               # vorgedrehte .ibl ohne eigenes KS
+
+  # BEFUND 09.09.2026: Das Plugin laedt NICHT.
+  # Weder ueber Werkzeuge -> Hilfsanwendungen (der Knopf ist in der Student
+  # Edition ausgegraut) noch ueber toolkit_registry_file in der config.pro.
+  # Keine Fehlermeldung, die Befehle erscheinen schlicht nicht.
+  # Damit sind Stufe 1 (CREOSON) und Stufe 2 (Ribbon-Plugin) auf dieser Lizenz
+  # nicht erreichbar - beide setzen voraus, dass Creo ein Toolkit-Programm
+  # ueberhaupt laedt. Auch der lizenzfreie IGES-Weg haette daran nichts
+  # geaendert: das Problem ist nicht die API, sondern das Laden.
+  plugin_laedt: false
+  plugin_grund: "Creo Parametric Student Edition laedt keine Toolkit-Anwendungen"
+  automatisierung_moeglich_ab: "Volllizenz mit TOOLKIT-Option"
   geprueft_am: "2026-09-09"
   geprueft_von: "Jannis"
 
