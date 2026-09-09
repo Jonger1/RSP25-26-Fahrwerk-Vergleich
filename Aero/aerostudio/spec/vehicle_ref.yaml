@@ -1,0 +1,90 @@
+# Fahrzeugreferenz für den Regelvalidator
+#
+# Hier stehen nur die Werte, die KEIN Kinematikprogramm exportiert. Alles
+# Bewegte - Radhub, Nicken, Wanken - liest das Werkzeug direkt aus euren
+# vorhandenen Textexporten unter RSP26/Textfiles/ ein. Format dort:
+#
+#     groesse [einheit]: [wert, wert, wert, ...]
+#
+# Diese Datei ist also kurz und muss nur einmal pro Fahrzeug gepflegt werden.
+#
+# Alle Längen in mm, Winkel in Grad.
+# Koordinatensystem: Ursprung Vorderachsmitte auf der Bodenebene,
+#                    x nach hinten, y nach rechts, z nach oben.
+#
+# AUSFUELLEN = von euch einzutragen.
+
+meta:
+  fahrzeug: RSP26
+  stand: "2026-09-09"
+  gepflegt_von: "Jannis"
+  # Gilt laut Team auch fuer RSP27.
+
+# --------------------------------------------------------------- Räder
+# Relevant für T 8.2 (Breiten- und Längengrenzen) und T 2.1.3 (Keep-out-Zone).
+raeder:
+  radstand: 1535                      # Vorderachse bis Hinterachse
+  spurweite_vorne: 1200               # Mitte Rad zu Mitte Rad
+  spurweite_hinten: 1180
+  # Bestaetigt durch die Kinematikexporte: die Spurkennlinien laufen in der
+  # Konstruktionslage exakt durch 1200.0 bzw. 1180.0 mm.
+
+  reifen_vorne:
+    durchmesser: AUSFUELLEN           # bei Fahrzeugmasse, nicht unbelastet
+    breite: AUSFUELLEN
+  reifen_hinten:
+    durchmesser: AUSFUELLEN
+    breite: AUSFUELLEN
+
+  # Aus Spurweite und Reifenbreite rechnet das Werkzeug die innersten und
+  # äußersten Punkte selbst aus. Nur eintragen, falls die Felgen asymmetrisch
+  # sitzen und die Rechnung nicht stimmt:
+  # innerster_punkt_vorne: null
+  # aeusserster_punkt_vorne: null
+
+# ------------------------------------------------------------- Cockpit
+# T 8.2.1 nennt die Vertikalebene durch den hintersten Punkt der Vorderfläche
+# der Kopfstützenaufnahme, ohne Polster, in HINTERSTER Einstellposition.
+# Davor gilt 500 mm Höhengrenze, dahinter 1100 mm.
+cockpit:
+  kopfstuetze_x_hinterste_position: AUSFUELLEN
+
+# ------------------------------------------------ Frontstruktur (T 3.20)
+# Aeroteile dürfen vor die Anti-Intrusion-Platte ragen, ihr Anbindungspunkt
+# ans Chassis muss aber dahinter liegen.
+frontstruktur:
+  aip_x: AUSFUELLEN                   # Lage der Anti-Intrusion-Platte
+  frontschott_x: AUSFUELLEN
+
+# ------------------------------------------------------------ Fahrwerk
+# T 2.2.1: mindestens 30 mm statische Bodenfreiheit mit Fahrer.
+# T 8.2:   alle Grenzen gelten "with any suspension setup, with or without
+#          a driver" - deshalb reicht die statische Lage nicht.
+fahrwerk:
+  bodenfreiheit_statisch: AUSFUELLEN
+
+  # Zeigt auf eure vorhandenen Kinematikexporte. Das Werkzeug liest daraus
+  # den Federungs-Envelope und prüft die Regeln über den gesamten Bereich.
+  kinematik_ordner: 'C:\Users\janni\Downloads\RSP26_Datacurves\RSP26_Datacurves'
+  # TODO: in das Repository kopieren, damit der Validator nicht von
+  # einem Downloads-Ordner abhaengt.
+
+  # Vollstaendig vorhanden: Hub, Wanken und Lenken fuer beide Achsen.
+  # Aus den Exporten gelesen am 09.09.2026:
+  #
+  #                    vorne                hinten
+  #   Radhub      -24.333 .. +24.354    -22.895 .. +22.937   mm
+  #   Wankwinkel   -2.329 ..  +2.324     -2.329 ..  +2.324   Grad
+  #   Spurweite  1196.76  .. 1200.47   1175.61  .. 1181.46   mm
+  #
+  # NICHT enthalten ist der NICKWINKEL. Fuer den Frontfluegel ist er der
+  # wichtigste Freiheitsgrad, weil er den Bodenabstand direkt aendert.
+  # Bitte nachliefern oder unten unter ersatzwerte eintragen.
+
+  # Ersatzweise, falls die Exporte nicht kurzfristig zu bekommen sind:
+  # dann rechnet das Werkzeug mit diesen Grenzwerten statt mit Kennlinien.
+  ersatzwerte:
+    radhub_einfedern: AUSFUELLEN      # positiv, in mm
+    radhub_ausfedern: AUSFUELLEN
+    nickwinkel_max: AUSFUELLEN        # Bremsen und Beschleunigen
+    wankwinkel_max: AUSFUELLEN
