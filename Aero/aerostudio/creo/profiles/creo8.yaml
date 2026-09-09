@@ -70,7 +70,6 @@ umgebung:
   java_konflikt_geklaert: OFFEN_BIS_M5
 
 koordinatensystem:
-  name: CS_AERO
 
   # BEFUND M0: Die Teamvorlage hat Y als Hochachse.
   # Ebenennamen XY_T_VORNE / XZ_T_OBEN / YZ_T_RECHTS, Standard-KS mit
@@ -80,21 +79,43 @@ koordinatensystem:
   # ueber Hoehen ueber Grund argumentiert (T 8.2: "lower than 500 mm from the
   # ground"). Mit z = 0 auf der Bodenebene wird jede Hoehenpruefung trivial.
   #
-  # Aufgeloest wird das NICHT im Exporter, sondern an genau einer Stelle:
-  # CS_AERO wird gegenueber dem Standard-KS um -90 Grad um X gedreht.
-  # Danach gilt:  unser z = Vorlage Y (oben), unser x = Vorlage X,
-  #               unser y = Vorlage -Z. Rechtshaendig.
+  # ENTSCHEIDUNG GEAENDERT am 09.09.2026:
+  # Frueher sollte in Creo von Hand ein gedrehtes CS_AERO angelegt werden.
+  # Das ist selbst eine Fehlerquelle - wer +90 statt -90 dreht, bekommt eine
+  # gespiegelte Geometrie, ohne dass es an der Form auffaellt. Stattdessen
+  # dreht der EXPORTER, gesteuert ueber `export.frame_map` weiter unten.
+  # Damit sitzt die Konvention weiterhin an genau einer Stelle, ist aber
+  # versionierbar und testbar - und in Creo muss niemand etwas anlegen.
   vorlage_hochachse: "Y"
-  cs_aero_aus_standard_ks: "Drehung -90 Grad um X"
 
   # Zuordnung Tool -> Fahrzeug. Steht fest, weil sie aus dem Reglement folgt.
   x: "nach hinten"
   y: "nach rechts"
   z: "nach oben, z = 0 auf der Bodenebene"
 
-  # OFFEN bis M4: Wie CS_AERO im echten Fahrzeugmodell liegt, also welche
-  # Richtung im Auto "hinten" ist. Bis dahin genuegt, dass z senkrecht steht.
+  # OFFEN bis M4: Wie das Aeroteil im echten Fahrzeugmodell platziert wird,
+  # also welche Richtung im Auto "hinten" ist. Das ist dann eine normale
+  # Baugruppen-Randbedingung, kein handgebautes Koordinatensystem.
   ausrichtung_im_fahrzeugmodell: OFFEN_BIS_M4
+
+export:
+  # Achsabbildung Werkzeug -> Creo-Vorlage, angewandt beim Schreiben der .ibl.
+  # Gelesen als: Creos X-Achse ist unser +x, Creos Y-Achse unser +z,
+  # Creos Z-Achse unser -y.
+  #
+  # Das Minuszeichen ist Pflicht, nicht Geschmack: mit +y waere die Abbildung
+  # eine Spiegelung (Determinante -1) und jedes Profil kaeme seitenverkehrt
+  # in Creo an, ohne dass man es der Form ansieht. Der Exporter prueft das
+  # und verweigert die Arbeit bei Determinante != +1.
+  frame_map:
+    creo_x: "+x"
+    creo_y: "+z"
+    creo_z: "-y"
+
+  # Folge: Eine erzeugte .ibl laesst sich direkt auf das Standard-Koordinaten-
+  # system importieren - oder sogar per Datei -> Oeffnen laden - und sitzt
+  # richtig. In Creo ist nichts vorzubereiten.
+  kein_eigenes_ks_noetig: true
 
 mapkeys:
   # In M0 aufgezeichnet. Einzige versionsfragile Stelle im ganzen System -
@@ -106,7 +127,7 @@ befunde:
   ibl_import_funktioniert: true
   masshaltigkeit_ok: true
   ibl_kommentarzeilen_erlaubt: AUSFUELLEN
-  cs_aero_import_geprueft: AUSFUELLEN       # Import lief bisher ueber Datei->Oeffnen
+  direktimport_geprueft: AUSFUELLEN         # vorgedrehte .ibl ohne eigenes KS
   geprueft_am: "2026-09-09"
   geprueft_von: "Jannis"
 

@@ -2,7 +2,7 @@
 
 **Ziel:** Beweisen, dass eine Kurve aus dem Tool maßhaltig und wiederholbar in Creo 8 landet. Solange das nicht bewiesen ist, ist alles ab M1 Spekulation.
 
-Rechner geprüft am 05.09.2026: Creo 8.0.3.0, alles Nötige vorhanden, **nichts zu installieren**. Es fehlen nur noch die Schritte, die in Creo selbst passieren müssen — Dauer etwa 30 Minuten.
+Stand 09.09.2026: Umgebung geprüft, **nichts zu installieren**. Maßhaltigkeit bewiesen, Splineverhalten identifiziert. Offen sind nur noch die Sichtprüfung mit der vorgedrehten Datei, der Kommentartest und der Mapkey — zusammen etwa 15 Minuten.
 
 **Dateien** in diesem Ordner:
 - `M0_pruefkurve.ibl` — die Prüfkurve
@@ -48,45 +48,45 @@ Auf einem anderen Rechner das Skript erneut laufen lassen, bevor es weitergeht.
 
 ---
 
-## Schritt 2 — Testteil und CS_AERO anlegen
+## Schritt 2 — Testteil anlegen
 
 1. **Datei → Neu → Teil → Volumenkörper**, Name `M0_TEST`.
-2. **Standardschablone verwenden lassen** — also den Haken **drin** lassen.
+2. **Standardschablone verwenden lassen** — Haken drin lassen.
 
-   > Wir nehmen bewusst die **Teamvorlage** `sut_de_startt.prt`, nicht PTCs `mmns_part_solid_abs`. Die Aeroteile müssen später in derselben Baugruppe leben wie der Rest des Fahrzeugs: gleiche Ebenenbenennung, gleicher Zeichnungsstandard, gleiche Parameter. Eine zweite Vorlagenfamilie erzeugt genau die Inkonsistenz, die man beim Zusammenbau teuer bezahlt. Die absolute Genauigkeit von 0,01 mm, die wir brauchen, steht in eurer `config.pro` ohnehin schon.
+   > Wir nehmen bewusst die **Teamvorlage** `sut_de_startt.prt`. Die Aeroteile müssen später in derselben Baugruppe leben wie der Rest des Fahrzeugs: gleiche Ebenenbenennung, gleicher Zeichnungsstandard, gleiche Parameter. Die absolute Genauigkeit von 0,01 mm steht in eurer `config.pro` ohnehin schon.
 
-3. **Datei → Vorbereiten → Modelleigenschaften → Einheiten** kontrollieren. Es muss ein **Millimeter**-System sein (`mmNs` oder `mmKs` — für die Geometrie ist beides gleich, entscheidend ist die Längeneinheit).
+3. Fertig. **Es ist kein Koordinatensystem anzulegen.**
 
-   Das ist die einzige Annahme, die von außen nicht prüfbar war. Steht dort Zoll: melden, nicht selbst umstellen.
+### Warum kein eigenes Koordinatensystem mehr
 
-4. **Modell → Koordinatensystem**
-5. Als Referenz das vorhandene **Standard-Koordinatensystem** wählen.
-6. Reiter **Ausrichtung** → **Um Achsen drehen** → **X: −90**
-7. Reiter **Eigenschaften** → Name **`CS_AERO`** → bestätigen.
+Die Teamvorlage hat **Y als Hochachse**, das Werkzeug rechnet mit **Z nach oben** — weil das Reglement durchgehend über Höhen über Grund argumentiert (T 8.2: „lower than 500 mm from the ground") und `z = 0` auf der Bodenebene jede Regelprüfung zu einem Vergleich macht.
 
-### Warum die Drehung
+Ursprünglich sollte dieser Unterschied durch ein von Hand gedrehtes `CS_AERO` aufgelöst werden. **Das war der falsche Ort.** Ein handgebautes Koordinatensystem ist selbst eine Fehlerquelle: Wer versehentlich +90° statt −90° dreht, bekommt eine gespiegelte Geometrie, ohne dass es an der Form auffällt.
 
-Die Teamvorlage hat **Y als Hochachse** (Ebenen `XY_T_VORNE`, `XZ_T_OBEN`, `YZ_T_RECHTS`). Normales Creo-Verhalten, kein Fehler.
+Seit 09.09.2026 dreht deshalb **der Exporter**, gesteuert über `export.frame_map` in `creo8.yaml`:
 
-Das Tool rechnet mit **Z als Hochachse**, weil das Reglement durchgehend über Höhen über Grund argumentiert — T 8.2 sagt „lower than 500 mm from the ground". Mit `z = 0` auf der Bodenebene wird jede Höhenprüfung ein Vergleich statt einer Koordinatentransformation. Diese Konvention bleibt.
+```
+Creos X-Achse = unser +x        (nach hinten)
+Creos Y-Achse = unser +z        (nach oben)
+Creos Z-Achse = unser -y        (Spannweite)
+```
 
-Der Unterschied wird **an genau einer Stelle** aufgelöst: bei CS_AERO. Nicht im Exporter — sonst steckt die Konvention an zwei Orten und driftet auseinander, sobald jemand eine davon anfasst.
+Das Minuszeichen ist Pflicht, nicht Geschmack: Mit `+y` wäre die Abbildung eine Spiegelung (Determinante −1). Der Exporter rechnet die Determinante aus und verweigert die Arbeit, wenn sie nicht +1 ist.
 
-Nach der Drehung gilt: unser z = Y der Vorlage (senkrecht), unser x = X der Vorlage, unser y = −Z der Vorlage. Rechtshändig.
-
-> **Offen bis M4:** wie CS_AERO im echten Fahrzeugmodell liegt, also welche Richtung im Auto „hinten" ist. Für M0 und M1 genügt, dass z senkrecht steht.
+Die Konvention sitzt damit weiterhin an genau einer Stelle, ist aber versionierbar und testbar — und **in Creo ist nichts vorzubereiten**.
 
 ---
 
 ## Schritt 3 — Import
 
+Die `.ibl` ist bereits vorgedreht. Es genügt der schlichte Import:
+
 1. **Modell → Daten abrufen → Importieren**
 2. Zur `M0_pruefkurve.ibl` navigieren. Wird sie nicht angezeigt: Dateityp-Filter auf **Alle Dateien**.
 3. Unter **Importtyp** → **Kurve** wählen, bestätigen.
-4. Reiter **Platzierung** → Sammler für das Koordinatensystem anklicken → **`CS_AERO`** wählen.
+4. Bestätigen — **kein Koordinatensystem auszuwählen**, das Standard-KS ist richtig.
 
-   **Das ist der entscheidende Klick.** Ohne ihn landet alles auf dem Standard-KS und liegt gekippt.
-5. Bestätigen.
+Alternativ geht auch **Datei → Öffnen** direkt auf die `.ibl`; Creo legt dann ein neues Teil an. Bequem zum Nachmessen, aber ohne Vorlage und ohne Modellparameter — für den Arbeitsablauf ist der Import in ein vorhandenes Teil der richtige Weg.
 
 Bei Fehlern: Meldung **wörtlich** notieren.
 
@@ -103,26 +103,54 @@ Bei Fehlern: Meldung **wörtlich** notieren.
 | 5 | Spline glatt, ohne Beulen oder Schlingen? | ja |
 | 6 | Vier Rechteckkanten sichtbar zusammenhängend? | ja |
 
-Zum Vergleich: Bei einem Import auf das **Standard-KS** liegt das Rechteck flach, der Spline hängt in die Tiefe, die Marke zeigt nach oben und das kleine Rechteck schwebt 300 mm darüber — so sah es beim ersten Versuch am 05.09.2026 aus. Wer beide Zustände einmal gesehen hat, hat die Konvention bewiesen statt behauptet.
+Beim ersten Versuch am 05.09.2026 — noch mit ungedrehter Datei — lag das Rechteck flach, der Spline hing in die Tiefe, die Marke zeigte nach oben und das kleine Rechteck schwebte 300 mm darüber. Genau das kehrt die Drehung im Exporter jetzt um.
 
 ---
 
-## Schritt 5 — Messen
+## Schritt 5 — Messen *(erledigt am 09.09.2026)*
 
-**Analyse → Messen.** Toleranz ±0,01 mm.
+Alle Sollwerte exakt getroffen, gemessen mit **Analyse → Messen**:
 
-| # | Messung | Soll | Ist | ok? |
+| # | Messung | Soll | Creo | |
 |---|---|---|---|---|
-| 1 | Unterkante großes Rechteck, Länge | 200,000 mm | | |
-| 2 | Vorderkante großes Rechteck, Länge | 50,000 mm | | |
-| 3 | Abstand Rechteckecke zum Ursprung von `CS_AERO` | 0,000 mm | | |
-| 4 | Höchster Punkt des Splines über der Rechteckunterkante | 80,000 mm | | |
-| 5 | Position dieses Scheitelpunkts in Längsrichtung | 100,000 mm | | |
-| 6 | Richtungsmarke, Länge | 150,000 mm | | |
-| 7 | Abstand der beiden Rechtecke quer | 300,000 mm | | |
-| 8 | Kleines Rechteck, Länge × Höhe | 100,000 × 25,000 mm | | |
+| 1 | Unterkante großes Rechteck | 200,000 mm | 200,000 | ✓ |
+| 2 | Vorderkante großes Rechteck | 50,000 mm | 50,000 | ✓ |
+| 3 | Höhe großes Rechteck | 50,000 mm | 50,000 | ✓ |
+| 4 | Länge großes Rechteck | 200,000 mm | 200,000 | ✓ |
+| 5 | Kleines Rechteck | 100 × 25 mm | 100,000 × 25,0000 | ✓ |
+| 6 | Querabstand der Rechtecke | 300,000 mm | 300,000 | ✓ |
+| 7 | Lücke Spline-Ende zu Rechteckecke | 0,000 mm | 0,0000000000 | ✓ |
+| 8 | Bogenlänge des Splines | — | 210,184 mm | siehe unten |
 
-**Nummer 4 ist die wichtigste Zahl des ganzen Tages.** Läuft der Spline exakt durch seinen Stützpunkt bei 80,000 mm, reichen später wenige Punkte pro Profilkurve. Weicht er ab, brauchen wir dichtere Punktverteilungen — das entscheidet den Zuschnitt von M1.
+Zeile 7 ist wichtiger, als sie aussieht: Sie beweist, dass Creo aufeinanderfolgende Sektionen sauber zusammensetzt, wenn der erste Punkt gleich dem letzten des Vorgängers ist. Darauf baut jede spätere Profilkontur auf.
+
+### Der eigentliche Fund: 210,184 mm
+
+Aus der Bogenlänge des Splines lässt sich ablesen, welchen Kurventyp Creo baut:
+
+| Kurventyp | Bogenlänge |
+|---|---|
+| kubischer Spline, natural | 210,1791 mm |
+| **kubischer Spline, not-a-knot** | **210,1857 mm** |
+| Creo, gemessen | **210,184 mm** |
+
+Abweichung **1,7 µm auf 210 mm**, also 8 ppm. Damit ist geklärt: Creo baut aus einer IBL-Sektion einen **interpolierenden kubischen Spline mit not-a-knot-Randbedingung, parametrisiert über die kumulierte Sehnenlänge**. Nachrechnen mit [`spline_verifikation.py`](spline_verifikation.py).
+
+Zwei Folgerungen:
+
+**Der Scheitel ist damit belegt, ohne ihn zu messen.** Ein interpolierender Spline läuft exakt durch seine Stützpunkte; aus der Symmetrie der fünf Punkte folgt der Scheitel bei genau x = 100,000 / z = 80,000.
+
+**Die Punktzahl pro Profilkurve wird ab jetzt gerechnet, nicht geschätzt.** Weil sich in Python dieselbe Kurve bauen lässt, die Creo bauen wird, ist die Abweichung zur echten Profilkontur vorher berechenbar:
+
+```
+NACA 4412, Sehne 250 mm, Kosinusverteilung
+  20 Punkte  ->  0,1142 mm    zu grob
+  30 Punkte  ->  0,0135 mm    grenzwertig
+  40 Punkte  ->  0,0037 mm    unter Modellgenauigkeit
+  80 Punkte  ->  0,0023 mm    kein Gewinn mehr
+```
+
+Die Annahme im Konzept lautete 60–120 Punkte — das war zu konservativ. Es sind eher **40**. Mehr Punkte kosten Regenerationszeit und erhöhen das Risiko welliger Splines, ohne etwas zu verbessern. In M1 wird daraus eine Funktion: Toleranz vorgeben, Punktzahl fällt heraus.
 
 ---
 
@@ -151,22 +179,22 @@ Der Baustein, aus dem in M5 die Automatisierung wird.
 
 ## Was am Ende zurückkommt
 
-1. Einheiten der Teamvorlage (Schritt 2, Punkt 3)
-2. Die sechs Sichtprüfungen (Schritt 4)
-3. Die acht Messwerte (Schritt 5)
-4. Kommentierte Datei importierbar? (Schritt 6)
-5. Mapkey-Text und ob das Abspielen funktioniert (Schritt 7)
-6. Alles, was unerwartet war — Fehlermeldungen bitte wörtlich
+1. Die sechs Sichtprüfungen mit der vorgedrehten Datei (Schritt 4)
+2. Kommentierte Datei importierbar? (Schritt 6)
+3. Mapkey-Text und ob das Abspielen funktioniert (Schritt 7)
+4. Alles, was unerwartet war — Fehlermeldungen bitte wörtlich
 
 ---
 
 ## Abnahme M0
 
 - [x] Umgebung geprüft, nichts zu installieren
-- [x] IBL-Import funktioniert grundsätzlich
-- [x] Achskonvention verstanden und in `creo8.yaml` festgeschrieben
-- [ ] Alle acht Messungen innerhalb ±0,01 mm
-- [ ] Spline glatt und durch seine Stützpunkte
+- [x] IBL-Import funktioniert
+- [x] Alle Messungen exakt getroffen
+- [x] Spline glatt und durch seine Stützpunkte, Kurventyp identifiziert
+- [x] Achskonvention festgeschrieben und in den Exporter verlegt
+- [x] Einheiten der Teamvorlage bestätigt
+- [ ] Sichtprüfung mit vorgedrehter Datei
 - [ ] Verhalten bei Kommentarzeilen geklärt
 - [ ] Mapkey wiederholt den Import ohne Handeingriff
 - [ ] `creo8.yaml` ohne offene Einträge außer `OFFEN_BIS_M4` und `OFFEN_BIS_M5`
