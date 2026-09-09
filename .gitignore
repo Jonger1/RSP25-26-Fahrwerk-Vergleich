@@ -1,3 +1,6 @@
 .claude/settings.local.json
 __pycache__/
 *.pyc
+Aero/aerostudio/creo/plugin/build/
+Aero/aerostudio/creo/plugin/aerostudio.jar
+Aero/aerostudio/creo/plugin/protk.dat

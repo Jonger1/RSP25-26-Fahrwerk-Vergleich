@@ -1,0 +1,16 @@
+-Aero Studio: IBL importieren
+-Aero Studio: IBL importieren
+#
+#
+IBL-Datei waehlen und als Bezugskurve einfuegen
+IBL-Datei waehlen und als Bezugskurve einfuegen
+#
+#
+-Aero Studio: IBL aktualisieren
+-Aero Studio: IBL aktualisieren
+#
+#
+Zuletzt importierte IBL-Datei erneut einlesen
+Zuletzt importierte IBL-Datei erneut einlesen
+#
+#
