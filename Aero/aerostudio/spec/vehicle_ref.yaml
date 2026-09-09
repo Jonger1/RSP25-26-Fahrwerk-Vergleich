@@ -99,15 +99,12 @@ fahrwerk:
   # wichtigste Freiheitsgrad, weil er den Bodenabstand direkt aendert.
   # Bitte nachliefern oder unten unter ersatzwerte eintragen.
 
-  # Ersatzweise, falls die Exporte nicht kurzfristig zu bekommen sind:
-  # dann rechnet das Werkzeug mit diesen Grenzwerten statt mit Kennlinien.
-  ersatzwerte:
-    radhub_einfedern: AUSFUELLEN      # positiv, in mm
-    radhub_ausfedern: AUSFUELLEN
-    # OFFEN: soll berechnet werden. Dafuer fehlen mir noch Fahrzeugmasse,
-    # Schwerpunkthoehe und maximale Verzoegerung - siehe offene_punkte unten.
-    nickwinkel_max: BERECHNEN
-    wankwinkel_max: AUSFUELLEN
+  # Die frueher vorgesehenen Ersatzwerte entfallen: die echten Kennlinien
+  # liegen vollstaendig vor, nur der Nickwinkel ist gerechnet statt gemessen.
+  envelope:
+    radhub_vorne: [-24.333, 24.354]    # mm, aus den Exporten
+    radhub_hinten: [-22.895, 22.937]
+    wankwinkel: [-2.329, 2.324]        # Grad, aus den Exporten
 
 # ------------------------------------------------- CAD-Koordinatensystem
 # BEFUND 09.09.2026 aus dem Fahrzeugmodell:
@@ -125,15 +122,38 @@ fahrwerk:
 # Koordinatensystem rechtshaendig ist (ISO 8855). Bitte einmal bestaetigen.
 cad_konvention:
   x: "nach vorne"
+  y: "nach links"
   z: "nach oben, z = 0 Bodenebene"
-  y: PRUEFEN
   ursprung: "Vorderachsmitte"
+  norm: "ISO 8855"
+  # BESTAETIGT am 09.09.2026. Zwei unabhaengige Belege:
+  #  1. Gemessener Punkt an der linken Frontfluegel-Endplatte: Y = +740.
+  #     Betrag passt zur Spurweite (600 mm halbe Spur + 95 mm halbe
+  #     Reifenbreite = 695 mm Reifenaussenkante), Vorzeichen positiv links.
+  #  2. Zwingend aus der Rechtshaendigkeit: Creo-Koordinatensysteme sind
+  #     immer rechtshaendig, also X x Y = Z. Mit X vorne und Z oben MUSS Y
+  #     nach links zeigen. Haette die Messung ein Minus ergeben, waere eine
+  #     der beiden anderen Achsen anders herum als angenommen.
 
 # ------------------------------------------------------- Offene Punkte
+# ------------------------------------------------------- Fahrdynamik
+# Alle drei bewusst als Parameter - sie aendern sich von Saison zu Saison.
+fahrdynamik:
+  masse_leer: 220                # kg, ohne Fahrer
+  masse_fahrer: 75               # kg, Angabe 70-80, Mittelwert angesetzt
+  masse_fahrer_spanne: [70, 80]
+  schwerpunkthoehe: 310          # mm ueber Boden
+  schwerpunkthoehe_variabel: true
+  verzoegerung_max: 2.0          # g
+
+  # Aus den Kinematikexporten gelesen, Wert in Konstruktionslage:
+  radrate_vorne: 64884.5         # N/m   (Bereich 56092 .. 66861)
+  radrate_hinten: 68827.5        # N/m   (Bereich 60484 .. 71631)
+  antidive_vorne: 0.59012        #       (Bereich 0.461 .. 0.744)
+  antilift_hinten: 0.55318       #       (Bereich 0.440 .. 0.685)
+
 offene_punkte:
-  # Fuer die Berechnung des Nickwinkels:
-  fahrzeugmasse_mit_fahrer: AUSFUELLEN     # kg
-  schwerpunkthoehe: AUSFUELLEN             # mm ueber Boden
-  verzoegerung_max: AUSFUELLEN             # g, aus Bremsauslegung oder Messung
-  # Damit und mit den Federraten aus den Kinematikexporten laesst sich der
-  # Nickwinkel ausrechnen. Ohne diese drei Werte nicht.
+  # Nur noch Kleinigkeiten:
+  frontschott_x: AUSFUELLEN
+  # Nick-Kennlinie aus dem Kinematikprogramm waere besser als die Rechnung,
+  # ist laut Team aber nicht exportierbar. Die Rechnung bleibt.
