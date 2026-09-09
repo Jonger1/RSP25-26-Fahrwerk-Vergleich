@@ -68,7 +68,12 @@ frontstruktur:
   # Im Werkzeug-KS (x nach hinten) entspricht das -514.
   aip_x: -514
   aip_z: 463
-  frontschott_x: AUSFUELLEN
+
+  # Front Bulkhead bei X = 510 im CAD, also 510 mm vor der Vorderachse.
+  # Die AIP liegt bei 514 - genau 4 mm davor. Das passt exakt zu T 3.19.4,
+  # die eine 4 mm starke Aluminium-AIP nennt, die ans Bulkhead geschraubt
+  # wird. Guter Beleg dafuer, dass beide Werte richtig abgelesen sind.
+  frontschott_x: -510
 
 # ------------------------------------------------------------ Fahrwerk
 # T 2.2.1: mindestens 30 mm statische Bodenfreiheit mit Fahrer.
@@ -153,7 +158,5 @@ fahrdynamik:
   antilift_hinten: 0.55318       #       (Bereich 0.440 .. 0.685)
 
 offene_punkte:
-  # Nur noch Kleinigkeiten:
-  frontschott_x: AUSFUELLEN
   # Nick-Kennlinie aus dem Kinematikprogramm waere besser als die Rechnung,
   # ist laut Team aber nicht exportierbar. Die Rechnung bleibt.
