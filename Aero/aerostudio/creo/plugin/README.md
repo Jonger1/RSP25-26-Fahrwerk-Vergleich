@@ -24,7 +24,17 @@ Die auf diesem Rechner hinterlegte Lizenz ist eine Studentenlizenz mit den Optio
 
 **Trotzdem testen** — es kostet zwei Minuten, und an Hochschulen liegen TOOLKIT-Lizenzen manchmal auf einem Lizenzserver, der in der lokalen Datei nicht auftaucht.
 
-Wenn es an der Lizenz scheitert, gibt es einen **lizenzfreien Weg**: IGES statt IBL. `pfcModel.IntfIges_Create` und `Solid.CreateImportFeat` gehören zur freien Ebene und tragen keinen Lizenzvermerk. Dafür müsste der Exporter IGES-Kurven statt IBL schreiben — machbar, aber eine bewusste Formatentscheidung.
+Wenn es an der Lizenz scheitert, gibt es einen **lizenzfreien Weg**: IGES statt IBL. Ein vollständiger Scan aller Klassen in `otk.jar` bestätigt, dass die drei dafür nötigen Aufrufe sämtlich in der freien `pfc`-Ebene liegen und keinen Lizenzvermerk tragen:
+
+```java
+IntfIges     quelle = pfcModel.IntfIges_Create(pfad);        // frei
+ImportFeatAttr attr = pfcModel.ImportFeatAttr_Create();      // frei
+Feature      feature = solid.CreateImportFeat(quelle, ks, attr);  // frei
+```
+
+Der Scan zeigt außerdem: **einen zweiten Weg zu IBL gibt es nicht.** `CreateImportFeat` ist die einzige Erzeugungsmethode, und ein `IntfDataSource` für IBL entsteht ausschließlich über die kostenpflichtige `wfcModel`-Fabrik.
+
+Preis der IGES-Variante: `RedefineImportFeature` ist ebenfalls `wfc`, fällt also weg. Aktualisieren hieße dann „altes Feature löschen, neu importieren" — beides über die freie Ebene machbar, aber nachgelagerte Features hängen sich dabei aus. Der Exporter müsste IGES-Kurven statt IBL schreiben. Machbar, aber eine bewusste Formatentscheidung für das ganze Projekt.
 
 ---
 
