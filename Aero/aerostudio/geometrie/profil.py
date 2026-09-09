@@ -356,6 +356,23 @@ class Profil:
 
     # ------------------------------------------------------------- Umformungen
 
+    def gespiegelt(self) -> "Profil":
+        """Spiegelt das Profil an der Sehne.
+
+        Ein Abtriebsfluegel ist ein umgedrehtes Auftriebsprofil - die
+        Katalogprofile sind alle fuer Auftrieb gezeichnet. Ohne Spiegelung
+        erzeugt ein E423 am Fahrzeug Auftrieb statt Abtrieb.
+
+        Die Punktreihenfolge wird mit umgekehrt: Nach dem Spiegeln ist die
+        fruehere Oberseite die Unterseite, und die Selig-Reihenfolge - von der
+        Hinterkante ueber oben zur Nase und unten zurueck - muss erhalten
+        bleiben, sonst kehren sich Dicke und Woelbung im Vorzeichen um.
+        """
+        punkte = self.punkte.copy()
+        punkte[:, 1] *= -1.0
+        return Profil(punkte[::-1], name=f"{self.name} (gespiegelt)",
+                      herkunft=self.herkunft)
+
     def repanelisiert(self, n_je_seite: int = 40) -> "Profil":
         """Neue Punktverteilung mit Kosinus-Clustering je Seite."""
         x = kosinus(n_je_seite)
@@ -551,6 +568,44 @@ class Profil:
                 f"  max. Woelbung  {self.max_woelbung*100:6.2f} %\n"
                 f"  Nasenradius    {self.nasenradius()*100:6.3f} % Sehne\n"
                 f"  Hinterkante    {self.hinterkante_dicke*100:6.3f} % Sehne")
+
+
+KATALOG = Path(__file__).resolve().parents[2] / "profile" / "katalog"
+
+
+def katalogprofile() -> list[str]:
+    """Namen der verfuegbaren Katalogdateien, alphabetisch."""
+    return sorted(d.name for d in KATALOG.glob("*.dat"))
+
+
+def profil_fuer(element) -> Profil:
+    """Das wirksame Profil eines Elements, Spiegelung eingeschlossen.
+
+    Eine Stelle fuer alle Aufrufer - Oberflaeche, Export und Report duerfen
+    nicht jeder fuer sich entscheiden, ob gespiegelt wird.
+    """
+    profil = aus_quelle(element.profil)
+    return profil.gespiegelt() if getattr(element, "invertiert", False) else profil
+
+
+def aus_quelle(quelle) -> Profil:
+    """Baut ein Profil aus der Angabe im Spec.
+
+    Die drei Profilquellen des Datenmodells landen hier an einer Stelle
+    zusammen, damit Oberflaeche, Kommandozeile und Reportgenerator denselben
+    Weg nehmen und nicht jede fuer sich raten muss.
+    """
+    art = getattr(quelle, "art", None)
+    if art == "datei":
+        pfad = Path(quelle.datei)
+        if not pfad.is_absolute() and not pfad.exists():
+            pfad = KATALOG / quelle.datei
+        return Profil.aus_dat(pfad)
+    if art == "naca":
+        return Profil.aus_naca(quelle.woelbung, quelle.woelbungslage, quelle.dicke)
+    if art == "cst":
+        return Profil.aus_cst(quelle.oben, quelle.unten, quelle.hinterkante_dicke)
+    raise ValueError(f"Unbekannte Profilquelle: {art!r}")
 
 
 def _werte_auf(seite: np.ndarray, x: np.ndarray) -> np.ndarray:

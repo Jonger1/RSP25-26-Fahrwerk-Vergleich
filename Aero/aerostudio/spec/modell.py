@@ -203,8 +203,12 @@ class Element(BaseModel):
     sehne: float = Field(gt=0.0, description="Sehnenlaenge in mm.")
     anstellwinkel: float = Field(
         default=0.0,
-        description="Anstellwinkel in Grad. Negativ = Nase nach unten, "
-                    "also abtriebserzeugend.")
+        description="Anstellwinkel in Grad. Negativ = Nase nach unten.")
+    invertiert: bool = Field(
+        default=True,
+        description="Profil an der Sehne spiegeln. Katalogprofile sind fuer "
+                    "Auftrieb gezeichnet; ein Abtriebsfluegel braucht sie "
+                    "umgedreht. Vorgabe deshalb: gespiegelt.")
 
     fertigung: Optional[Fertigung] = Field(
         default=None,

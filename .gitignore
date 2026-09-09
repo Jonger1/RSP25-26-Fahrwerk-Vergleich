@@ -4,3 +4,5 @@ __pycache__/
 Aero/aerostudio/creo/plugin/build/
 Aero/aerostudio/creo/plugin/aerostudio.jar
 Aero/aerostudio/creo/plugin/protk.dat
+Aero/export/
+Aero/specs/*.lock
