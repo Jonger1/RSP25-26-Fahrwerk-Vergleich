@@ -83,7 +83,7 @@ def abweichung_zur_kontur(stuetzpunkte: np.ndarray, referenz: np.ndarray,
 
 
 def punktzahl_fuer_toleranz(kontur_fn, toleranz_mm: float = CREO_GENAUIGKEIT_MM / 2,
-                            n_min: int = 12, n_max: int = 300,
+                            n_min: int = 12, n_max: int = 400,
                             schritt: int = 2) -> int | None:
     """Kleinste Punktzahl, deren Creo-Spline die Kontur innerhalb `toleranz_mm` trifft.
 

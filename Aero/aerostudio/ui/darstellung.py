@@ -152,3 +152,32 @@ def zonenbalken(profil: Profil, sehne_mm: float, fertigung) -> go.Figure:
     fig.update_xaxes(title="% Sehne", range=[0, 100])
     fig.update_yaxes(showticklabels=False)
     return _achsen(fig)
+
+
+def exportpunkte(plan, name: str = "") -> go.Figure:
+    """Genau die Punkte, die in die IBL-Datei geschrieben werden.
+
+    Nicht die glatte Kontur, sondern die Stuetzstellen - damit sichtbar ist,
+    wie fein die Kurve tatsaechlich aufgeloest wird und wo die Kosinusverteilung
+    verdichtet. Die beiden Sektionen sind unterschiedlich eingefaerbt, weil ihre
+    Trennung an Nase und Hinterkante der Grund dafuer ist, dass Creo dort keine
+    Beule baut.
+    """
+    farben = [FARBE_KONTUR, "#7b3294"]
+    fig = go.Figure()
+    for i, sektion in enumerate(plan.sektionen):
+        fig.add_trace(go.Scatter(
+            x=sektion[:, 0], y=sektion[:, 2], mode="lines+markers",
+            line=dict(color=farben[i % len(farben)], width=1),
+            marker=dict(size=3, color=farben[i % len(farben)]),
+            name=f"Sektion {i + 1} ({len(sektion)} Punkte)",
+            hovertemplate="x %{x:.2f} mm<br>z %{y:.2f} mm<extra></extra>"))
+
+    fig.update_layout(**_grundlayout(
+        f"{name} — {plan.punktzahl} Punkte je Seite bei "
+        f"{plan.toleranz_mm:.4f} mm Toleranz"))
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", y=-0.25, font=dict(size=11)))
+    fig.update_yaxes(scaleanchor="x", scaleratio=1, title="mm")
+    fig.update_xaxes(title="mm")
+    return _achsen(fig)

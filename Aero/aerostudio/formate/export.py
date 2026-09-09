@@ -30,11 +30,17 @@ class Exportplan:
 
     sektionen: list[np.ndarray]
     punktzahl: int
-    toleranz_mm: float
+    toleranz_mm: float           # tatsaechlich erreichte Toleranz
+    toleranz_gefordert: float    # was verlangt war
 
     @property
     def punkte_gesamt(self) -> int:
         return sum(len(s) for s in self.sektionen)
+
+    @property
+    def gelockert(self) -> bool:
+        """Musste die Toleranz aufgeweicht werden, damit es ueberhaupt geht?"""
+        return self.toleranz_mm > self.toleranz_gefordert * 1.001
 
 
 def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
@@ -48,12 +54,29 @@ def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
     Die Punktzahl wird gerechnet, nicht geschaetzt - auf Basis des in M0
     vermessenen Creo-Splines.
     """
-    n = profil.punktzahl(sehne_mm, toleranz_mm)
+    # Reicht die geforderte Toleranz nicht, wird sie schrittweise gelockert
+    # statt den Export scheitern zu lassen. Eine etwas groebere Kurve ist immer
+    # noch besser als gar keine - und der Plan sagt hinterher, womit gerechnet
+    # wurde, sodass niemand eine Genauigkeit annimmt, die es nicht gab.
+    gefordert = float(toleranz_mm)
+    # Kurze Leiter statt fortgesetztem Verdoppeln: Bei einer sehr kleinen
+    # Vorgabe braeuchte das Verdoppeln zwei Dutzend Anlaeufe, und jeder davon
+    # sucht die Punktzahl von Neuem. Sieben Stufen decken denselben Bereich ab.
+    leiter = [gefordert, gefordert * 2, gefordert * 5,
+              0.005, 0.010, 0.020, 0.050]
+    leiter = sorted({round(t, 6) for t in leiter if t >= gefordert})
+
+    n, versuch = None, gefordert
+    for versuch in leiter:
+        n = profil.punktzahl(sehne_mm, versuch)
+        if n is not None:
+            break
+
     if n is None:
         raise ValueError(
-            f"Fuer {toleranz_mm:.4f} mm Toleranz reicht auch die Obergrenze der "
-            f"Punktzahl nicht. Toleranz erhoehen oder das Profil auf einen Knick "
-            f"pruefen.")
+            f"Selbst mit {versuch:.4f} mm Toleranz laesst sich die Kontur nicht "
+            f"treffen. Das deutet auf einen Knick im Profil hin, nicht auf zu "
+            f"wenige Punkte - bitte die Quelldatei pruefen.")
 
     punkte = profil.repanelisiert(n).angestellt(anstellwinkel, sehne_mm)
     nase = len(punkte) // 2
@@ -61,7 +84,8 @@ def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
 
     return Exportplan(sektionen=[_in_spannweitenebene(oben),
                                  _in_spannweitenebene(unten)],
-                      punktzahl=n, toleranz_mm=toleranz_mm)
+                      punktzahl=n, toleranz_mm=versuch,
+                      toleranz_gefordert=gefordert)
 
 
 def schreibe(plan: Exportplan, ziel: str | Path,

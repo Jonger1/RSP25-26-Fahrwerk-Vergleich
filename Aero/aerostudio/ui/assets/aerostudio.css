@@ -1,0 +1,28 @@
+/* Aero Studio - eigenes Aussehen.
+   Dash laedt alles aus diesem Ordner von selbst. */
+
+/* Dash 4 setzt neben jedes Zahlenfeld eigene Stepper-Knoepfe. Die schalten
+   bei step="any" immer um 1 - unabhaengig davon, was fuer das Feld sinnvoll
+   waere. Zusammen mit unseren eigenen Knoepfen standen dadurch vier Knoepfe
+   nebeneinander, von denen zwei falsch rechneten. Deshalb weg damit; unsere
+   Knoepfe kennen die richtige Schrittweite je Feld. */
+.dash-input-stepper {
+    display: none !important;
+}
+
+/* Auch die browsereigenen Pfeilchen ausblenden - sonst kommen sie bei
+   Firefox durch die Hintertuer wieder herein. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* Der Dash-Container um das Eingabefeld darf unseren Rahmen nicht doppeln. */
+.dash-input-container {
+    display: contents;
+}

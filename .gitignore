@@ -7,3 +7,4 @@ Aero/aerostudio/creo/plugin/protk.dat
 Aero/export/
 Aero/specs/*.lock
 .idea/
+Aero/.venv/

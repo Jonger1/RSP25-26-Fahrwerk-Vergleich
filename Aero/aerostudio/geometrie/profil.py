@@ -207,7 +207,7 @@ class Profil:
 
         yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2
                       + 0.2843 * x**3 - 0.1015 * x**4)
-        if m > 0.0:
+        if m != 0.0:
             yc = np.where(x < p_, m / p_**2 * (2 * p_ * x - x**2),
                           m / (1 - p_)**2 * ((1 - 2 * p_) + 2 * p_ * x - x**2))
             dy = np.where(x < p_, 2 * m / p_**2 * (p_ - x),
@@ -221,7 +221,16 @@ class Profil:
         unten = np.column_stack([x + yt * np.sin(th), yc - yt * np.cos(th)])
 
         punkte = np.vstack([oben[::-1], unten[1:]])
-        name = f"NACA {int(round(m*100))}{int(round(p_*10))}{int(round(t*100)):02d}"
+        if -0.095 <= m <= 0.095 and abs(m * 100) < 10:
+            name = (f"NACA {int(round(abs(m)*100))}{int(round(p_*10))}"
+                    f"{int(round(t*100)):02d}"
+                    + (" (negativ gewölbt)" if m < 0 else ""))
+        else:
+            # Ausserhalb der Standardfamilie gibt es keine gueltige Ziffernfolge -
+            # dann lieber die Werte nennen als eine Bezeichnung erfinden, die es
+            # nicht gibt.
+            name = (f"NACA-Typ  Wölbung {m*100:+.1f} % bei {p_*100:.0f} %, "
+                    f"Dicke {t*100:.1f} %")
         return Profil(punkte, name=name, herkunft="naca")
 
     @staticmethod
@@ -585,7 +594,11 @@ def profil_fuer(element) -> Profil:
     nicht jeder fuer sich entscheiden, ob gespiegelt wird.
     """
     profil = aus_quelle(element.profil)
-    return profil.gespiegelt() if getattr(element, "invertiert", False) else profil
+    # Katalogprofile sind fuer Auftrieb gezeichnet. Fuer Abtrieb - den
+    # Normalfall am Rennwagen - werden sie gespiegelt.
+    richtung = getattr(element, "wirkrichtung", "abtrieb")
+    richtung = getattr(richtung, "value", richtung)
+    return profil.gespiegelt() if richtung == "abtrieb" else profil
 
 
 def aus_quelle(quelle) -> Profil:

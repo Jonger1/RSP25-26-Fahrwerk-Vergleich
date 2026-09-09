@@ -16,6 +16,22 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class Wirkrichtung(str, Enum):
+    """Wofuer das Element da ist.
+
+    Praktisch jedes Katalogprofil ist fuer AUFTRIEB gezeichnet - sie stammen
+    aus dem Flugzeugbau. Am Rennwagen braucht man fast immer das Gegenteil,
+    deshalb ist Abtrieb die Vorgabe und das Profil wird dafuer gespiegelt.
+
+    Auftrieb bleibt waehlbar, weil es Anwendungen gibt, in denen er gewollt
+    ist - Bullwings zum Beispiel, die vorne Auftrieb erzeugen, um die
+    Aerobalance nach hinten zu verschieben.
+    """
+
+    abtrieb = "abtrieb"
+    auftrieb = "auftrieb"
+
+
 class Verfahren(str, Enum):
     """Fertigungsverfahren. Bestimmt die erreichbaren Mindestdicken."""
 
@@ -152,8 +168,13 @@ class ProfilNaca(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     art: Literal["naca"] = "naca"
-    woelbung: float = Field(default=0.04, ge=0.0, le=0.095,
-                            description="Groesste Woelbung, Anteil der Sehne.")
+    woelbung: float = Field(default=0.04, ge=-0.25, le=0.25,
+                            description="Groesste Woelbung, Anteil der Sehne. "
+                                        "Negativ erzeugt ein nach unten "
+                                        "gewoelbtes Profil. Ueber 9.5 % verlaesst "
+                                        "man die Standard-NACA-Familie - die "
+                                        "Formel gilt weiter, Literaturdaten "
+                                        "gibt es dann aber keine mehr.")
     woelbungslage: float = Field(default=0.4, gt=0.0, lt=1.0,
                                  description="Lage der groessten Woelbung.")
     dicke: float = Field(default=0.12, gt=0.0, le=0.40,
@@ -204,11 +225,11 @@ class Element(BaseModel):
     anstellwinkel: float = Field(
         default=0.0,
         description="Anstellwinkel in Grad. Negativ = Nase nach unten.")
-    invertiert: bool = Field(
-        default=True,
-        description="Profil an der Sehne spiegeln. Katalogprofile sind fuer "
-                    "Auftrieb gezeichnet; ein Abtriebsfluegel braucht sie "
-                    "umgedreht. Vorgabe deshalb: gespiegelt.")
+    wirkrichtung: Wirkrichtung = Field(
+        default=Wirkrichtung.abtrieb,
+        description="Abtrieb ist die Vorgabe - Katalogprofile sind fuer "
+                    "Auftrieb gezeichnet und werden dafuer gespiegelt. "
+                    "Auftrieb waehlt man fuer Bullwings.")
 
     fertigung: Optional[Fertigung] = Field(
         default=None,

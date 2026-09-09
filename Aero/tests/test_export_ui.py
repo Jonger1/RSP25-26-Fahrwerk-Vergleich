@@ -14,7 +14,7 @@ from aerostudio.formate import export
 from aerostudio.formate.ibl import frame_matrix, to_creo, write_ibl
 from aerostudio.geometrie.profil import (Profil, aus_quelle, katalogprofile,
                                           profil_fuer)
-from aerostudio.spec.modell import ProfilAusDatei, ProfilNaca
+from aerostudio.spec.modell import ProfilAusDatei, ProfilNaca, Wirkrichtung
 from aerostudio.spec.projekt import AeroSpec, SperreBelegt, sperre
 from aerostudio.ui import app as UI
 
@@ -62,9 +62,28 @@ def test_kommentare_landen_vor_dem_kopf(tmp_path):
     assert "open" in zeilen[:5]
 
 
-def test_unmoegliche_toleranz_meldet_sich_deutlich():
-    with pytest.raises(ValueError, match="Toleranz"):
-        export.plane_element(_profil(), 250.0, 0.0, toleranz_mm=1e-9)
+def test_zu_enge_toleranz_wird_gelockert_statt_zu_scheitern():
+    """Eine etwas groebere Kurve ist besser als gar keine - aber sie muss
+    sich als solche zu erkennen geben."""
+    plan = export.plane_element(_profil(), 250.0, 0.0, toleranz_mm=0.0005)
+    assert plan.gelockert
+    assert plan.toleranz_mm > 0.0005
+    assert plan.toleranz_gefordert == pytest.approx(0.0005)
+
+
+def test_erreichbare_toleranz_wird_nicht_gelockert():
+    plan = export.plane_element(_profil(), 250.0, 0.0, toleranz_mm=0.005)
+    assert not plan.gelockert
+    assert plan.toleranz_mm == pytest.approx(0.005)
+
+
+@pytest.mark.parametrize("sehne", [1.0, 37.5, 253.7, 1200.0, 4999.0])
+def test_beliebige_sehnenlaengen_auch_mit_komma(sehne):
+    """Die Sehne darf jede Zahl sein - vorher liess das Eingabefeld nur
+    Vielfache der Schrittweite zu."""
+    plan = export.plane_element(_profil(), sehne, -4.0)
+    assert plan.punktzahl > 10
+    assert plan.sektionen[0][:, 0].max() == pytest.approx(sehne, rel=0.02)
 
 
 # ------------------------------------------------------- Koordinatendrehung
@@ -135,7 +154,10 @@ def test_quelle_datei_und_naca():
 
 # ---------------------------------------------------------------- Callbacks
 
-WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, 250.0, -4.0, ["ja"],
+# Reihenfolge wie in _EINGABEN:
+# quelle, katalogdatei, naca-woelbung, naca-lage, naca-dicke, wirkrichtung,
+# sehne, aoa, verfahren, wandstaerke, kern, klebespalt
+WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
          "prepreg", 0.6, 3.0, 0.2)
 
 
@@ -147,7 +169,7 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 
 
 def test_naca_zweig_erzeugt_ein_anderes_profil():
-    naca = ("naca", None, 6.0, 40.0, 15.0, 180.0, -8.0, ["ja"],
+    naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
             "nasslaminat", 1.2, 0.0, 0.2)
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
@@ -164,9 +186,13 @@ def test_fehlende_datei_bricht_die_oberflaeche_nicht():
 
 
 def test_export_callback_schreibt_ohne_klick_nichts(tmp_path):
+    """Vorschau und Diagramm entstehen bei jeder Aenderung, die Datei nur
+    auf Klick - sonst laege bei jedem Reglerzucken eine neue IBL auf der Platte."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
-    info, vorschau = UI._export(spec, 0.005, str(tmp_path), 0)
+    info, vorschau, figur, status = UI._export(spec, 0.005, str(tmp_path), 0, 0)
     assert "begin section" in vorschau
+    assert hasattr(figur, "data")
+    assert status == ""
     assert not list(Path(tmp_path).glob("*.ibl"))
 
 
@@ -192,9 +218,63 @@ def test_zweimal_spiegeln_ergibt_das_original():
     assert np.allclose(p.gespiegelt().gespiegelt().punkte, p.punkte, atol=1e-9)
 
 
-def test_element_wird_standardmaessig_gespiegelt():
+def test_vorgabe_ist_abtrieb():
     """Die Vorgabe muss Abtrieb sein - alles andere waere eine Falle."""
     element = AeroSpec.beispiel().elemente[0]
-    assert element.invertiert is True
+    assert element.wirkrichtung == Wirkrichtung.abtrieb
     x, w = profil_fuer(element).woelbungsverlauf()
     assert np.interp(0.4, x, w) < 0
+
+
+def test_auftrieb_fuer_bullwings_spiegelt_nicht():
+    """Bullwings brauchen Auftrieb - dann bleibt das Katalogprofil, wie es ist."""
+    element = AeroSpec.beispiel().elemente[0]
+    element.wirkrichtung = Wirkrichtung.auftrieb
+    x, w = profil_fuer(element).woelbungsverlauf()
+    assert np.interp(0.4, x, w) > 0
+
+
+# ------------------------------------------------------- Schrittschaltflaechen
+
+def test_plus_und_minus_rechnen_mit_der_schrittweite():
+    assert UI.schritt_rechnen(250.0, 5.0, "plus") == pytest.approx(255.0)
+    assert UI.schritt_rechnen(250.0, 5.0, "minus") == pytest.approx(245.0)
+
+
+def test_schritte_halten_die_grenzen_ein():
+    assert UI.schritt_rechnen(10.0, 5.0, "minus", minimum=10.0) == 10.0
+    assert UI.schritt_rechnen(25.0, 5.0, "plus", maximum=25.0) == 25.0
+
+
+def test_schrittweite_steckt_nicht_im_eingabefeld():
+    """Sonst erklaert HTML jeden Wert fuer ungueltig, der kein Vielfaches ist.
+
+    Genau daran liessen sich Sehnenlaengen wie 253.7 nicht eintragen.
+    """
+    feld = UI._zahlenfeld("pruef-feld", 100.0, 5.0, 1.0, 500.0)
+    eingabe = feld.children[1]
+    assert eingabe.step == "any"
+    assert UI._SCHRITTE["pruef-feld"] == 5.0
+
+
+def test_schritte_erzeugen_keine_gleitkommareste():
+    """Ohne Runden entstuenden Werte wie 0.30000000000000004 - und die landen
+    dann so im Spec und in der IBL."""
+    w = 0.2
+    for _ in range(6):
+        w = UI.schritt_rechnen(w, 0.05, "plus")
+    assert w == pytest.approx(0.5)
+    assert len(str(w)) < 8
+
+
+def test_negative_woelbung_ist_erlaubt():
+    """Fuer direkt nach unten gewoelbte Profile."""
+    p = Profil.aus_naca(-0.06, 0.4, 0.12, n=301)
+    x, w = p.woelbungsverlauf()
+    assert np.interp(0.4, x, w) < 0
+
+
+def test_woelbung_ueber_zehn_prozent_geht():
+    p = Profil.aus_naca(0.15, 0.4, 0.12, n=301)
+    assert p.max_woelbung > 0.13
+    assert "NACA-Typ" in p.name        # keine erfundene Ziffernfolge
