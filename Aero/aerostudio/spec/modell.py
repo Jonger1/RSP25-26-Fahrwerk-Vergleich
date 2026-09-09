@@ -60,10 +60,37 @@ class Fertigung(BaseModel):
         default=2.0, ge=2.0,
         description="Mindestdicke der Hinterkante in mm. 2.0 folgt aus T 2.4.1 "
                     "(1 mm Radius) und ist die untere Grenze.")
+
+    # ---- Verklebung -----------------------------------------------------
+    # Team-Entscheidung 09.09.2026: Die Hinterkante wird nicht in das
+    # aerodynamische Profil gezeichnet, sondern entsteht beim Verkleben der
+    # Ober- und Unterschale. Ein Profil mit spitzer Hinterkante ist damit
+    # zulaessig - die gebaute Kante ist es, die zaehlt.
+    #
+    # Das Werkzeug schaltet die Pruefung deshalb nicht ab, sondern rechnet die
+    # gebaute Dicke aus dem Aufbau: zwei Haeute plus Klebespalt. So bleibt
+    # sichtbar, was am Ende wirklich am Bauteil steht.
+    hinterkante_durch_verklebung: bool = Field(
+        default=True,
+        description="Hinterkante entsteht durch Verkleben, nicht durch die "
+                    "Profilform. Die Pruefung wird dann zum Hinweis.")
+    klebespalt: float = Field(
+        default=0.2, ge=0.0,
+        description="Klebstoffdicke an der Hinterkante in mm.")
+    verklebung_beginn_max: float = Field(
+        default=0.85, gt=0.0, lt=1.0,
+        description="Ab wo darf das Profil in den vollen Klebekeil uebergehen? "
+                    "Anteil der Sehne. Frueher hiesse: das Bauteil ist hinten "
+                    "auf einer langen Strecke Vollmaterial - schwer und teuer.")
     nasenradius_min: float = Field(
         default=3.0, ge=3.0,
         description="Mindestnasenradius in mm. 3.0 folgt aus T 2.4.1 fuer "
                     "nach vorne gerichtete Kanten und ist die untere Grenze.")
+
+    @property
+    def hinterkante_gebaut(self) -> float:
+        """Dicke der fertigen Hinterkante in mm: zwei Haeute plus Klebespalt."""
+        return 2.0 * self.wandstaerke + self.klebespalt
 
     @property
     def dicke_min(self) -> float:
@@ -84,8 +111,11 @@ class Fertigung(BaseModel):
             herkunft = f"2 x {self.wandstaerke:g} Haut + {self.kern:g} Kern"
         else:
             herkunft = f"2 x {self.wandstaerke:g} Haut"
+        hk = (f"Hinterkante {self.hinterkante_gebaut:g} mm aus Verklebung"
+              if self.hinterkante_durch_verklebung
+              else f"Hinterkante >= {self.hinterkante_min:g} mm")
         return (f"{self.verfahren.value}, Mindestdicke {self.dicke_min:g} mm "
-                f"({herkunft}), Hinterkante >= {self.hinterkante_min:g} mm, "
+                f"({herkunft}), {hk}, "
                 f"Nasenradius >= {self.nasenradius_min:g} mm")
 
 

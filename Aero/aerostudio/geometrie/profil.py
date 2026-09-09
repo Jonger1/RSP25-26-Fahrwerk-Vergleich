@@ -76,7 +76,12 @@ def _cst_matrix(x: np.ndarray, ordnung: int, n1: float = 0.5,
 
 @dataclass
 class Befund:
-    """Ein Prüfergebnis. `ok` heisst regel- und fertigungskonform."""
+    """Ein Prüfergebnis.
+
+    `ok` heisst regel- und fertigungskonform. `stufe` trennt harte Verstoesse
+    von Dingen, die die Fertigung von sich aus loest: Ein Hinweis darf rot
+    aussehen, blockiert aber kein Design.
+    """
 
     pruefung: str
     ok: bool
@@ -85,9 +90,14 @@ class Befund:
     einheit: str = "mm"
     regel: str | None = None
     hinweis: str | None = None
+    stufe: str = "fehler"          # "fehler" oder "hinweis"
+
+    @property
+    def blockiert(self) -> bool:
+        return not self.ok and self.stufe == "fehler"
 
     def __str__(self) -> str:
-        zeichen = "ok  " if self.ok else "FEHL"
+        zeichen = "ok  " if self.ok else ("FEHL" if self.stufe == "fehler" else "HINW")
         quelle = f"  [{self.regel}]" if self.regel else ""
         text = (f"  {zeichen} {self.pruefung:26s} "
                 f"ist {self.ist:8.3f}, soll >= {self.soll:6.3f} {self.einheit}{quelle}")
@@ -405,25 +415,51 @@ class Profil:
         """
         befunde: list[Befund] = []
 
-        hk = self.hinterkante_dicke * sehne_mm
-        befunde.append(Befund(
-            "Hinterkantendicke", hk >= fertigung.hinterkante_min - 1e-9,
-            hk, fertigung.hinterkante_min, regel="T 2.4.1",
-            hinweis="Hinterkante aufdicken oder Sehne vergroessern. Unter 2 mm "
-                    "ist der geforderte 1-mm-Radius nicht darstellbar."))
+        # --- Hinterkante ------------------------------------------------
+        if fertigung.hinterkante_durch_verklebung:
+            # Das aerodynamische Profil darf spitz auslaufen. Was zaehlt, ist
+            # die gebaute Kante aus zwei Haeuten plus Klebespalt.
+            gebaut = fertigung.hinterkante_gebaut
+            befunde.append(Befund(
+                "Hinterkante gebaut", gebaut >= fertigung.hinterkante_min - 1e-9,
+                gebaut, fertigung.hinterkante_min, regel="T 2.4.1", stufe="hinweis",
+                hinweis=f"Ergibt sich aus 2 x {fertigung.wandstaerke:g} mm Haut "
+                        f"+ {fertigung.klebespalt:g} mm Kleber. Liegt unter dem "
+                        f"Mass, das ein 1-mm-Radius geometrisch braucht - bei "
+                        f"strenger Messung im Scrutineering ist das die "
+                        f"Angriffsflaeche. Dickere Haut oder Klebespalt hilft."))
 
+            # Ab wo ist das Profil zu duenn fuer den Sandwichaufbau?
+            # Dahinter ist das Bauteil Vollmaterial. Gesucht wird von HINTEN:
+            # an der Nase ist die Dicke ebenfalls null, ein Vorwaertssuchen
+            # findet also immer x = 0 und meldet Unsinn.
+            x, d = self.dickenverlauf(801)
+            dick_genug = np.where(d * sehne_mm >= fertigung.dicke_min)[0]
+            voll_ab = float(x[dick_genug[-1]]) if len(dick_genug) else 0.0
+            befunde.append(Befund(
+                "Vollmaterial ab", voll_ab >= fertigung.verklebung_beginn_max - 1e-9,
+                voll_ab * 100.0, fertigung.verklebung_beginn_max * 100.0,
+                einheit="% Sehne",
+                hinweis=f"Hinter dieser Stelle ist das Profil duenner als die "
+                        f"{fertigung.dicke_min:g} mm, die der Aufbau braucht - dort "
+                        f"wird das Bauteil Vollmaterial. Je frueher das beginnt, "
+                        f"desto schwerer wird der Fluegel. Duennere Haut, kein "
+                        f"Kern oder ein dickeres Profil verschiebt die Stelle "
+                        f"nach hinten."))
+        else:
+            hk = self.hinterkante_dicke * sehne_mm
+            befunde.append(Befund(
+                "Hinterkantendicke", hk >= fertigung.hinterkante_min - 1e-9,
+                hk, fertigung.hinterkante_min, regel="T 2.4.1",
+                hinweis="Hinterkante aufdicken oder Sehne vergroessern. Unter "
+                        "2 mm ist der geforderte 1-mm-Radius nicht darstellbar."))
+
+        # --- Nase --------------------------------------------------------
         nr = self.nasenradius() * sehne_mm
         befunde.append(Befund(
             "Nasenradius", nr >= fertigung.nasenradius_min - 1e-9,
             nr, fertigung.nasenradius_min, regel="T 2.4.1",
             hinweis="Nase abrunden. Vorwaertsgerichtete Kanten brauchen 3 mm."))
-
-        d_min_ist = float(self.dickenverlauf()[1][1:-1].min()) * sehne_mm
-        befunde.append(Befund(
-            "kleinste lokale Dicke", d_min_ist >= fertigung.dicke_min - 1e-9,
-            d_min_ist, fertigung.dicke_min,
-            hinweis=f"Laesst sich mit {fertigung.verfahren.value} nicht bauen. "
-                    f"Grenze folgt aus {fertigung.beschreibung()}."))
 
         return befunde
 
