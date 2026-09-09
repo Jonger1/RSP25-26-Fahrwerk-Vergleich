@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Ackermann Percentage Over Inner Wheel Steering Angle</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Ackermann Percentage Over Inner Wheel Steering Angle',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Inner Wheel Steering Angle [°]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Ackermann Condition Percentage [%]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Inner Wheel Steering Angle [°]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Ackermann Condition Percentage [%]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Ackermann Percentage Over Inner Wheel Steering Angle'
+    }
+};
+
+var trace0 =
+{
+x: ["0.0","1.1352965674554603","2.281801083260155","3.440548830338807","4.612672442223252","5.799416935948464","7.002157756770324","8.222422611619674","9.461918115911073","10.722562622321204","12.006527084136824","13.316286499181906","14.654685490796227","16.025023086611903","17.43116404430149","18.877687646655836","20.370090627838273","21.91507042040622","23.52093133832278","25.198185903793885","26.96047970144016"],
+y: ["0.0","60.99999671061149","61.43928487013562","61.93293516661856","62.48116768233103","63.08461584683109","63.74433766469109","64.4618374158871","65.23909919537365","66.07863444324225","66.98354656837","67.95761714622355","69.00542009458559","70.13247308944078","71.34543977211017","72.65240298507469","74.06323997339415","75.5901482213508","77.24840113184416","79.05746770356055","81.04273460134547"],
+marker: {
+    size: 6.0,
+    color: 'rgba(0,0,139,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(0,0,139,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Ackermann Percentage Over Inner Wheel Steering Angle',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

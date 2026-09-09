@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>RSP26_V4: Outer Wheel Steering Angle 100% Ackermann</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id='target' ></div>
+    <script>        var target_target = document.getElementById('target');
+        var layout = {
+    title: 'RSP26_V4: Outer Wheel Steering Angle 100% Ackermann',
+    titlefont: {
+  "color" : "#000000",
+  "family" : "arial",
+  "size" : 22
+},
+    height: 450,
+    showlegend: true,
+    autosize: true,
+    scene: {
+    xaxis: {
+	automargin: true,
+    title: 'Tie Rod Inner Y-Movement [mm]',
+    },
+    yaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+}
+,
+    xaxis: {
+	automargin: true,
+    title: 'Tie Rod Inner Y-Movement [mm]',
+    },
+
+    yaxis: {
+	automargin: true,
+    title: 'Steering Angle [°]',
+    },
+
+    zaxis: {
+	automargin: true,
+    title: '',
+    },
+    barmode: 'stack',
+};
+function saveToPath() {
+    const htmlContent = document.documentElement.outerHTML;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plot_visualization.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+var config = {
+    responsive: true,
+    displayModeBar: true,
+    displaylogo: false,
+    modeBarButtonsToAdd: [{
+        name: 'Download HTML',
+        icon: Plotly.Icons.disk,
+        click: function() {
+            saveToPath();
+        },
+        attr: 'data-title="Download HTML file"'
+    }],
+    toImageButtonOptions: {
+        format: 'svg',
+        filename: 'RSP26_V4: Outer Wheel Steering Angle 100% Ackermann'
+    }
+};
+
+var trace0 =
+{
+x: ["30.0","28.5","27.0","25.5","24.0","22.5","21.0","19.5","18.0","16.5","15.0","13.5","12.0","10.5","9.0","7.5","6.0","4.5","3.0","1.5","0.0"],
+y: ["20.1531213354869","19.122777400085532","18.1172739675628","17.129901181034704","16.155366930115093","15.1893666086724","14.228303663721622","13.269100913650528","12.30906894058529","11.34581171072948","10.377157253777224","9.401105680821294","8.415789497712845","7.419442837489722","6.410377303405803","5.386962817682128","4.347612345537265","3.2907696921756404","2.2148998020919337","1.1184811579050942","0.0"],
+marker: {
+    size: 6.0,
+    color: 'rgba(173,216,230,1.0)',
+},
+mode: 'lines+markers',
+line: {
+  "color" : "rgba(173,216,230,1.0)",
+  "dash" : "dot",
+  "shape" : "spline",
+  "simplify" : true,
+  "smoothing" : 1.0,
+  "width" : 3.0
+},
+xaxis: 'x',
+yaxis: 'y',
+type: 'scatter',
+name: 'Outer Wheel Steering Angle 100% Ackermann',
+};
+
+        var data = [ trace0];
+Plotly.newPlot(target_target, data, layout, config);        </script>
+</body>
+</html>

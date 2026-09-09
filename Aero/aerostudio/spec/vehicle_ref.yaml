@@ -65,9 +65,9 @@ fahrwerk:
 
   # Zeigt auf eure vorhandenen Kinematikexporte. Das Werkzeug liest daraus
   # den Federungs-Envelope und prüft die Regeln über den gesamten Bereich.
-  kinematik_ordner: 'C:\Users\janni\Downloads\RSP26_Datacurves\RSP26_Datacurves'
-  # TODO: in das Repository kopieren, damit der Validator nicht von
-  # einem Downloads-Ordner abhaengt.
+  kinematik_ordner: "../../fahrzeug/RSP26"
+  # Liegt im Repository, damit der Validator unabhaengig von lokalen
+  # Ordnern ist. Kopiert am 09.09.2026 aus den RSP26-Datacurves.
 
   # Vollstaendig vorhanden: Hub, Wanken und Lenken fuer beide Achsen.
   # Aus den Exporten gelesen am 09.09.2026:
