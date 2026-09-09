@@ -15,13 +15,16 @@ import plotly.graph_objects as go
 from ..geometrie.profil import Profil
 
 # Eine Farbe je Laminatzone, durchgehend im ganzen Werkzeug verwendet.
+# Abgestimmt auf die Palette in assets/aerostudio.css - wer dort die
+# Hausfarben aendert, sollte diese hier mitziehen.
 FARBE = {
-    "sandwich": "#2c7fb8",
-    "schale": "#7fcdbb",
-    "vollmaterial": "#d95f0e",
+    "sandwich": "#3d6fa5",
+    "schale": "#8fb4d4",
+    "vollmaterial": "#ea7317",
 }
-FARBE_KONTUR = "#253494"
-FARBE_HILFE = "#9e9e9e"
+FARBE_KONTUR = "#16181c"
+FARBE_HILFE = "#c8ccd4"
+FARBE_AKZENT = "#cf2027"
 
 
 def _grundlayout(titel: str, hoehe: int = 340) -> dict:
@@ -29,16 +32,20 @@ def _grundlayout(titel: str, hoehe: int = 340) -> dict:
         title=dict(text=titel, font=dict(size=14)),
         height=hoehe,
         margin=dict(l=55, r=20, t=40, b=45),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        font=dict(family="Segoe UI, system-ui, sans-serif", size=12,
+                  color="#1c1f24"),
         showlegend=False,
         hovermode="x unified",
     )
 
 
 def _achsen(fig: go.Figure) -> go.Figure:
-    fig.update_xaxes(gridcolor="#eeeeee", zerolinecolor="#dddddd")
-    fig.update_yaxes(gridcolor="#eeeeee", zerolinecolor="#dddddd")
+    fig.update_xaxes(gridcolor="#eef0f3", zerolinecolor="#dfe3e8",
+                     linecolor="#dfe3e8", ticks="outside", tickcolor="#dfe3e8")
+    fig.update_yaxes(gridcolor="#eef0f3", zerolinecolor="#dfe3e8",
+                     linecolor="#dfe3e8", ticks="outside", tickcolor="#dfe3e8")
     return fig
 
 
@@ -163,7 +170,7 @@ def exportpunkte(plan, name: str = "") -> go.Figure:
     Trennung an Nase und Hinterkante der Grund dafuer ist, dass Creo dort keine
     Beule baut.
     """
-    farben = [FARBE_KONTUR, "#7b3294"]
+    farben = [FARBE_KONTUR, FARBE_AKZENT]
     fig = go.Figure()
     for i, sektion in enumerate(plan.sektionen):
         fig.add_trace(go.Scatter(

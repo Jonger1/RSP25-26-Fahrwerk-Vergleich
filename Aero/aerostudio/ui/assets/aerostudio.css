@@ -1,17 +1,261 @@
-/* Aero Studio - eigenes Aussehen.
-   Dash laedt alles aus diesem Ordner von selbst. */
+/* ===================================================================
+   Aero Studio - Erscheinungsbild
+   Rennschmiede Pforzheim
 
-/* Dash 4 setzt neben jedes Zahlenfeld eigene Stepper-Knoepfe. Die schalten
-   bei step="any" immer um 1 - unabhaengig davon, was fuer das Feld sinnvoll
-   waere. Zusammen mit unseren eigenen Knoepfen standen dadurch vier Knoepfe
-   nebeneinander, von denen zwei falsch rechneten. Deshalb weg damit; unsere
-   Knoepfe kennen die richtige Schrittweite je Feld. */
-.dash-input-stepper {
-    display: none !important;
+   Dash laedt alles aus diesem Ordner von selbst.
+
+   Die Farben sind von der Lackierung des Fahrzeugs abgeleitet, wie sie im
+   CAD-Modell steht: schwarzer Grundton, darueber ein Streifen von Rot ueber
+   Orange nach Gelb. Sie stehen alle als Variablen im Block :root - wer die
+   echten Hausfarben des Teams kennt, aendert sie dort an einer Stelle und
+   nirgends sonst.
+   =================================================================== */
+
+:root {
+    /* Grundtoene */
+    --grund:        #f4f5f7;
+    --flaeche:      #ffffff;
+    --dunkel:       #16181c;
+    --dunkel-hell:  #262a31;
+
+    /* Akzente, aus der Lackierung */
+    --rot:          #cf2027;
+    --orange:       #ea7317;
+    --gelb:         #f4c20d;
+
+    /* Text */
+    --text:         #1c1f24;
+    --text-leise:   #6b7280;
+    --text-hell:    #e8eaed;
+
+    /* Zustaende */
+    --ok:           #1e7a34;
+    --hinweis:      #c96a00;
+    --fehler:       #c0272d;
+
+    /* Linien und Kanten */
+    --rahmen:       #e2e5ea;
+    --rahmen-stark: #c8ccd4;
+    --radius:       6px;
+    --schatten:     0 1px 2px rgba(16, 18, 22, 0.06);
+
+    --schrift: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --schrift-zahl: "Consolas", "SF Mono", "Menlo", monospace;
 }
 
-/* Auch die browsereigenen Pfeilchen ausblenden - sonst kommen sie bei
-   Firefox durch die Hintertuer wieder herein. */
+/* ------------------------------------------------------------------ Grund */
+
+body {
+    margin: 0;
+    background: var(--grund);
+    color: var(--text);
+    font-family: var(--schrift);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ----------------------------------------------------------------- Kopf */
+
+.as-kopf {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 12px 22px;
+    background: var(--dunkel);
+    color: var(--text-hell);
+}
+
+/* Der Streifen unter dem Kopf greift die Lackierung auf. */
+.as-streifen {
+    height: 3px;
+    background: linear-gradient(90deg,
+        var(--rot) 0%, var(--rot) 33%,
+        var(--orange) 33%, var(--orange) 66%,
+        var(--gelb) 66%, var(--gelb) 100%);
+}
+
+.as-marke {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.as-logo {
+    height: 30px;
+    width: auto;
+    display: block;
+}
+
+.as-wortmarke {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    line-height: 1.1;
+}
+
+.as-untertitel {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: #9aa1ab;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+.as-kopf-rechts {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.as-hash {
+    font-family: var(--schrift-zahl);
+    font-size: 11px;
+    color: #9aa1ab;
+    letter-spacing: 0.03em;
+}
+
+/* ----------------------------------------------------------------- Reiter */
+
+.as-reiter .tab {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    color: var(--text-leise) !important;
+    font-weight: 600 !important;
+    font-size: 13.5px !important;
+    letter-spacing: 0.03em;
+    padding: 11px 4px !important;
+}
+
+.as-reiter .tab--selected {
+    color: var(--text) !important;
+    border-bottom: 2px solid var(--rot) !important;
+    background: transparent !important;
+}
+
+.as-reiter {
+    background: var(--flaeche);
+    border-bottom: 1px solid var(--rahmen);
+    padding: 0 22px;
+}
+
+/* ----------------------------------------------------------------- Karten */
+
+.as-inhalt {
+    padding: 18px 22px 40px;
+}
+
+.as-karte {
+    background: var(--flaeche);
+    border: 1px solid var(--rahmen);
+    border-radius: var(--radius);
+    box-shadow: var(--schatten);
+    padding: 15px 16px;
+    margin-bottom: 14px;
+}
+
+.as-karte h4 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-leise);
+}
+
+/* ------------------------------------------------------------ Formulare */
+
+.as-feld { margin-bottom: 15px; }
+.as-feld:last-child { margin-bottom: 0; }
+
+.as-beschriftung {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.as-hinweis {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-leise);
+    margin-top: 4px;
+}
+
+.as-zahlenfeld {
+    display: flex;
+    border: 1px solid var(--rahmen-stark);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--flaeche);
+}
+
+.as-zahlenfeld:focus-within {
+    border-color: var(--rot);
+    box-shadow: 0 0 0 2px rgba(207, 32, 39, 0.12);
+}
+
+.as-schritt {
+    width: 34px;
+    flex-shrink: 0;
+    border: none;
+    background: #f0f1f4;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 17px;
+    line-height: 1;
+    padding: 0;
+    user-select: none;
+    transition: background 0.12s;
+}
+.as-schritt:hover  { background: #e3e5ea; }
+.as-schritt:active { background: var(--rot); color: #fff; }
+
+.as-zahlenfeld input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    text-align: center;
+    font-family: var(--schrift-zahl);
+    font-size: 13px;
+    padding: 7px 4px;
+}
+
+.as-textfeld {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 9px;
+    font-size: 13px;
+    font-family: var(--schrift);
+    border: 1px solid var(--rahmen-stark);
+    border-radius: var(--radius);
+    outline: none;
+}
+.as-textfeld:focus { border-color: var(--rot); }
+
+/* Dash 4 setzt neben jedes Zahlenfeld eigene Stepper-Knoepfe. Die schalten
+   bei step="any" immer um 1, unabhaengig davon, was fuer das Feld sinnvoll
+   waere - es standen dadurch vier Knoepfe nebeneinander, von denen zwei
+   falsch rechneten. Unsere eigenen kennen die richtige Schrittweite. */
+.dash-input-stepper { display: none !important; }
+
+/* Dash wickelt das Eingabefeld in einen eigenen Container. Ein Versuch mit
+   display:contents hat den Container zwar aus dem Layout genommen, die
+   Reihenfolge im Flexkasten aber durcheinandergebracht: Beide Knoepfe standen
+   links, das Feld rechts daneben. Der Container bleibt deshalb ein normales
+   Flexelement und traegt die Breite. */
+.dash-input-container {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+.dash-input-container input { width: 100%; }
+
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -22,7 +266,105 @@ input[type="number"] {
     appearance: textfield;
 }
 
-/* Der Dash-Container um das Eingabefeld darf unseren Rahmen nicht doppeln. */
-.dash-input-container {
-    display: contents;
+/* --------------------------------------------------------------- Knoepfe */
+
+.as-knopf {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: var(--schrift);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
 }
+
+.as-knopf-voll {
+    background: var(--rot);
+    color: #fff;
+    border: 1px solid var(--rot);
+}
+.as-knopf-voll:hover { background: #b31c22; border-color: #b31c22; }
+
+.as-knopf-leer {
+    background: var(--flaeche);
+    color: var(--text);
+    border: 1px solid var(--rahmen-stark);
+    margin-top: 9px;
+}
+.as-knopf-leer:hover { border-color: var(--rot); color: var(--rot); }
+
+.as-knopf-klein {
+    width: auto;
+    padding: 7px 15px;
+    font-size: 12.5px;
+    background: transparent;
+    color: var(--text-hell);
+    border: 1px solid #454b55;
+}
+.as-knopf-klein:hover { border-color: var(--gelb); color: var(--gelb); }
+
+/* ----------------------------------------------------------------- Ampel */
+
+.as-ampel-kopf {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 9px;
+}
+.as-ampel-kopf.ok   { color: var(--ok); }
+.as-ampel-kopf.fehl { color: var(--fehler); }
+
+.as-kennwerte {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 22px;
+    font-size: 12px;
+    color: var(--text-leise);
+    padding-bottom: 10px;
+    margin-bottom: 11px;
+    border-bottom: 1px solid var(--rahmen);
+}
+.as-kennwert b { color: var(--text); font-weight: 600; }
+
+.as-befund { margin-bottom: 9px; font-size: 13px; }
+.as-befund:last-child { margin-bottom: 0; }
+.as-zeichen { font-weight: 700; margin-right: 7px; }
+.as-zeichen.ok      { color: var(--ok); }
+.as-zeichen.hinweis { color: var(--hinweis); }
+.as-zeichen.fehler  { color: var(--fehler); }
+.as-pruefung { font-weight: 600; }
+.as-messwert { color: var(--text-leise); font-family: var(--schrift-zahl);
+               font-size: 12px; }
+.as-regel    { color: #a3a9b3; font-size: 11.5px; }
+.as-befund-hinweis {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-leise);
+    margin: 3px 0 0 24px;
+}
+
+/* -------------------------------------------------------------- Sonstiges */
+
+.as-spalte-links { width: 310px; flex-shrink: 0; margin-right: 18px; }
+.as-spalte-rechts { flex: 1; min-width: 0; }
+.as-zeile { display: flex; align-items: flex-start; }
+
+.as-code {
+    font-family: var(--schrift-zahl);
+    font-size: 11px;
+    line-height: 1.55;
+    background: #fafbfc;
+    border: 1px solid var(--rahmen);
+    border-radius: var(--radius);
+    padding: 11px 13px;
+    margin: 0;
+    overflow: auto;
+}
+
+.as-status-ok      { color: var(--ok); font-weight: 600; }
+.as-status-hinweis { color: var(--hinweis); font-weight: 600; }
+.as-status-fehler  { color: var(--fehler); font-weight: 600; }
+
+.as-fehlerkarte { font-size: 13px; }
+.as-fehlerkarte summary { cursor: pointer; font-size: 12px;
+                          color: var(--text-leise); }

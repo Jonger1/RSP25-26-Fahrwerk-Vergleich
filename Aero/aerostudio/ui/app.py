@@ -66,11 +66,6 @@ def wert(feld: str) -> dict:
 # von hier.
 _SCHRITTE: dict[str, float] = {}
 
-_KNOPF = {"width": "32px", "flexShrink": 0, "border": "1px solid #ccc",
-          "background": "#f7f7f7", "cursor": "pointer", "fontSize": "16px",
-          "lineHeight": "1", "padding": "5px 0", "userSelect": "none"}
-
-
 def _zahlenfeld(feld: str, vorgabe: float, schritt: float,
                 minimum: float | None = None,
                 maximum: float | None = None) -> html.Div:
@@ -84,16 +79,12 @@ def _zahlenfeld(feld: str, vorgabe: float, schritt: float,
     _SCHRITTE[feld] = float(schritt)
     return html.Div([
         html.Button("−", id={"typ": "minus", "feld": feld}, n_clicks=0,
-                    style={**_KNOPF, "borderRadius": "4px 0 0 4px"}),
+                    className="as-schritt", **{"aria-label": "verringern"}),
         dcc.Input(id=wert(feld), type="number", value=vorgabe, step="any",
-                  min=minimum, max=maximum, debounce=False,
-                  style={"flex": 1, "minWidth": 0, "padding": "5px",
-                         "fontSize": "13px", "textAlign": "center",
-                         "border": "1px solid #ccc", "borderLeft": "none",
-                         "borderRight": "none"}),
+                  min=minimum, max=maximum, debounce=False),
         html.Button("+", id={"typ": "plus", "feld": feld}, n_clicks=0,
-                    style={**_KNOPF, "borderRadius": "0 4px 4px 0"}),
-    ], style={"display": "flex"})
+                    className="as-schritt", **{"aria-label": "erhöhen"}),
+    ], className="as-zahlenfeld")
 
 
 # ------------------------------------------------------------------ Bausteine
@@ -101,26 +92,33 @@ def _zahlenfeld(feld: str, vorgabe: float, schritt: float,
 def _feld(beschriftung: str, komponente, hinweis: str = "") -> html.Div:
     kinder = []
     if beschriftung:
-        kinder.append(html.Label(beschriftung, style={
-            "fontSize": "13px", "fontWeight": 600, "display": "block",
-            "marginBottom": "3px"}))
+        kinder.append(html.Label(beschriftung, className="as-beschriftung"))
     kinder.append(komponente)
     if hinweis:
-        kinder.append(html.Div(hinweis, style={"fontSize": "11px", "color": "#777",
-                                               "marginTop": "3px"}))
-    return html.Div(kinder, style={"marginBottom": "14px"})
+        kinder.append(html.Div(hinweis, className="as-hinweis"))
+    return html.Div(kinder, className="as-feld")
 
 
-def _karte(kinder, **stil) -> html.Div:
-    grund = {"background": "white", "border": "1px solid #e0e0e0",
-             "borderRadius": "6px", "padding": "14px", "marginBottom": "14px"}
-    grund.update(stil)
-    return html.Div(kinder, style=grund)
+def _karte(kinder) -> html.Div:
+    return html.Div(kinder, className="as-karte")
 
 
 def _ueberschrift(text: str) -> html.H4:
-    return html.H4(text, style={"marginTop": 0, "marginBottom": "10px",
-                                "fontSize": "15px"})
+    return html.H4(text)
+
+
+def _logo():
+    """Zeigt das Teamlogo, wenn eines im Assets-Ordner liegt.
+
+    Erwartet logo.svg oder logo.png neben dieser Datei unter assets/. Fehlt es,
+    bleibt nur die Wortmarke - ein Logo wird nicht erfunden.
+    """
+    ordner = Path(__file__).resolve().parent / "assets"
+    for name in ("logo.svg", "logo.png", "logo.jpg"):
+        if (ordner / name).is_file():
+            return html.Img(src=f"/assets/{name}", className="as-logo",
+                            alt="Rennschmiede Pforzheim")
+    return None
 
 
 _GRAPH = dict(config={"displaylogo": False, "displayModeBar": False})
@@ -193,8 +191,7 @@ def _steuerung() -> html.Div:
 
 def _ansicht_profil() -> html.Div:
     return html.Div([
-        html.Div(_steuerung(), style={"width": "300px", "flexShrink": 0,
-                                      "marginRight": "16px"}),
+        html.Div(_steuerung(), className="as-spalte-links"),
         html.Div([
             _karte([html.Div(id="ampel")]),
             _karte([dcc.Graph(id="fig-kontur", **_GRAPH)]),
@@ -203,10 +200,10 @@ def _ansicht_profil() -> html.Div:
                          style={"flex": 1, "marginRight": "14px", "minWidth": 0}),
                 html.Div(_karte([dcc.Graph(id="fig-kruemmung", **_GRAPH)]),
                          style={"flex": 1, "minWidth": 0}),
-            ], style={"display": "flex"}),
+            ], className="as-zeile"),
             _karte([dcc.Graph(id="fig-zonen", **_GRAPH)]),
-        ], style={"flex": 1, "minWidth": 0}),
-    ], style={"display": "flex", "alignItems": "flex-start"})
+        ], className="as-spalte-rechts"),
+    ], className="as-zeile")
 
 
 def _ansicht_creo() -> html.Div:
@@ -216,40 +213,28 @@ def _ansicht_creo() -> html.Div:
                 _ueberschrift("Export nach Creo"),
                 _feld("Zielordner", dcc.Input(
                     id="exportordner", type="text", value="export",
-                    style={"width": "100%", "padding": "5px", "fontSize": "13px",
-                           "border": "1px solid #ccc", "borderRadius": "4px"}),
+                    className="as-textfeld"),
                     "Relativ zum Projektordner."),
                 _feld("Toleranz [mm]",
                       _zahlenfeld("toleranz", 0.005, 0.001, 0.0005, 0.5),
                       "Creos Modellgenauigkeit liegt bei 0,010 mm."),
                 html.Button("IBL schreiben", id="btn-export", n_clicks=0,
-                            style={"width": "100%", "padding": "9px",
-                                   "background": FARBE_AKZENT, "color": "white",
-                                   "border": "none", "borderRadius": "4px",
-                                   "fontSize": "14px", "cursor": "pointer"}),
-                html.Button("Schreiben und in Creo öffnen", id="btn-creo", n_clicks=0,
-                            style={"width": "100%", "padding": "9px",
-                                   "marginTop": "8px", "background": "white",
-                                   "color": FARBE_AKZENT,
-                                   "border": f"1px solid {FARBE_AKZENT}",
-                                   "borderRadius": "4px", "fontSize": "14px",
-                                   "cursor": "pointer"}),
-                html.Div(id="creo-status", style={"fontSize": "12px",
-                                                  "marginTop": "10px"}),
+                            className="as-knopf as-knopf-voll"),
+                html.Button("Schreiben und in Creo öffnen", id="btn-creo",
+                            n_clicks=0, className="as-knopf as-knopf-leer"),
+                html.Div(id="creo-status", className="as-hinweis",
+                         style={"marginTop": "11px"}),
             ]),
-        ], style={"width": "300px", "flexShrink": 0, "marginRight": "16px"}),
+        ], className="as-spalte-links"),
         html.Div([
             _karte([html.Div(id="export-info")]),
             _karte([_ueberschrift("Diese Punkte gehen nach Creo"),
                     dcc.Graph(id="fig-export", **_GRAPH)]),
             _karte([_ueberschrift("Vorschau der IBL-Datei"),
-                    html.Pre(id="ibl-vorschau",
-                             style={"fontSize": "11px", "background": "#fafafa",
-                                    "padding": "10px", "borderRadius": "4px",
-                                    "maxHeight": "300px", "overflow": "auto",
-                                    "margin": 0})]),
-        ], style={"flex": 1, "minWidth": 0}),
-    ], style={"display": "flex", "alignItems": "flex-start"})
+                    html.Pre(id="ibl-vorschau", className="as-code",
+                             style={"maxHeight": "300px"})]),
+        ], className="as-spalte-rechts"),
+    ], className="as-zeile")
 
 
 def _ansicht_projekt() -> html.Div:
@@ -260,52 +245,50 @@ def _ansicht_projekt() -> html.Div:
             _ueberschrift("AeroSpec"),
             html.Div("Das hier ist der gesamte Zustand des Programms. Genau diese "
                      "Datei wird gespeichert und liegt im Git.",
-                     style={"fontSize": "12px", "color": "#777", "marginBottom": "8px"}),
-            html.Pre(id="spec-yaml",
-                     style={"fontSize": "11px", "background": "#fafafa",
-                            "padding": "10px", "borderRadius": "4px",
-                            "maxHeight": "500px", "overflow": "auto", "margin": 0}),
+                     className="as-hinweis", style={"marginBottom": "9px"}),
+            html.Pre(id="spec-yaml", className="as-code",
+                     style={"maxHeight": "500px"}),
         ]),
     ])
 
 
 def layout() -> html.Div:
+    marke = [k for k in (_logo(), html.Div([
+        html.Div("Aero Studio", className="as-wortmarke"),
+        html.Div("Rennschmiede Pforzheim", className="as-untertitel"),
+    ])) if k is not None]
+
     return html.Div([
         dcc.Store(id="spec"),
         # Merkt sich je Verfahren die zuletzt benutzten Werte. Bewusst nur
         # Bedienkomfort und nicht Teil des Spec: Es beschreibt nicht den
         # Entwurf, sondern die Gewohnheit des Bearbeiters.
         dcc.Store(id="verfahrensspeicher", data={}),
+
         html.Div([
+            html.Div(marke, className="as-marke"),
             html.Div([
-                html.Span("Aero Studio", style={"fontSize": "19px", "fontWeight": 700}),
-                html.Span(id="kopf-hash", style={"fontSize": "12px", "color": "#777",
-                                                 "marginLeft": "12px"}),
-            ]),
-            html.Div([
-                html.Span(id="kopf-status", style={"fontSize": "12px",
-                                                   "marginRight": "12px"}),
+                html.Span(id="kopf-status"),
+                html.Span(id="kopf-hash", className="as-hash"),
                 html.Button("Spec speichern", id="btn-speichern", n_clicks=0,
-                            style={"padding": "6px 14px", "fontSize": "13px",
-                                   "cursor": "pointer", "borderRadius": "4px",
-                                   "border": "1px solid #bbb", "background": "white"}),
-            ]),
-        ], style={"display": "flex", "justifyContent": "space-between",
-                  "alignItems": "center", "padding": "10px 18px",
-                  "background": "white", "borderBottom": "1px solid #e0e0e0"}),
-        dcc.Tabs(id="reiter", value="profil", children=[
+                            className="as-knopf as-knopf-klein"),
+            ], className="as-kopf-rechts"),
+        ], className="as-kopf"),
+        html.Div(className="as-streifen"),
+
+        dcc.Tabs(id="reiter", value="profil", className="as-reiter", children=[
             dcc.Tab(label="Profil", value="profil"),
             dcc.Tab(label="Creo", value="creo"),
             dcc.Tab(label="Projekt", value="projekt"),
         ]),
+
         # Alle Ansichten stehen dauerhaft hier, der Reiter blendet nur um.
         html.Div([
             html.Div(_ansicht_profil(), id="view-profil"),
             html.Div(_ansicht_creo(), id="view-creo"),
             html.Div(_ansicht_projekt(), id="view-projekt"),
-        ], style={"padding": "16px"}),
-    ], style={"fontFamily": "Segoe UI, system-ui, sans-serif",
-              "background": "#f5f5f5", "minHeight": "100vh"})
+        ], className="as-inhalt"),
+    ])
 
 
 # ------------------------------------------------------------------ Callbacks
@@ -423,56 +406,57 @@ def _profil_aktualisieren(*werte):
 
 
 def _ampel(profil, sehne, fertigung, befunde) -> html.Div:
+    """Kennwerte und Pruefergebnisse als Ampel.
+
+    Der Kopf sagt in einem Satz, ob sich das so bauen laesst. Darunter die
+    Kennwerte, dann jede Pruefung mit Ist, Soll und - wo vorhanden - der
+    Regelnummer. Ein Hinweis erscheint nur, wenn die Pruefung nicht besteht;
+    sonst wuerde die Liste zulaufen und niemand liest sie mehr.
+    """
     kennwerte = html.Div([
-        html.Span(f"Dicke {profil.max_dicke*100:.1f} % bei "
-                  f"{profil.max_dicke_bei*100:.0f} %"),
-        html.Span(f"Wölbung {profil.max_woelbung*100:.1f} %",
-                  style={"marginLeft": "18px"}),
-        html.Span(f"Nasenradius {profil.nasenradius()*sehne:.1f} mm",
-                  style={"marginLeft": "18px"}),
+        html.Span([html.B(f"{profil.max_dicke*100:.1f} %"), " Dicke bei ",
+                   html.B(f"{profil.max_dicke_bei*100:.0f} %")],
+                  className="as-kennwert"),
+        html.Span([html.B(f"{profil.max_woelbung*100:.1f} %"), " Wölbung"],
+                  className="as-kennwert"),
+        html.Span([html.B(f"{profil.nasenradius()*sehne:.1f} mm"), " Nasenradius"],
+                  className="as-kennwert"),
         html.Span(f"{len(profil.punkte)} Punkte in der Quelle",
-                  style={"marginLeft": "18px", "color": "#777"}),
-    ], style={"fontSize": "12px", "color": "#555", "marginBottom": "10px"})
+                  className="as-kennwert"),
+    ], className="as-kennwerte")
 
     zeilen = []
-    for b in befunde:
-        farbe = FARBE_OK if b.ok else (FARBE_FEHLER if b.stufe == "fehler"
-                                       else FARBE_HINWEIS)
-        zeichen = "✓" if b.ok else ("✗" if b.stufe == "fehler" else "!")
-        kopf = [html.Span(f"{zeichen} ", style={"color": farbe, "fontWeight": 700}),
-                html.Span(b.pruefung, style={"fontWeight": 600}),
-                html.Span(f"  {b.ist:.2f} {b.einheit}, gefordert ≥ {b.soll:.2f}",
-                          style={"color": "#555"})]
-        if b.regel:
-            kopf.append(html.Span(f"  [{b.regel}]", style={"color": "#999"}))
+    for bef in befunde:
+        stufe = "ok" if bef.ok else bef.stufe
+        zeichen = "✓" if bef.ok else ("✗" if bef.stufe == "fehler" else "!")
+        kopf = [html.Span(zeichen, className=f"as-zeichen {stufe}"),
+                html.Span(bef.pruefung, className="as-pruefung"),
+                html.Span(f"  {bef.ist:.2f} {bef.einheit}  ·  gefordert ≥ "
+                          f"{bef.soll:.2f}", className="as-messwert")]
+        if bef.regel:
+            kopf.append(html.Span(f"  {bef.regel}", className="as-regel"))
         eintrag = [html.Div(kopf)]
-        if b.hinweis and not b.ok:
-            eintrag.append(html.Div(b.hinweis, style={
-                "fontSize": "11px", "color": "#777", "marginLeft": "16px",
-                "marginTop": "2px"}))
-        zeilen.append(html.Div(eintrag, style={"marginBottom": "7px",
-                                               "fontSize": "13px"}))
+        if bef.hinweis and not bef.ok:
+            eintrag.append(html.Div(bef.hinweis, className="as-befund-hinweis"))
+        zeilen.append(html.Div(eintrag, className="as-befund"))
 
-    blockiert = any(b.blockiert for b in befunde)
+    blockiert = any(bef.blockiert for bef in befunde)
     return html.Div([
         html.Div("Nicht baubar in dieser Form" if blockiert
                  else "Regel- und fertigungskonform",
-                 style={"fontWeight": 700, "marginBottom": "8px",
-                        "color": FARBE_FEHLER if blockiert else FARBE_OK}),
+                 className=f"as-ampel-kopf {'fehl' if blockiert else 'ok'}"),
         kennwerte, html.Div(zeilen)])
 
 
 def _fehlerkarte(fehler: Exception) -> html.Div:
     return html.Div([
-        html.Div("Das lässt sich so nicht berechnen.",
-                 style={"fontWeight": 700, "color": FARBE_FEHLER}),
-        html.Div(str(fehler), style={"fontSize": "13px", "marginTop": "6px"}),
-        html.Details([html.Summary("Einzelheiten",
-                                   style={"fontSize": "12px", "cursor": "pointer"}),
-                      html.Pre(traceback.format_exc(),
-                               style={"fontSize": "10px", "overflow": "auto"})],
-                     style={"marginTop": "8px"}),
-    ])
+        html.Div("Das lässt sich so nicht berechnen.", className="as-status-fehler"),
+        html.Div(str(fehler), style={"marginTop": "7px"}),
+        html.Details([html.Summary("Einzelheiten"),
+                      html.Pre(traceback.format_exc(), className="as-code",
+                               style={"marginTop": "7px"})],
+                     style={"marginTop": "9px"}),
+    ], className="as-fehlerkarte")
 
 
 @app.callback(Output("kopf-hash", "children"), Input("spec", "data"))
@@ -504,10 +488,11 @@ def _speichern(n, daten):
         return ""
     try:
         AeroSpec.model_validate(daten).speichern(SPEC_VORGABE)
-        return html.Span(f"gespeichert: {SPEC_VORGABE.name}", style={"color": FARBE_OK})
+        return html.Span(f"gespeichert: {SPEC_VORGABE.name}",
+                         className="as-status-ok")
     except Exception as fehler:
         return html.Span(f"Speichern fehlgeschlagen: {fehler}",
-                         style={"color": FARBE_FEHLER})
+                         className="as-status-fehler")
 
 
 @app.callback(Output("export-info", "children"), Output("ibl-vorschau", "children"),
@@ -551,11 +536,10 @@ def _export(daten, toleranz, ordner, n_export, n_creo):
 def _creo_oeffnen(ziel: Path):
     """Startet Creo mit der Datei und macht das Ergebnis lesbar."""
     ergebnis = creo_starten.oeffne(ziel)
-    farbe = FARBE_OK if ergebnis.gestartet else FARBE_HINWEIS
-    teile = [html.Div(ergebnis.meldung, style={"fontWeight": 600, "color": farbe})]
+    klasse = "as-status-ok" if ergebnis.gestartet else "as-status-hinweis"
+    teile = [html.Div(ergebnis.meldung, className=klasse)]
     if ergebnis.hinweis:
-        teile.append(html.Div(ergebnis.hinweis, style={"color": "#666",
-                                                       "marginTop": "3px"}))
+        teile.append(html.Div(ergebnis.hinweis, style={"marginTop": "4px"}))
     return html.Div(teile)
 
 
@@ -580,7 +564,7 @@ def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
                             f"({plan.punkte_gesamt} Punkte gesamt)")]),
         html.Div(f"Die geforderten {plan.toleranz_gefordert:.4f} mm waren nicht "
                  f"erreichbar — gerechnet wurde mit {plan.toleranz_mm:.4f} mm.",
-                 style={"color": FARBE_HINWEIS, "marginTop": "4px"})
+                 className="as-status-hinweis", style={"marginTop": "5px"})
         if plan.gelockert else html.Div(),
         html.Div([html.Span("Sektionen: ", style={"fontWeight": 600}),
                   html.Span("2 — Ober- und Unterseite getrennt, damit der Spline "
@@ -593,8 +577,8 @@ def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
     ]
     if geschrieben:
         zeilen.append(html.Div(f"Geschrieben: {geschrieben}",
-                               style={"color": FARBE_OK, "marginTop": "8px",
-                                      "fontWeight": 600}))
+                               className="as-status-ok",
+                               style={"marginTop": "9px"}))
     return html.Div(zeilen, style={"fontSize": "13px"})
 
 
