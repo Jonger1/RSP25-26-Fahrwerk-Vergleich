@@ -41,6 +41,31 @@ class Verfahren(str, Enum):
     unbestimmt = "unbestimmt"
 
 
+# Startwerte je Verfahren.
+#
+# ANNAHMEN, keine gemessenen Werte aus eurer Fertigung. Sie stammen aus dem,
+# was im Formula Student ueblich ist: Handlaminat traegt am meisten Harz auf
+# und wird am dicksten, Prepreg im Ofen liegt dazwischen, im Autoklaven wird
+# es am duennsten, weil der Druck das Laminat verdichtet.
+#
+# Gedacht als Ausgangspunkt, nicht als Vorschrift - jeder Wert bleibt
+# einstellbar, und die Oberflaeche merkt sich, was ihr je Verfahren zuletzt
+# benutzt habt. Sobald ihr eigene Werte gemessen habt, gehoeren sie hierher.
+VERFAHRENSVORGABEN: dict[str, dict[str, float]] = {
+    "nasslaminat": {"wandstaerke": 1.2, "kern": 0.0, "klebespalt": 0.30},
+    "prepreg":     {"wandstaerke": 0.6, "kern": 3.0, "klebespalt": 0.20},
+    "autoklav":    {"wandstaerke": 0.4, "kern": 3.0, "klebespalt": 0.15},
+    "unbestimmt":  {"wandstaerke": 1.0, "kern": 0.0, "klebespalt": 0.20},
+}
+
+
+def vorgaben_fuer(verfahren) -> dict[str, float]:
+    """Startwerte eines Verfahrens, immer als frische Kopie."""
+    schluessel = getattr(verfahren, "value", verfahren)
+    return dict(VERFAHRENSVORGABEN.get(schluessel,
+                                       VERFAHRENSVORGABEN["unbestimmt"]))
+
+
 class Fertigung(BaseModel):
     """Fertigungsgrenzen eines Bauteils.
 

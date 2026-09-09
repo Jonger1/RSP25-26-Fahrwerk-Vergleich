@@ -278,3 +278,36 @@ def test_woelbung_ueber_zehn_prozent_geht():
     p = Profil.aus_naca(0.15, 0.4, 0.12, n=301)
     assert p.max_woelbung > 0.13
     assert "NACA-Typ" in p.name        # keine erfundene Ziffernfolge
+
+
+# --------------------------------------------------------------- Verfahren
+
+def test_verfahren_setzt_eigene_startwerte():
+    """Vorher war das Feld eine reine Beschriftung - es stand etwas anderes da,
+    gerechnet wurde aber weiter mit denselben Zahlen."""
+    prepreg = UI._verfahren_gewaehlt("prepreg", {})
+    nass = UI._verfahren_gewaehlt("nasslaminat", {})
+    autoklav = UI._verfahren_gewaehlt("autoklav", {})
+    assert prepreg != nass != autoklav
+    # Handlaminat traegt am dicksten auf, der Autoklav am duennsten.
+    assert nass[0] > prepreg[0] > autoklav[0]
+
+
+def test_eigene_werte_werden_je_verfahren_gemerkt():
+    speicher = UI._verfahren_merken(0.9, 5.0, 0.4, "prepreg", {})
+    assert UI._verfahren_gewaehlt("prepreg", speicher) == (0.9, 5.0, 0.4)
+    # Ein anderes Verfahren bleibt davon unberuehrt.
+    assert UI._verfahren_gewaehlt("autoklav", speicher) == (0.4, 3.0, 0.15)
+
+
+def test_vorgaben_sind_kopien():
+    """Sonst veraendert ein Bearbeiter versehentlich die Vorgabe fuer alle."""
+    from aerostudio.spec.modell import vorgaben_fuer
+    a = vorgaben_fuer("prepreg")
+    a["wandstaerke"] = 99.0
+    assert vorgaben_fuer("prepreg")["wandstaerke"] == 0.6
+
+
+def test_unbekanntes_verfahren_faellt_zurueck():
+    from aerostudio.spec.modell import vorgaben_fuer
+    assert vorgaben_fuer("gibtsnicht") == vorgaben_fuer("unbestimmt")

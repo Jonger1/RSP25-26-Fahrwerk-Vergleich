@@ -34,7 +34,8 @@ from dash import (MATCH, Dash, Input, Output, State, callback_context, dcc, html
 from ..creo import starten as creo_starten
 from ..formate import export
 from ..geometrie.profil import katalogprofile, profil_fuer
-from ..spec.modell import Fertigung, ProfilAusDatei, ProfilNaca, Wirkrichtung
+from ..spec.modell import (Fertigung, ProfilAusDatei, ProfilNaca,
+                           Wirkrichtung, vorgaben_fuer)
 from ..spec.projekt import AeroSpec
 from . import darstellung
 
@@ -176,7 +177,10 @@ def _steuerung() -> html.Div:
             _feld("Verfahren", dcc.Dropdown(
                 id="verfahren", clearable=False, value="prepreg",
                 options=["nasslaminat", "prepreg", "autoklav", "unbestimmt"],
-                style={"fontSize": "13px"})),
+                style={"fontSize": "13px"}),
+                "Setzt die drei Werte darunter auf Startwerte für dieses "
+                "Verfahren. Änderst du sie, merkt sich das Werkzeug sie und "
+                "stellt sie beim nächsten Wechsel wieder her."),
             _feld("Wandstärke je Haut [mm]",
                   _zahlenfeld("wandstaerke", 0.6, 0.1, 0.05, 20.0)),
             _feld("Kerndicke [mm]", _zahlenfeld("kern", 3.0, 0.5, 0.0, 100.0),
@@ -268,6 +272,10 @@ def _ansicht_projekt() -> html.Div:
 def layout() -> html.Div:
     return html.Div([
         dcc.Store(id="spec"),
+        # Merkt sich je Verfahren die zuletzt benutzten Werte. Bewusst nur
+        # Bedienkomfort und nicht Teil des Spec: Es beschreibt nicht den
+        # Entwurf, sondern die Gewohnheit des Bearbeiters.
+        dcc.Store(id="verfahrensspeicher", data={}),
         html.Div([
             html.Div([
                 html.Span("Aero Studio", style={"fontSize": "19px", "fontWeight": 700}),
@@ -588,6 +596,38 @@ def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
                                style={"color": FARBE_OK, "marginTop": "8px",
                                       "fontWeight": 600}))
     return html.Div(zeilen, style={"fontSize": "13px"})
+
+
+@app.callback(
+    Output(wert("wandstaerke"), "value"), Output(wert("kern"), "value"),
+    Output(wert("klebespalt"), "value"),
+    Input("verfahren", "value"), State("verfahrensspeicher", "data"))
+def _verfahren_gewaehlt(verfahren, speicher):
+    """Beim Wechsel des Verfahrens die passenden Werte einsetzen.
+
+    Erst das, was zu diesem Verfahren zuletzt benutzt wurde; gibt es das noch
+    nicht, die Startwerte aus dem Datenmodell. Ohne das war das Feld eine
+    reine Beschriftung - es stand etwas anderes da, aber gerechnet wurde
+    weiter mit denselben Zahlen.
+    """
+    gemerkt = (speicher or {}).get(verfahren)
+    werte = gemerkt if gemerkt else vorgaben_fuer(verfahren)
+    return werte["wandstaerke"], werte["kern"], werte["klebespalt"]
+
+
+@app.callback(
+    Output("verfahrensspeicher", "data"),
+    Input(wert("wandstaerke"), "value"), Input(wert("kern"), "value"),
+    Input(wert("klebespalt"), "value"),
+    State("verfahren", "value"), State("verfahrensspeicher", "data"))
+def _verfahren_merken(wandstaerke, kern, klebespalt, verfahren, speicher):
+    """Haelt fest, was zu diesem Verfahren zuletzt eingestellt war."""
+    if verfahren is None:
+        return no_update
+    speicher = dict(speicher or {})
+    speicher[verfahren] = {"wandstaerke": wandstaerke, "kern": kern,
+                           "klebespalt": klebespalt}
+    return speicher
 
 
 def starten(port: int = 8051, browser: bool = True) -> None:
