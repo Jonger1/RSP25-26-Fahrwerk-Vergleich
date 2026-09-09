@@ -181,10 +181,20 @@ spline:
   nachweis_skript: creo/test/spline_verifikation.py
 
   # Konsequenz fuer M1: Die Punktzahl pro Profilkurve wird berechnet, nicht
-  # geschaetzt. Fuer NACA 4412 bei 250 mm Sehne genuegen 34 Punkte je Flaeche,
-  # um unter der halben Modellgenauigkeit zu bleiben; ab etwa 40 Punkten
-  # bringt mehr nichts. Der frueher angenommene Bereich 60-120 war zu
-  # konservativ. Weniger Punkte sind in Creo strikt besser.
+  # geschaetzt.
+  #
+  # NACHTRAG 09.09.2026, nach dem Laden der Benchmarkprofile:
+  # Der aus NACA 4412 abgeleitete Richtwert von 40 Punkten war zu optimistisch.
+  # Echte Hochauftriebsprofile sind an der Nase deutlich staerker gekruemmt und
+  # brauchen bei 250 mm Sehne und 5 um Toleranz:
+  #
+  #     S1210     86      LNV109A  108      E422    130
+  #     S1223     92      FX 63-137 144     E420    158
+  #     S1221    156      E423     170
+  #
+  # NACA 4412 kam mit 40 aus - ein Profil, das wir nie einsetzen werden.
+  # Genau deshalb wird die Zahl gerechnet und nicht aus einer Erfahrungsregel
+  # genommen: Sie haengt am Profil, nicht am Verfahren.
   punktzahl_wird_berechnet: true
-  punktzahl_richtwert: 40
+  punktzahl_richtwert: 150      # fuer Hochauftriebsprofile bei 250 mm Sehne
   punktzahl_toleranz_mm: 0.005

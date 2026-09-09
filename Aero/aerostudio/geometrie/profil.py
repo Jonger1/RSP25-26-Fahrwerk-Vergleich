@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from scipy.interpolate import PchipInterpolator
 from scipy.optimize import lsq_linear
 from scipy.special import comb
 
@@ -233,9 +234,20 @@ class Profil:
         return _monoton(self.punkte[self._nasenindex():])
 
     def _seiten_auf(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Ober- und Unterseite an gegebenen x-Stellen.
+
+        Interpoliert mit PCHIP, nicht linear. Katalogprofile haben oft nur 30
+        bis 100 Punkte; linear interpoliert waere die Kontur dazwischen ein
+        Polygonzug mit Knicken an jedem Stuetzpunkt. Dicke, Woelbung und jede
+        Toleranzbetrachtung waeren dann von der Punktzahl der Quelldatei
+        abhaengig statt von der Form.
+
+        PCHIP und nicht der gewoehnliche kubische Spline, weil PCHIP
+        formerhaltend ist: Er ueberschwingt nicht und erfindet damit keine
+        Dicke, die das Profil nicht hat.
+        """
         o, u = self.oben(), self.unten()
-        return (np.interp(x, o[:, 0], o[:, 1]),
-                np.interp(x, u[:, 0], u[:, 1]))
+        return (_werte_auf(o, x), _werte_auf(u, x))
 
     def dickenverlauf(self, n: int = 401) -> tuple[np.ndarray, np.ndarray]:
         x = kosinus(n)
@@ -279,8 +291,15 @@ class Profil:
 
         Numerisch statt aus der CST-Formel, damit der Wert fuer alle drei
         Profilquellen auf dieselbe Art entsteht und vergleichbar bleibt.
+
+        Das Fenster waechst, bis mindestens fuenf Punkte darin liegen. Sonst
+        liefern grob aufgeloeste Katalogprofile - manche haben nur 27 Punkte -
+        gar kein Ergebnis, obwohl ihre Nase voellig in Ordnung ist.
         """
         nahe = self.punkte[self.punkte[:, 0] <= anteil]
+        while len(nahe) < 5 and anteil < 0.2:
+            anteil *= 1.5
+            nahe = self.punkte[self.punkte[:, 0] <= anteil]
         if len(nahe) < 3:
             return float("nan")
         # Kreisfit: x^2+y^2 + D x + E y + F = 0
@@ -413,12 +432,19 @@ class Profil:
 
         Nutzt die in M0 verifizierte Nachbildung des Creo-Splines. Damit wird
         die Punktzahl gerechnet statt geschaetzt.
+
+        Gemessen wird gegen die GLATTE Kontur, nicht gegen den Polygonzug der
+        Quellpunkte. Ein erster Versuch verglich mit linear interpolierten
+        Katalogdaten - dagegen kann kein Spline gewinnen, weil der Polygonzug
+        an jedem der 72 Stuetzpunkte einen Knick hat. Die Suche lief dann bis
+        zur Obergrenze und meldete "keine Loesung", obwohl die Kurve laengst
+        genau genug war.
         """
-        o = self.oben()
+        o = self.oben() * float(sehne_mm)
 
         def kontur(n: int) -> np.ndarray:
-            x = kosinus(n)
-            return np.column_stack([x, np.interp(x, o[:, 0], o[:, 1])]) * sehne_mm
+            x = kosinus(n) * float(sehne_mm)
+            return np.column_stack([x, _werte_auf(o, x)])
 
         return punktzahl_fuer_toleranz(kontur, toleranz_mm)
 
@@ -429,6 +455,22 @@ class Profil:
                 f"  max. Woelbung  {self.max_woelbung*100:6.2f} %\n"
                 f"  Nasenradius    {self.nasenradius()*100:6.3f} % Sehne\n"
                 f"  Hinterkante    {self.hinterkante_dicke*100:6.3f} % Sehne")
+
+
+def _werte_auf(seite: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Wertet eine Profilseite formerhaltend an den Stellen x aus.
+
+    Die Auswertestellen werden auf den tatsaechlichen Bereich der Seite
+    geklemmt. Nach der Normierung reicht eine Seite naemlich nicht immer exakt
+    von 0 bis 1 - die Nase kann bei 1e-6 beginnen, die Hinterkante bei
+    0.999998 enden. Ohne Klemmung liefert PCHIP dort NaN, und der Fehler
+    breitet sich still in Dicke, Woelbung und Toleranzrechnung aus.
+
+    Der ueberbrueckte Bereich liegt im Bereich von Mikrometern und ist damit
+    weit unter jeder Fertigungs- oder Modelltoleranz.
+    """
+    xs = np.clip(np.asarray(x, dtype=float), seite[0, 0], seite[-1, 0])
+    return PchipInterpolator(seite[:, 0], seite[:, 1], extrapolate=False)(xs)
 
 
 def _monoton(seite: np.ndarray) -> np.ndarray:
