@@ -33,8 +33,10 @@ from dash import (MATCH, Dash, Input, Output, State, callback_context, dcc, html
 
 from ..creo import starten as creo_starten
 from ..formate import export
-from ..geometrie.profil import katalogprofile, profil_fuer
-from ..spec.modell import (Fertigung, ProfilAusDatei, ProfilNaca,
+from .. import regeln
+from ..geometrie.profil import (katalognotiz, katalogoptionen,
+                                katalogprofile, profil_fuer)
+from ..spec.modell import (Fertigung, ProfilAusDatei, ProfilNaca, Spannweite,
                            Wirkrichtung, vorgaben_fuer)
 from ..spec.projekt import AeroSpec
 from . import darstellung
@@ -126,115 +128,186 @@ _GRAPH = dict(config={"displaylogo": False, "displayModeBar": False})
 
 # ------------------------------------------------------------------- Ansichten
 
-def _steuerung() -> html.Div:
-    return html.Div([
-        _karte([
-            _ueberschrift("Profil"),
-            _feld("Quelle", dcc.RadioItems(
-                id="quelle", value="datei",
-                options=[{"label": " Katalog", "value": "datei"},
-                         {"label": " NACA", "value": "naca"}],
-                inline=True, style={"fontSize": "13px"})),
-            html.Div(id="quelle-katalog", children=[
-                _feld("Katalogprofil", dcc.Dropdown(
-                    id="katalogdatei", options=katalogprofile(),
-                    value="e423.dat", clearable=False,
-                    style={"fontSize": "13px"}))]),
-            html.Div(id="quelle-naca", children=[
-                _feld("Wölbung [%]",
-                      _zahlenfeld("naca-woelbung", 4.0, 0.5, -25.0, 25.0),
-                      "Negativ wölbt nach unten. Über 9,5 % verlässt man die "
-                      "Standard-NACA-Familie — die Formel gilt weiter, "
-                      "Literaturdaten gibt es dann aber keine."),
-                _feld("Wölbungslage [%]",
-                      _zahlenfeld("naca-lage", 40.0, 5.0, 5.0, 95.0)),
-                _feld("Dicke [%]", _zahlenfeld("naca-dicke", 12.0, 0.5, 1.0, 40.0)),
-            ]),
+def _leiste(titel: str, felder: list, spalten: str = "220px") -> html.Div:
+    """Eine Karte, deren Felder NEBENEINANDER stehen statt untereinander.
+
+    Der Grund ist praktisch: Standen die Regler in einer hohen Spalte links,
+    lag die Haelfte davon unterhalb des sichtbaren Bereichs. Wer den
+    Anstellwinkel aendern wollte, musste scrollen und sah dabei das Diagramm
+    nicht mehr, das sich gerade aenderte. Nebeneinander passen dieselben
+    Felder in zwei Zeilen und stehen gemeinsam mit der Zeichnung im Blick.
+
+    auto-fit statt einer festen Spaltenzahl: Auf einem schmalen Bildschirm
+    rutschen die Felder von selbst untereinander, statt zusammengequetscht
+    zu werden.
+    """
+    return _karte([
+        _ueberschrift(titel),
+        html.Div(felder, className="as-leiste",
+                 style={"gridTemplateColumns":
+                        f"repeat(auto-fit, minmax({spalten}, 1fr))"}),
+    ])
+
+
+def _profilleiste() -> html.Div:
+    return _leiste("Profil und Geometrie", [
+        _feld("Name des Entwurfs", dcc.Input(
+            id="entwurfsname", type="text", value="Frontfluegel Hauptelement",
+            debounce=True, maxLength=60, className="as-textfeld"),
+            "Steht im Dateinamen des Exports und im Kopf der IBL-Datei."),
+
+        _feld("Quelle", dcc.RadioItems(
+            id="quelle", value="datei",
+            options=[{"label": " Katalog", "value": "datei"},
+                     {"label": " NACA", "value": "naca"}],
+            inline=True, style={"fontSize": "13px"}),
+            "Fertiges Profil aus dem Katalog oder eines nach NACA-Formel."),
+
+        html.Div(id="quelle-katalog", children=[
+            _feld("Katalogprofil", dcc.Dropdown(
+                id="katalogdatei", options=katalogoptionen(),
+                value="e423.dat", clearable=False,
+                style={"fontSize": "13px"}))]),
+
+        html.Div(id="quelle-naca", children=[
+            _feld("Wölbung [%]",
+                  _zahlenfeld("naca-woelbung", 4.0, 0.5, -25.0, 25.0),
+                  "Negativ wölbt nach unten. Über 9,5 % verlässt man die "
+                  "Standard-NACA-Familie."),
+            _feld("Wölbungslage [%]",
+                  _zahlenfeld("naca-lage", 40.0, 5.0, 5.0, 95.0)),
+            _feld("Dicke [%]", _zahlenfeld("naca-dicke", 12.0, 0.5, 1.0, 40.0)),
         ]),
-        _karte([
-            _ueberschrift("Wirkrichtung"),
-            _feld("", dcc.RadioItems(
-                id="wirkrichtung", value="abtrieb",
-                options=[{"label": " Abtrieb", "value": "abtrieb"},
-                         {"label": " Auftrieb (Bullwing)", "value": "auftrieb"}],
-                style={"fontSize": "13px"}),
-                "Katalogprofile sind für Auftrieb gezeichnet — sie stammen aus "
-                "dem Flugzeugbau. Für Abtrieb, den Normalfall am Rennwagen, "
-                "werden sie gespiegelt. Auftrieb wählt man für Bullwings, die "
-                "die Aerobalance nach hinten verschieben."),
-        ]),
-        _karte([
-            _ueberschrift("Geometrie"),
-            _feld("Sehnenlänge [mm]", _zahlenfeld("sehne", 250.0, 5.0, 1.0, 5000.0),
-                  "Beliebige Zahl, auch mit Komma. Die Knöpfe springen in 5-mm-Schritten."),
-            _feld("Anstellwinkel [°]", _zahlenfeld("aoa", -4.0, 0.5, -60.0, 60.0),
-                  "Negativ = Nase nach unten."),
-        ]),
-        _karte([
-            _ueberschrift("Fertigung"),
-            _feld("Verfahren", dcc.Dropdown(
-                id="verfahren", clearable=False, value="prepreg",
-                options=["nasslaminat", "prepreg", "autoklav", "unbestimmt"],
-                style={"fontSize": "13px"}),
-                "Setzt die drei Werte darunter auf Startwerte für dieses "
-                "Verfahren. Änderst du sie, merkt sich das Werkzeug sie und "
-                "stellt sie beim nächsten Wechsel wieder her."),
-            _feld("Wandstärke je Haut [mm]",
-                  _zahlenfeld("wandstaerke", 0.6, 0.1, 0.05, 20.0)),
-            _feld("Kerndicke [mm]", _zahlenfeld("kern", 3.0, 0.5, 0.0, 100.0),
-                  "0 = keine. Der Kern wird nur dort eingelegt, wo er hineinpasst."),
-            _feld("Klebespalt [mm]", _zahlenfeld("klebespalt", 0.2, 0.05, 0.0, 5.0),
-                  "Bestimmt zusammen mit der Wandstärke die gebaute Hinterkante."),
-        ]),
+
+        _feld("Wirkrichtung", dcc.RadioItems(
+            id="wirkrichtung", value="abtrieb",
+            options=[{"label": " Abtrieb", "value": "abtrieb"},
+                     {"label": " Auftrieb (Bullwing)", "value": "auftrieb"}],
+            style={"fontSize": "13px"}),
+            "Katalogprofile sind für Auftrieb gezeichnet und werden für "
+            "Abtrieb gespiegelt. Auftrieb wählt man für Bullwings."),
+
+        _feld("Sehnenlänge [mm]", _zahlenfeld("sehne", 250.0, 5.0, 1.0, 5000.0),
+              "Beliebige Zahl, auch mit Komma. Die Knöpfe springen in "
+              "5-mm-Schritten."),
+
+        _feld("Anstellwinkel [°]", _zahlenfeld("aoa", -4.0, 0.5, -60.0, 60.0),
+              "Negativ = Nase nach unten."),
+    ])
+
+
+def _fertigungsleiste() -> html.Div:
+    return _leiste("Fertigung", [
+        _feld("Verfahren", dcc.Dropdown(
+            id="verfahren", clearable=False, value="prepreg",
+            options=["nasslaminat", "prepreg", "autoklav", "unbestimmt"],
+            style={"fontSize": "13px"}),
+            "Setzt die drei Werte daneben auf Startwerte. Änderst du sie, "
+            "merkt sich das Werkzeug sie je Verfahren."),
+        _feld("Wandstärke je Haut [mm]",
+              _zahlenfeld("wandstaerke", 0.6, 0.1, 0.05, 20.0)),
+        _feld("Kerndicke [mm]", _zahlenfeld("kern", 3.0, 0.5, 0.0, 100.0),
+              "0 = keine. Der Kern kommt nur dorthin, wo er hineinpasst."),
+        _feld("Klebespalt [mm]", _zahlenfeld("klebespalt", 0.2, 0.05, 0.0, 5.0),
+              "Bestimmt zusammen mit der Wandstärke die gebaute Hinterkante."),
     ])
 
 
 def _ansicht_profil() -> html.Div:
     return html.Div([
-        html.Div(_steuerung(), className="as-spalte-links"),
+        _profilleiste(),
         html.Div([
-            _karte([html.Div(id="ampel")]),
-            _karte([dcc.Graph(id="fig-kontur", **_GRAPH)]),
-            html.Div([
-                html.Div(_karte([dcc.Graph(id="fig-dicke", **_GRAPH)]),
-                         style={"flex": 1, "marginRight": "14px", "minWidth": 0}),
-                html.Div(_karte([dcc.Graph(id="fig-kruemmung", **_GRAPH)]),
-                         style={"flex": 1, "minWidth": 0}),
-            ], className="as-zeile"),
-            _karte([dcc.Graph(id="fig-zonen", **_GRAPH)]),
-        ], className="as-spalte-rechts"),
-    ], className="as-zeile")
+            html.Div(_karte([dcc.Graph(id="fig-kontur", **_GRAPH)]),
+                     style={"flex": "2 1 0", "minWidth": 0,
+                            "marginRight": "14px"}),
+            html.Div([_karte([html.Div(id="ampel")]),
+                      html.Div(id="katalog-notiz")],
+                     style={"flex": "1 1 0", "minWidth": "300px"}),
+        ], className="as-zeile"),
+        _fertigungsleiste(),
+        html.Div([
+            html.Div(_karte([dcc.Graph(id="fig-dicke", **_GRAPH)]),
+                     style={"flex": 1, "marginRight": "14px", "minWidth": 0}),
+            html.Div(_karte([dcc.Graph(id="fig-kruemmung", **_GRAPH)]),
+                     style={"flex": 1, "minWidth": 0}),
+        ], className="as-zeile"),
+        _karte([dcc.Graph(id="fig-zonen", **_GRAPH)]),
+    ])
 
 
 def _ansicht_creo() -> html.Div:
     return html.Div([
-        html.Div([
-            _karte([
-                _ueberschrift("Export nach Creo"),
-                _feld("Zielordner", dcc.Input(
-                    id="exportordner", type="text", value="export",
-                    className="as-textfeld"),
-                    "Relativ zum Projektordner."),
-                _feld("Toleranz [mm]",
-                      _zahlenfeld("toleranz", 0.005, 0.001, 0.0005, 0.5),
-                      "Creos Modellgenauigkeit liegt bei 0,010 mm."),
+        _leiste("Export nach Creo", [
+            _feld("Ausgabe", dcc.RadioItems(
+                id="ausgabe", value="kurve",
+                options=[{"label": " Eine geschlossene Kurve", "value": "kurve"},
+                         {"label": " Profil aus zwei Kurven", "value": "profil"},
+                         {"label": " 3D-Flügel über die Spannweite",
+                          "value": "fluegel"}],
+                style={"fontSize": "13px"}),
+                "Eine geschlossene Kurve ist der Normalfall: EIN umlaufender "
+                "Spline, aus dem sich sofort eine Skizze und daraus ein "
+                "Extrudieren machen lässt. Profil liefert Ober- und Unterseite "
+                "getrennt — die berühren sich nur, für Creo ist das keine "
+                "geschlossene Kontur, dafür braucht diese Form etwa ein "
+                "Drittel der Punkte. 3D-Flügel schreibt einen Schnittstapel "
+                "über die Spannweite, aus dem in Creo ein Verbund wird."),
+            _feld("Toleranz [mm]",
+                  _zahlenfeld("toleranz", 0.005, 0.001, 0.0005, 0.5),
+                  "Creos Modellgenauigkeit liegt bei 0,010 mm."),
+            _feld("Zielordner", dcc.Input(
+                id="exportordner", type="text", value="export",
+                className="as-textfeld"), "Relativ zum Projektordner."),
+            html.Div([
                 html.Button("IBL schreiben", id="btn-export", n_clicks=0,
                             className="as-knopf as-knopf-voll"),
                 html.Button("Schreiben und in Creo öffnen", id="btn-creo",
                             n_clicks=0, className="as-knopf as-knopf-leer"),
                 html.Div(id="creo-status", className="as-hinweis",
-                         style={"marginTop": "11px"}),
+                         style={"marginTop": "9px"}),
             ]),
-        ], className="as-spalte-links"),
+        ], spalten="250px"),
+
+        _leiste("Flügel (3D) — wirkt nur bei der Ausgabe 3D-Flügel", [
+            _feld("Verteilung", dcc.Dropdown(
+                id="verteilung", clearable=False, value="frontfluegel",
+                options=[{"label": "Frontflügel außen (Outwash innen)",
+                          "value": "frontfluegel"},
+                         {"label": "Gerader Flügel ohne Verwindung",
+                          "value": "gerade"}],
+                style={"fontSize": "13px"}),
+                "Frontflügel außen folgt veröffentlichten FS-Entwürfen: innen "
+                "−10° für den Outwash ums Vorderrad, außen die längste Sehne."),
+            _feld("Halbspannweite [mm]",
+                  _zahlenfeld("halbspannweite", 600.0, 25.0, 50.0, 900.0),
+                  "Ab Fahrzeugmitte. Der äußerste Punkt des Vorderrads liegt "
+                  "bei 695 mm."),
+            _feld("Schnitte", _zahlenfeld("schnittzahl", 13.0, 2.0, 2.0, 101.0),
+                  "Mehr Schnitte bilden die Verwindung feiner ab, kosten in "
+                  "Creo aber Regenerationszeit."),
+            _feld("Nase vor der Vorderachse [mm]",
+                  _zahlenfeld("pos-x", 600.0, 25.0, -2000.0, 2000.0),
+                  "Positiv = vor der Achse."),
+            _feld("Höhe über Boden [mm]",
+                  _zahlenfeld("pos-z", 90.0, 5.0, 0.0, 1500.0),
+                  "Höhe der Wurzelsehne. Der Regelcheck rechnet den Bremsfall "
+                  "dazu."),
+        ]),
+
         html.Div([
-            _karte([html.Div(id="export-info")]),
-            _karte([_ueberschrift("Diese Punkte gehen nach Creo"),
-                    dcc.Graph(id="fig-export", **_GRAPH)]),
-            _karte([_ueberschrift("Vorschau der IBL-Datei"),
-                    html.Pre(id="ibl-vorschau", className="as-code",
-                             style={"maxHeight": "300px"})]),
-        ], className="as-spalte-rechts"),
-    ], className="as-zeile")
+            html.Div(_karte([_ueberschrift("Diese Punkte gehen nach Creo"),
+                             dcc.Graph(id="fig-export", **_GRAPH)]),
+                     style={"flex": "2 1 0", "minWidth": 0,
+                            "marginRight": "14px"}),
+            html.Div(_karte([html.Div(id="export-info")]),
+                     style={"flex": "1 1 0", "minWidth": "300px"}),
+        ], className="as-zeile"),
+
+        html.Div(id="regelkarte"),
+        _karte([_ueberschrift("Vorschau der IBL-Datei"),
+                html.Pre(id="ibl-vorschau", className="as-code",
+                         style={"maxHeight": "300px"})]),
+    ])
 
 
 def _ansicht_projekt() -> html.Div:
@@ -345,7 +418,8 @@ def schritt_rechnen(aktuell, schritt, richtung: str,
 
 
 def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
-               verfahren, wandstaerke, kern, klebespalt) -> AeroSpec:
+               verfahren, wandstaerke, kern, klebespalt, entwurfsname,
+               verteilung, halbspannweite, schnittzahl, pos_x, pos_z) -> AeroSpec:
     """Sammelt die Bedienelemente zu einem gueltigen Spec.
 
     Einzige Stelle, an der aus Bedienelementen Fachdaten werden - alles Weitere
@@ -360,9 +434,23 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
             dicke=(dicke or 12) / 100.0)
     else:
         element.profil = ProfilAusDatei(datei=katalogdatei or "e423.dat")
+    element.name = (entwurfsname or "").strip()
     element.wirkrichtung = Wirkrichtung(wirkrichtung or "abtrieb")
     element.sehne = float(sehne or 250.0)
     element.anstellwinkel = float(0.0 if aoa is None else aoa)
+    # Die Spannweite steht immer im Spec, auch wenn gerade nur eine Kurve
+    # ausgegeben wird. So geht die Einstellung beim Umschalten nicht verloren
+    # - und der Regelcheck kann rechnen, ohne dass man erst exportieren muss.
+    weite = float(halbspannweite or 600.0)
+    grund = (Spannweite.gerade(weite) if verteilung == "gerade"
+             else Spannweite.frontfluegel_aussen().skaliert(weite))
+    grund.schnitte = int(schnittzahl or 13)
+    element.spannweite = grund
+    # Im Werkzeug zeigt x nach hinten, im Bedienfeld wird nach VORNE gefragt -
+    # "600 mm vor der Vorderachse" ist die Sprache, in der ein Aeroteam denkt.
+    element.pos_x = -float(pos_x if pos_x is not None else 600.0)
+    element.pos_z = float(pos_z if pos_z is not None else 90.0)
+
     spec.fertigung = Fertigung(
         verfahren=verfahren or "unbestimmt",
         wandstaerke=float(wandstaerke or 0.6),
@@ -378,6 +466,10 @@ _EINGABEN = [
     Input(wert("sehne"), "value"), Input(wert("aoa"), "value"),
     Input("verfahren", "value"), Input(wert("wandstaerke"), "value"),
     Input(wert("kern"), "value"), Input(wert("klebespalt"), "value"),
+    Input("entwurfsname", "value"),
+    Input("verteilung", "value"), Input(wert("halbspannweite"), "value"),
+    Input(wert("schnittzahl"), "value"), Input(wert("pos-x"), "value"),
+    Input(wert("pos-z"), "value"),
 ]
 
 
@@ -403,6 +495,29 @@ def _profil_aktualisieren(*werte):
     except Exception as fehler:
         leer = {"data": [], "layout": {"height": 200}}
         return no_update, _fehlerkarte(fehler), leer, leer, leer, leer
+
+
+@app.callback(Output("katalog-notiz", "children"),
+              Input("katalogdatei", "value"))
+def _katalognotiz(datei):
+    """Zeigt, wofuer das gewaehlte Profil taugt.
+
+    Eigener Callback und nicht Teil der Ampel: Die Notiz haengt allein an der
+    Profilauswahl. Waere sie im grossen Callback, wuerde sie bei jeder
+    Sehnenaenderung mitgerechnet, ohne sich zu aendern.
+    """
+    notiz = katalognotiz(datei or "")
+    if not notiz:
+        return html.Div("Keine Notiz hinterlegt. Wer eine ergänzen möchte: "
+                        "profile/katalog.yaml.", className="as-hinweis")
+
+    teile = []
+    if notiz.get("notiz"):
+        teile.append(html.Div(notiz["notiz"].strip(), className="as-notiz-text"))
+    if notiz.get("achtung"):
+        teile.append(html.Div([html.B("Achtung: "), notiz["achtung"].strip()],
+                              className="as-notiz-achtung"))
+    return html.Div(teile, className="as-notiz")
 
 
 def _ampel(profil, sehne, fertigung, befunde) -> html.Div:
@@ -497,40 +612,117 @@ def _speichern(n, daten):
 
 @app.callback(Output("export-info", "children"), Output("ibl-vorschau", "children"),
               Output("fig-export", "figure"),
-              Output("creo-status", "children"),
+              Output("creo-status", "children"), Output("regelkarte", "children"),
               Input("spec", "data"), Input(wert("toleranz"), "value"),
-              Input("exportordner", "value"), Input("btn-export", "n_clicks"),
-              Input("btn-creo", "n_clicks"))
-def _export(daten, toleranz, ordner, n_export, n_creo):
+              Input("exportordner", "value"), Input("ausgabe", "value"),
+              Input("btn-export", "n_clicks"), Input("btn-creo", "n_clicks"))
+def _export(daten, toleranz, ordner, ausgabe, n_export, n_creo):
     leer = {"data": [], "layout": {"height": 200}}
     if not daten:
-        return "", "", leer, ""
+        return "", "", leer, "", ""
     try:
         spec = AeroSpec.model_validate(daten)
         element = spec.elemente[0]
         profil = profil_fuer(element)
 
-        plan = export.plane_element(profil, element.sehne, element.anstellwinkel,
-                                    float(toleranz or 0.005))
-        ziel = PROJEKT / (ordner or "export") / f"{element.id}.ibl"
+        if ausgabe == "fluegel" and element.spannweite is not None:
+            plan = export.plane_fluegel(
+                profil, element.spannweite, element.sehne, element.anstellwinkel,
+                lage=(element.pos_x, element.pos_y, element.pos_z),
+                toleranz_mm=float(toleranz or 0.005))
+        else:
+            plan = export.plane_element(profil, element.sehne,
+                                        element.anstellwinkel,
+                                        float(toleranz or 0.005),
+                                        geschlossen=(ausgabe != "profil"))
+        ziel = (PROJEKT / (ordner or "export")
+                / export.dateiname(element.anzeigename))
 
         # Beide Schaltflaechen schreiben - die zweite oeffnet zusaetzlich Creo.
         nach_creo = _ausgeloest_von("btn-creo")
         geschrieben = None
         if _ausgeloest_von("btn-export") or nach_creo:
             export.schreibe(plan, ziel, kommentare=[
-                f"Aero Studio - {element.id}",
+                f"Aero Studio - {element.anzeigename}",
                 f"Profil {profil.name}, Sehne {element.sehne:.1f} mm, "
                 f"Anstellwinkel {element.anstellwinkel:+.1f} Grad",
+                "Kurvenform: " + ("eine geschlossene Kurve" if plan.geschlossen
+                                  else "Ober- und Unterseite getrennt"),
                 f"AERO_SPEC_HASH: {spec.hash()}",
             ])
             geschrieben = ziel
 
         status = _creo_oeffnen(ziel) if nach_creo else ""
         return (_exportinfo(plan, ziel, geschrieben), export.vorschau(plan),
-                darstellung.exportpunkte(plan, profil.name), status)
+                darstellung.exportpunkte(plan, profil.name), status,
+                _regelkarte(plan))
     except Exception as fehler:
-        return _fehlerkarte(fehler), "", leer, ""
+        return _fehlerkarte(fehler), "", leer, "", ""
+
+
+def _regelkarte(plan) -> html.Div:
+    """Prueft den Fluegel gegen beide Regelstaende und zeigt es nebeneinander.
+
+    Nur beim 3D-Fluegel: Ein einzelner Profilschnitt hat keine Lage am
+    Fahrzeug, und ohne Lage laesst sich keine einzige Regel aus T 8.2 pruefen.
+    Eine Ampel, die dann trotzdem gruen meldet, waere schlimmer als keine.
+    """
+    if not plan.ist_fluegel or not plan.stapel:
+        return html.Div()
+
+    bezug = regeln.Bezugsgeometrie.aus_datei()
+    vorne = max(0.0, -min(s.punkte[:, 0].min() for s in plan.stapel))
+    zustand = regeln.Fahrzustand.bremsend(vorne)
+
+    spalten = []
+    for satz in regeln.alle_staende():
+        befunde = regeln.pruefe_fluegel(plan.stapel, satz, bezug, zustand)
+        schlecht = [b for b in befunde if not b.ok]
+        harte = [b for b in schlecht if b.blockiert]
+
+        kopf = ("Regelkonform" if not schlecht else
+                (f"{len(harte)} Verstoß" if len(harte) == 1 else
+                 f"{len(harte)} Verstöße") if harte else
+                f"{len(schlecht)} Punkt(e) zu prüfen")
+        spalten.append(html.Div([
+            html.Div([
+                html.Span(satz.version, style={"fontWeight": 700}),
+                html.Span(" · Entwurf, nicht verbindlich" if satz.entwurf
+                          else " · geltend", className="as-regel"),
+            ], style={"marginBottom": "6px"}),
+            html.Div(kopf, className="as-ampel-kopf "
+                     + ("fehl" if harte else "ok"),
+                     style={"fontSize": "13.5px"}),
+            html.Div([_regelzeile(b) for b in befunde]),
+        ], className="as-spalte-rechts", style={"minWidth": "340px"}))
+
+    return _karte([
+        _ueberschrift("Regelprüfung im Fahrzustand"),
+        html.Div(f"Geprüft über den Federungs-Envelope, wie T 8.2.4 es "
+                 f"verlangt: {zustand.hoch:.1f} mm höher beim Ausfedern, "
+                 f"{zustand.tief:.1f} mm tiefer beim Bremsen "
+                 f"({zustand.quelle}).", className="as-hinweis",
+                 style={"marginBottom": "12px"}),
+        html.Div(spalten, className="as-zeile", style={"gap": "24px"}),
+    ])
+
+
+def _regelzeile(b) -> html.Div:
+    stufe = "ok" if b.ok else b.stufe
+    zeichen = "✓" if b.ok else ("✗" if b.stufe == "fehler" else "!")
+    pfeil = "≤" if b.richtung == "max" else "≥"
+    zeilen = [html.Div([
+        html.Span(zeichen, className=f"as-zeichen {stufe}"),
+        html.Span(b.pruefung, className="as-pruefung"),
+        html.Span(f"  {b.ist:.1f} {pfeil} {b.grenze:.1f} {b.einheit}",
+                  className="as-messwert"),
+        html.Span(f"  {b.regel}", className="as-regel"),
+    ])]
+    if b.ort and not b.ok:
+        zeilen.append(html.Div(b.ort, className="as-befund-hinweis"))
+    if b.hinweis and not b.ok:
+        zeilen.append(html.Div(b.hinweis, className="as-befund-hinweis"))
+    return html.Div(zeilen, className="as-befund")
 
 
 def _creo_oeffnen(ziel: Path):
@@ -561,14 +753,29 @@ def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
         html.Div([html.Span("Punktzahl: ", style={"fontWeight": 600}),
                   html.Span(f"{plan.punktzahl} je Seite, berechnet für "
                             f"{plan.toleranz_mm:.4f} mm Toleranz "
-                            f"({plan.punkte_gesamt} Punkte gesamt)")]),
+                            f"({plan.punkte_gesamt} Punkte gesamt"
+                            + (f", {len(plan.sektionen[0])} je Schnitt)"
+                               if plan.ist_fluegel else ")"))]),
         html.Div(f"Die geforderten {plan.toleranz_gefordert:.4f} mm waren nicht "
                  f"erreichbar — gerechnet wurde mit {plan.toleranz_mm:.4f} mm.",
                  className="as-status-hinweis", style={"marginTop": "5px"})
         if plan.gelockert else html.Div(),
-        html.Div([html.Span("Sektionen: ", style={"fontWeight": 600}),
-                  html.Span("2 — Ober- und Unterseite getrennt, damit der Spline "
-                            "an der Nase keine Beule bekommt")]),
+        html.Div([html.Span("Kurvenform: ", style={"fontWeight": 600}),
+                  html.Span(
+                      f"{len(plan.sektionen)} geschlossene Schnitte über die "
+                      "Spannweite — in Creo als Verbund zu einem Volumen"
+                      if plan.ist_fluegel else
+                      "eine geschlossene Kurve — in Creo unmittelbar als "
+                      "Skizze verwendbar und damit extrudierbar"
+                      if plan.geschlossen else
+                      f"{len(plan.sektionen)} getrennte Kurven für Ober- und "
+                      "Unterseite — sie berühren sich nur, für Creo ist das "
+                      "keine geschlossene Kontur")]),
+        html.Div(f"{plan.ausgeduennt} Punkte entfernt, die enger beieinander "
+                 f"lagen als Creos Modellgenauigkeit von 0,010 mm — Creo hätte "
+                 f"sie für denselben Punkt gehalten.",
+                 className="as-hinweis", style={"marginTop": "4px"})
+        if plan.ausgeduennt else html.Div(),
         html.Div([html.Span("Koordinaten: ", style={"fontWeight": 600}),
                   html.Span("bereits in das System der Creo-Vorlage gedreht — "
                             "in Creo ist nichts vorzubereiten")]),

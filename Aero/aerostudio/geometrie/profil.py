@@ -25,7 +25,7 @@ from scipy.interpolate import PchipInterpolator
 from scipy.optimize import lsq_linear
 from scipy.special import comb
 
-from .spline import punktzahl_fuer_toleranz
+from .spline import punktzahl_fuer_toleranz, punktzahl_fuer_umlauf
 
 
 # --------------------------------------------------------------- Verteilungen
@@ -570,6 +570,20 @@ class Profil:
 
         return punktzahl_fuer_toleranz(kontur, toleranz_mm)
 
+    def punktzahl_umlauf(self, sehne_mm: float,
+                         toleranz_mm: float = 0.005) -> int | None:
+        """Punktzahl je Seite fuer den GESCHLOSSENEN Umlauf.
+
+        Braucht mehr Punkte als `punktzahl`, weil die geschlossene Kurve an
+        der Hinterkante keinen Kurvenwechsel als Knick benutzen kann - der
+        Knick muss durch dichte Stuetzpunkte erzwungen werden. Deshalb eine
+        eigene Rechnung und keine Schaetzung mit einem Aufschlag.
+        """
+        def umlauf(n: int) -> np.ndarray:
+            return self.repanelisiert(n).punkte[:-1] * float(sehne_mm)
+
+        return punktzahl_fuer_umlauf(umlauf, toleranz_mm)
+
     def __str__(self) -> str:
         return (f"{self.name}  ({len(self.punkte)} Punkte, {self.herkunft})\n"
                 f"  max. Dicke     {self.max_dicke*100:6.2f} % bei "
@@ -585,6 +599,51 @@ KATALOG = Path(__file__).resolve().parents[2] / "profile" / "katalog"
 def katalogprofile() -> list[str]:
     """Namen der verfuegbaren Katalogdateien, alphabetisch."""
     return sorted(d.name for d in KATALOG.glob("*.dat"))
+
+
+_KATALOGNOTIZEN: dict | None = None
+
+
+def katalognotizen() -> dict:
+    """Die Notizen aus profile/katalog.yaml, einmal gelesen.
+
+    Fehlt die Datei oder ein Eintrag, ist das kein Fehler: Ein neu abgelegtes
+    .dat soll auch ohne Notiz auswaehlbar sein. Dann steht eben nichts dabei.
+    """
+    global _KATALOGNOTIZEN
+    if _KATALOGNOTIZEN is None:
+        import yaml
+        pfad = KATALOG.parent / "katalog.yaml"
+        try:
+            _KATALOGNOTIZEN = yaml.safe_load(pfad.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            _KATALOGNOTIZEN = {}
+    return _KATALOGNOTIZEN
+
+
+def katalognotiz(datei: str) -> dict:
+    """Notiz zu einer Katalogdatei; leeres Wortverzeichnis, wenn keine da ist."""
+    return katalognotizen().get(datei, {})
+
+
+def katalogoptionen() -> list[dict]:
+    """Auswahlliste fuer die Oberflaeche: Klarname und Eignung statt Dateiname.
+
+    "e423.dat" sagt niemandem etwas, "Eppler E423 - Hauptelement" schon. Der
+    Wert bleibt der Dateiname, damit sich am Spec nichts aendert.
+    """
+    optionen = []
+    for datei in katalogprofile():
+        notiz = katalognotiz(datei)
+        name = notiz.get("name", datei.replace(".dat", "").upper())
+        eignung = notiz.get("eignung")
+        optionen.append({"label": f"{name} - {eignung}" if eignung else name,
+                         "value": datei})
+    # Nach dem angezeigten Namen sortieren, nicht nach dem Dateinamen. Sonst
+    # stuende "Wortmann FX 63-137" zwischen den Epplers und den Goettingern,
+    # weil die Datei fx63137.dat heisst - die Liste sieht dann durcheinander
+    # aus, obwohl nichts fehlt.
+    return sorted(optionen, key=lambda o: o["label"].lower())
 
 
 def profil_fuer(element) -> Profil:

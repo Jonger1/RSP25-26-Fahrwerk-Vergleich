@@ -368,3 +368,52 @@ input[type="number"] {
 .as-fehlerkarte { font-size: 13px; }
 .as-fehlerkarte summary { cursor: pointer; font-size: 12px;
                           color: var(--text-leise); }
+
+/* --------------------------------------------------------- Katalognotiz */
+
+/* Steht direkt unter der Profilauswahl und sagt, wofuer das Profil taugt.
+   Bewusst zurueckhaltend gesetzt: Es ist Begleittext, keine Meldung. */
+.as-notiz {
+    margin-top: 8px;
+    padding: 9px 11px;
+    background: #fafbfc;
+    border-left: 3px solid var(--gelb);
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.as-notiz-text {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-leise);
+}
+
+.as-notiz-achtung {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--hinweis);
+    margin-top: 6px;
+}
+
+/* ------------------------------------------------------------- Leiste */
+
+/* Bedienelemente nebeneinander statt in einer hohen Spalte. Sonst liegt die
+   Haelfte der Regler unterhalb des Bildschirmrands, und wer etwas aendert,
+   sieht die Zeichnung nicht mehr, die sich gerade aendert. */
+.as-leiste {
+    display: grid;
+    gap: 12px 20px;
+    align-items: start;
+}
+
+.as-leiste .as-feld { margin-bottom: 0; }
+
+/* In der Leiste bleibt der Hinweistext, aber gedaempft und kurz gehalten -
+   er soll erklaeren, nicht die Zeile aufblaehen. */
+.as-leiste .as-hinweis {
+    font-size: 10.5px;
+    line-height: 1.4;
+}
+
+/* Die Notiz zum Katalogprofil steht jetzt neben der Ampel statt unter der
+   Auswahl - dort ist Platz und sie verdraengt keine Bedienelemente. */
+.as-notiz { margin-top: 0; }

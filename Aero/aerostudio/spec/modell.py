@@ -236,6 +236,86 @@ class ProfilCst(BaseModel):
 Profilquelle = ProfilAusDatei | ProfilNaca | ProfilCst
 
 
+class Stuetzstelle(BaseModel):
+    """Ein Punkt der Spannweitenverteilung.
+
+    Sehne wirkt multiplikativ auf die Wurzelsehne, Verwindung additiv auf den
+    Grundanstellwinkel. So bleibt der Entwurf lesbar: Man sieht sofort, ob ein
+    Fluegel nach aussen schmaler oder staerker angestellt wird, ohne
+    Absolutwerte vergleichen zu muessen.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    y: float = Field(ge=0.0, description="Abstand von der Fahrzeugmitte in mm.")
+    sehne: float = Field(default=1.0, gt=0.0,
+                         description="Faktor auf die Wurzelsehne.")
+    verwindung: float = Field(default=0.0,
+                              description="Zusaetzlicher Anstellwinkel in Grad. "
+                                          "Negativ innen erzeugt Outwash.")
+    z: float = Field(default=0.0, description="Hoehenversatz in mm.")
+    x: float = Field(default=0.0, description="Laengsversatz in mm, Pfeilung.")
+
+
+class Spannweite(BaseModel):
+    """Wie sich das Profil ueber die Spannweite veraendert."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stuetzstellen: list[Stuetzstelle] = Field(min_length=1)
+    schnitte: int = Field(default=13, ge=2, le=101,
+                          description="Wieviele Profilschnitte exportiert werden. "
+                                      "Mehr Schnitte bilden eine Verwindung "
+                                      "feiner ab, kosten in Creo aber "
+                                      "Regenerationszeit.")
+
+    @model_validator(mode="after")
+    def _pruefe(self) -> "Spannweite":
+        stellen = [s.y for s in self.stuetzstellen]
+        if len(set(stellen)) != len(stellen):
+            raise ValueError("Zwei Stuetzstellen liegen auf derselben "
+                             "Spannweitenposition.")
+        return self
+
+    def skaliert(self, halbspannweite: float) -> "Spannweite":
+        """Streckt die Verteilung auf eine andere Halbspannweite.
+
+        Die Stuetzstellen der Vorgaben liegen auf festen y-Werten. Wer eine
+        andere Spannweite braucht, will fast immer denselben VERLAUF an
+        anderer Stelle - also proportional gestreckt und nicht abgeschnitten.
+        """
+        weite = max(s.y for s in self.stuetzstellen)
+        if weite <= 0.0:
+            return self.model_copy(deep=True)
+        faktor = float(halbspannweite) / weite
+        neu = self.model_copy(deep=True)
+        for stelle in neu.stuetzstellen:
+            stelle.y *= faktor
+        return neu
+
+    @staticmethod
+    def frontfluegel_aussen() -> "Spannweite":
+        """Aussenabschnitt eines Frontfluegels, nach veroeffentlichten Entwuerfen.
+
+        Aussen laengste Sehne und groesster Anstellwinkel - so beschreibt es
+        eMotorsports Cologne. Innen negativ angestellt fuer den Outwash um das
+        Vorderrad; eine Arbeit aus Joenkoeping misst dafuer -10 Grad als bestes
+        Ergebnis, nachgewiesen ueber den gesunkenen Widerstand der Vorderraeder.
+        """
+        return Spannweite(stuetzstellen=[
+            Stuetzstelle(y=0.0, sehne=0.85, verwindung=-10.0, z=0.0),
+            Stuetzstelle(y=250.0, sehne=0.95, verwindung=-4.0, z=0.0),
+            Stuetzstelle(y=450.0, sehne=1.00, verwindung=0.0, z=8.0),
+            Stuetzstelle(y=600.0, sehne=1.00, verwindung=2.0, z=22.0),
+        ], schnitte=13)
+
+    @staticmethod
+    def gerade(halbspannweite: float = 500.0) -> "Spannweite":
+        """Rechteckfluegel ohne Verwindung - der einfachste Fall."""
+        return Spannweite(stuetzstellen=[
+            Stuetzstelle(y=0.0), Stuetzstelle(y=halbspannweite)], schnitte=5)
+
+
 class Element(BaseModel):
     """Ein Fluegelelement: Profil, Sehne, Anstellwinkel.
 
@@ -245,6 +325,11 @@ class Element(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    name: str = Field(
+        default="",
+        max_length=60,
+        description="Freier Name des Entwurfs. Steht im Dateinamen des "
+                    "Exports und im Kopf der IBL-Datei. Leer = die id.")
     profil: Profilquelle = Field(discriminator="art")
     sehne: float = Field(gt=0.0, description="Sehnenlaenge in mm.")
     anstellwinkel: float = Field(
@@ -256,6 +341,23 @@ class Element(BaseModel):
                     "Auftrieb gezeichnet und werden dafuer gespiegelt. "
                     "Auftrieb waehlt man fuer Bullwings.")
 
+    # Lage im Fahrzeug-Koordinatensystem: x nach hinten, y nach rechts,
+    # z nach oben, Ursprung Vorderachsmitte auf der Bodenebene. Ohne diese
+    # Angabe laesst sich kein Regelcheck rechnen - das Reglement nennt
+    # ausschliesslich absolute Lagen am Fahrzeug.
+    pos_x: float = Field(default=-600.0,
+                         description="Nasenposition der Wurzel in mm. Negativ "
+                                     "= vor der Vorderachse.")
+    pos_y: float = Field(default=0.0,
+                         description="Beginn der Spannweite in mm ab Mitte.")
+    pos_z: float = Field(default=60.0,
+                         description="Hoehe der Wurzelsehne ueber Grund in mm.")
+
+    spannweite: Optional[Spannweite] = Field(
+        default=None,
+        description="Verteilung ueber die Spannweite. None = ebener Schnitt, "
+                    "also nur ein Profil ohne Fluegel.")
+
     fertigung: Optional[Fertigung] = Field(
         default=None,
         description="Ueberschreibt die Fertigungsvorgaben des Pakets. "
@@ -263,3 +365,9 @@ class Element(BaseModel):
 
     def fertigung_wirksam(self, vorgabe: Fertigung) -> Fertigung:
         return self.fertigung if self.fertigung is not None else vorgabe
+
+    @property
+    def anzeigename(self) -> str:
+        """Was der Anwender sieht. Faellt auf die id zurueck, damit nie eine
+        namenlose Datei entsteht."""
+        return self.name.strip() or self.id

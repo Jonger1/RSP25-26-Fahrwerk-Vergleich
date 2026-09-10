@@ -10,12 +10,14 @@ Kontext hat.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from ..geometrie.profil import Profil
+from ..geometrie.spannweite import als_umlaeufe, huellwerte, schnitte
+from ..geometrie.spline import CREO_GENAUIGKEIT_MM, entdoppeln
 from .ibl import write_ibl
 
 
@@ -32,6 +34,14 @@ class Exportplan:
     punktzahl: int
     toleranz_mm: float           # tatsaechlich erreichte Toleranz
     toleranz_gefordert: float    # was verlangt war
+    geschlossen: bool = True     # eine umlaufende Kurve statt zweier Haelften
+    ausgeduennt: int = 0         # Punkte, die Creo nicht haette trennen koennen
+    ausgabe: str = "kurve"       # "kurve", "profil" oder "fluegel"
+    stapel: list = field(default_factory=list)   # Schnitte, nur beim Fluegel
+
+    @property
+    def ist_fluegel(self) -> bool:
+        return self.ausgabe == "fluegel"
 
     @property
     def punkte_gesamt(self) -> int:
@@ -44,15 +54,25 @@ class Exportplan:
 
 
 def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
-                  toleranz_mm: float = 0.005) -> Exportplan:
+                  toleranz_mm: float = 0.005,
+                  geschlossen: bool = True) -> Exportplan:
     """Bereitet die Sektionen fuer ein Fluegelelement vor.
 
-    Ober- und Unterseite werden GETRENNT exportiert, mit einem Knick an Nase
-    und Hinterkante. Ein durchgehender Spline ueber die Nase erzeugt in Creo
-    fast immer eine Beule, weil die Kruemmung dort springt.
+    GESCHLOSSEN ist der Normalfall: Das Profil wird als EINE umlaufende Kurve
+    geschrieben - Hinterkante, Oberseite, Nase, Unterseite, zurueck zur
+    Hinterkante. Nur so entsteht in Creo eine geschlossene Kontur, aus der
+    sich unmittelbar eine Skizze und daraus ein Extrudieren machen laesst.
 
-    Die Punktzahl wird gerechnet, nicht geschaetzt - auf Basis des in M0
-    vermessenen Creo-Splines.
+    Der frueher benutzte Weg mit zwei getrennten Haelften ist ueber
+    `geschlossen=False` weiter erreichbar. Er hat einen echten Vorteil - der
+    Knick an Nase und Hinterkante liegt genau auf der Kurvengrenze und muss
+    nicht durch dichte Stuetzpunkte erzwungen werden - aber er liefert zwei
+    Kurvenfeatures, die sich nur beruehren. Das ist fuer Creo keine
+    geschlossene Kontur.
+
+    Der Preis der geschlossenen Kurve ist die Punktzahl: gemessen etwa das
+    Zwei- bis Dreifache bei gleicher Toleranz. Sie wird gerechnet, nicht
+    geschaetzt - auf Basis des in M0 vermessenen Creo-Splines.
     """
     # Reicht die geforderte Toleranz nicht, wird sie schrittweise gelockert
     # statt den Export scheitern zu lassen. Eine etwas groebere Kurve ist immer
@@ -66,9 +86,10 @@ def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
               0.005, 0.010, 0.020, 0.050]
     leiter = sorted({round(t, 6) for t in leiter if t >= gefordert})
 
+    zaehle = profil.punktzahl_umlauf if geschlossen else profil.punktzahl
     n, versuch = None, gefordert
     for versuch in leiter:
-        n = profil.punktzahl(sehne_mm, versuch)
+        n = zaehle(sehne_mm, versuch)
         if n is not None:
             break
 
@@ -79,19 +100,128 @@ def plane_element(profil: Profil, sehne_mm: float, anstellwinkel: float,
             f"wenige Punkte - bitte die Quelldatei pruefen.")
 
     punkte = profil.repanelisiert(n).angestellt(anstellwinkel, sehne_mm)
-    nase = len(punkte) // 2
-    oben, unten = punkte[:nase + 1], punkte[nase:]
 
-    return Exportplan(sektionen=[_in_spannweitenebene(oben),
-                                 _in_spannweitenebene(unten)],
-                      punktzahl=n, toleranz_mm=versuch,
-                      toleranz_gefordert=gefordert)
+    if geschlossen:
+        roh = [_in_spannweitenebene(punkte)]
+    else:
+        nase = len(punkte) // 2
+        roh = [_in_spannweitenebene(punkte[:nase + 1]),
+               _in_spannweitenebene(punkte[nase:])]
+
+    # Die Kosinusverteilung draengt an Nase und Hinterkante Punkte zusammen,
+    # die Creo bei 0,01 mm Modellgenauigkeit nicht mehr trennen kann. Sie
+    # werden hier entfernt, nicht in Creo - dort waere es ein Importfehler
+    # ohne brauchbare Meldung.
+    sektionen = []
+    entfernt = 0
+    for sektion in roh:
+        if geschlossen:
+            # Der doppelte Endpunkt gehoert zur Definition des Umlaufs und
+            # wird erst beim Schreiben entfernt - fuer die Abstandspruefung
+            # muss er weg, sonst faellt er selbst dem Filter zum Opfer.
+            offen = sektion[:-1] if np.allclose(sektion[0], sektion[-1]) else sektion
+            duenn = entdoppeln(offen, CREO_GENAUIGKEIT_MM, geschlossen=True)
+            entfernt += len(offen) - len(duenn)
+            sektionen.append(np.vstack([duenn, duenn[:1]]))
+        else:
+            duenn = entdoppeln(sektion, CREO_GENAUIGKEIT_MM, geschlossen=False)
+            entfernt += len(sektion) - len(duenn)
+            sektionen.append(duenn)
+
+    return Exportplan(sektionen=sektionen, punktzahl=n, toleranz_mm=versuch,
+                      toleranz_gefordert=gefordert, geschlossen=geschlossen,
+                      ausgeduennt=entfernt,
+                      ausgabe="kurve" if geschlossen else "profil")
+
+
+def plane_fluegel(profil: Profil, spannweite, sehne_mm: float,
+                  anstellwinkel: float, lage=(0.0, 0.0, 0.0),
+                  toleranz_mm: float = 0.005) -> Exportplan:
+    """Bereitet den Schnittstapel eines 3D-Fluegels vor.
+
+    Alle Schnitte bekommen DIESELBE Punktzahl, und zwar die, die an der
+    laengsten Sehne noetig ist. Zwei Gruende: Creo verdreht den Verbund,
+    sobald die Schnitte ungleich aufgebaut sind, und die laengste Sehne ist
+    der schwierigste Fall - was dort reicht, reicht ueberall.
+
+    Die Schnitte sind geschlossene Umlaeufe, keine getrennten Haelften. Nur
+    daraus laesst sich in Creo unmittelbar ein Volumen bilden.
+    """
+    gefordert = float(toleranz_mm)
+    leiter = sorted({round(t, 6) for t in
+                     [gefordert, gefordert * 2, gefordert * 5,
+                      0.005, 0.010, 0.020, 0.050] if t >= gefordert})
+
+    # Laengste Sehne im Stapel bestimmt die Punktzahl.
+    laengste = sehne_mm * max(s.sehne for s in spannweite.stuetzstellen)
+
+    n, versuch = None, gefordert
+    for versuch in leiter:
+        n = profil.punktzahl_umlauf(laengste, versuch)
+        if n is not None:
+            break
+    if n is None:
+        raise ValueError(
+            f"Selbst mit {versuch:.4f} mm Toleranz laesst sich die Kontur bei "
+            f"{laengste:.1f} mm Sehne nicht treffen. Das deutet auf einen Knick "
+            f"im Profil hin, nicht auf zu wenige Punkte.")
+
+    stapel = schnitte(profil, spannweite, sehne_mm, anstellwinkel, n, lage=lage)
+
+    sektionen, entfernt = [], 0
+    for umlauf in als_umlaeufe(stapel):
+        offen = umlauf[:-1] if np.allclose(umlauf[0], umlauf[-1]) else umlauf
+        duenn = entdoppeln(offen, CREO_GENAUIGKEIT_MM, geschlossen=True)
+        entfernt += len(offen) - len(duenn)
+        sektionen.append(np.vstack([duenn, duenn[:1]]))
+
+    # Ungleich lange Schnitte waeren ein verdrehter Verbund. Das Ausduennen
+    # kann je Schnitt unterschiedlich viel entfernen - deshalb hier auf die
+    # kuerzeste Laenge angleichen statt zu hoffen, dass es passt.
+    kuerzeste = min(len(s) for s in sektionen)
+    if any(len(s) != kuerzeste for s in sektionen):
+        sektionen = [_auf_laenge(s, kuerzeste) for s in sektionen]
+
+    return Exportplan(sektionen=sektionen, punktzahl=n, toleranz_mm=versuch,
+                      toleranz_gefordert=gefordert, geschlossen=True,
+                      ausgeduennt=entfernt, ausgabe="fluegel", stapel=stapel)
+
+
+def _auf_laenge(umlauf: np.ndarray, ziel: int) -> np.ndarray:
+    """Kuerzt einen Umlauf gleichmaessig auf `ziel` Punkte.
+
+    Gleichmaessig ueber die Bogenlaenge und nicht einfach hinten abgeschnitten
+    - sonst wanderte die Naht von Schnitt zu Schnitt, und genau daran verdreht
+    sich der Verbund in Creo.
+    """
+    offen = umlauf[:-1]
+    index = np.unique(np.round(np.linspace(0, len(offen) - 1, ziel - 1)).astype(int))
+    gekuerzt = offen[index]
+    return np.vstack([gekuerzt, gekuerzt[:1]])
 
 
 def schreibe(plan: Exportplan, ziel: str | Path,
              kommentare: list[str] | None = None) -> Path:
     """Schreibt den Plan als IBL-Datei."""
-    return write_ibl(ziel, plan.sektionen, kommentare=kommentare)
+    return write_ibl(ziel, plan.sektionen, kommentare=kommentare,
+                     geschlossen=plan.geschlossen)
+
+
+def dateiname(name: str, endung: str = ".ibl") -> str:
+    """Macht aus einem frei getippten Namen einen brauchbaren Dateinamen.
+
+    Creo und Windows vertragen weder Doppelpunkte noch Schraegstriche, und
+    Umlaute im Dateinamen sorgen beim Import regelmaessig fuer Aerger. Deshalb
+    wird hier eingedampft statt darauf zu hoffen, dass es gutgeht.
+    """
+    umschrift = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe",
+                 "Ü": "Ue", "ß": "ss"}
+    sauber = "".join(umschrift.get(z, z) for z in (name or "").strip())
+    sauber = "".join(z if (z.isalnum() or z in "-_") else "_" for z in sauber)
+    while "__" in sauber:
+        sauber = sauber.replace("__", "_")
+    sauber = sauber.strip("_")
+    return (sauber or "profil") + endung
 
 
 def vorschau(plan: Exportplan, zeilen: int = 40) -> str:
@@ -99,7 +229,8 @@ def vorschau(plan: Exportplan, zeilen: int = 40) -> str:
     import tempfile
 
     with tempfile.TemporaryDirectory() as ordner:
-        pfad = write_ibl(Path(ordner) / "vorschau.ibl", plan.sektionen)
+        pfad = write_ibl(Path(ordner) / "vorschau.ibl", plan.sektionen,
+                         geschlossen=plan.geschlossen)
         text = pfad.read_text(encoding="ascii").splitlines()
     if len(text) > zeilen:
         text = text[:zeilen] + [f"... ({len(text) - zeilen} weitere Zeilen)"]

@@ -165,11 +165,16 @@ def exportpunkte(plan, name: str = "") -> go.Figure:
     """Genau die Punkte, die in die IBL-Datei geschrieben werden.
 
     Nicht die glatte Kontur, sondern die Stuetzstellen - damit sichtbar ist,
-    wie fein die Kurve tatsaechlich aufgeloest wird und wo die Kosinusverteilung
-    verdichtet. Die beiden Sektionen sind unterschiedlich eingefaerbt, weil ihre
-    Trennung an Nase und Hinterkante der Grund dafuer ist, dass Creo dort keine
-    Beule baut.
+    wie fein die Kurve tatsaechlich aufgeloest wird und wo die
+    Kosinusverteilung verdichtet.
+
+    Beim 3D-Fluegel wird raeumlich gezeichnet: Ein Stapel von dreizehn
+    uebereinandergelegten Schnitten in der Seitenansicht waere ein Knaeuel,
+    aus dem sich weder Verwindung noch Pfeilung ablesen laesst.
     """
+    if getattr(plan, "ist_fluegel", False):
+        return _fluegelpunkte(plan, name)
+
     farben = [FARBE_KONTUR, FARBE_AKZENT]
     fig = go.Figure()
     for i, sektion in enumerate(plan.sektionen):
@@ -188,3 +193,39 @@ def exportpunkte(plan, name: str = "") -> go.Figure:
     fig.update_yaxes(scaleanchor="x", scaleratio=1, title="mm")
     fig.update_xaxes(title="mm")
     return _achsen(fig)
+
+
+def _fluegelpunkte(plan, name: str = "") -> go.Figure:
+    """Der Schnittstapel raeumlich, in Fahrzeugkoordinaten.
+
+    Achsen bewusst so beschriftet, wie das Reglement spricht: x nach hinten ab
+    Vorderachse, y ab Fahrzeugmitte, z ueber Boden. Wer hier eine Zahl abliest,
+    kann sie unmittelbar gegen T 8.2 halten.
+    """
+    fig = go.Figure()
+    anzahl = len(plan.sektionen)
+    for i, sektion in enumerate(plan.sektionen):
+        # Innen dunkel, aussen im Akzentton - so ist die Reihenfolge der
+        # Schnitte auch ohne Legende erkennbar.
+        anteil = i / max(anzahl - 1, 1)
+        farbe = FARBE_AKZENT if anteil > 0.999 else (
+            FARBE_KONTUR if anteil < 0.001 else "rgba(120,128,140,0.55)")
+        fig.add_trace(go.Scatter3d(
+            x=sektion[:, 0], y=sektion[:, 1], z=sektion[:, 2],
+            mode="lines", line=dict(color=farbe, width=2),
+            name=f"Schnitt {i + 1}", showlegend=False,
+            hovertemplate="x %{x:.1f}<br>y %{y:.1f}<br>z %{z:.1f} mm<extra></extra>"))
+
+    fig.update_layout(
+        title=dict(text=f"{name} — {anzahl} Schnitte, je {len(plan.sektionen[0])} "
+                        f"Punkte bei {plan.toleranz_mm:.4f} mm Toleranz",
+                   font=dict(size=12)),
+        margin=dict(l=0, r=0, t=34, b=0), height=460,
+        paper_bgcolor="white",
+        scene=dict(
+            aspectmode="data",
+            xaxis=dict(title="x [mm] ab Vorderachse, nach hinten"),
+            yaxis=dict(title="y [mm] ab Mitte"),
+            zaxis=dict(title="z [mm] über Boden"),
+        ))
+    return fig

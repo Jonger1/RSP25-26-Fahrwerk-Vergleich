@@ -1,0 +1,116 @@
+# Notizen zum Profilkatalog
+#
+# Wofür taugt welches Profil? Die Angaben sind Orientierung, keine Messwerte
+# aus eigener Rechnung. Sie stammen aus der Fachliteratur zu Hochauftriebs-
+# profilen bei niedriger Reynoldszahl und aus veröffentlichten Arbeiten von
+# Formula-Student-Teams; wo eine Aussage aus einer konkreten Arbeit stammt,
+# steht es dabei.
+#
+# Die Kennwerte darunter hat das Werkzeug selbst aus den Koordinatendateien
+# gemessen - sie stimmen also mit dem überein, was gerechnet wird.
+#
+# Wer ein Profil ergänzt: .dat nach profile/katalog/ legen und hier einen
+# Eintrag schreiben. Fehlt der Eintrag, erscheint das Profil trotzdem, nur
+# ohne Notiz.
+
+e423.dat:
+  name: Eppler E423
+  eignung: Hauptelement
+  notiz: >
+    Der Standard für Hauptelemente im Formula Student. Sehr hohe Wölbung bei
+    noch brauchbarer Dicke, gut dokumentiert, gutmütig. In der KTH-Arbeit
+    bewusst gegenüber dem aerodynamisch stärkeren MSHD gewählt, weil dessen
+    dünne, lange Hinterkante nicht fertigbar war.
+  achtung: >
+    Zehn Prozent Wölbung sind viel. Bei kleiner Sehne wird die Form eng und
+    das Bauteil hinten schnell zu Vollmaterial.
+
+e420.dat:
+  name: Eppler E420
+  eignung: Hauptelement, wenn maximaler Abtrieb zählt
+  notiz: >
+    Dieselbe Familie wie das E423, aber noch stärker gewölbt und etwas
+    dicker. Mehr Abtrieb, dafür empfindlicher gegen Anstellwinkeländerungen.
+  achtung: Schmaler Arbeitsbereich - über den Fahrzustand hinweg prüfen.
+
+e422.dat:
+  name: Eppler E422
+  eignung: Hauptelement, gutmütige Auslegung
+  notiz: >
+    Die zurückhaltende Variante der Eppler-Familie: weniger Wölbung als E420
+    und E423, dadurch breiterer Arbeitsbereich. Sinnvoll dort, wo der
+    Anstellwinkel über den Federweg stark wandert - also am Frontflügel.
+
+s1223.dat:
+  name: Selig S1223
+  eignung: Hauptelement, hoher Auftriebsbeiwert
+  notiz: >
+    Eines der auftriebsstärksten bekannten Profile bei niedriger Reynoldszahl,
+    eigens dafür entworfen. Im Formula Student weit verbreitet und in fast
+    jeder Profilauswahl auf der Liste.
+  achtung: >
+    Der hintere Bereich läuft flach aus. Der Klebekeil beginnt früher als bei
+    den Eppler-Profilen - das Werkzeug zeigt es unter "Vollmaterial ab".
+
+s1210.dat:
+  name: Selig S1210
+  eignung: Hauptelement, ausgewogen
+  notiz: >
+    Weniger extrem als das S1223, dafür berechenbarer. Guter Ausgangspunkt,
+    wenn ein Flügel über einen weiten Geschwindigkeitsbereich arbeiten soll.
+
+s1221.dat:
+  name: Selig S1221
+  eignung: Hauptelement, moderate Wölbung
+  notiz: >
+    Die ruhigste der Selig-Reihe hier. Wenig Wölbung, dickenmäßig unauffällig
+    - brauchbar, wo Bauraum knapp und Robustheit wichtiger als der letzte
+    Newton ist.
+
+lnv109a.dat:
+  name: Douglas/Liebeck LNV109A
+  eignung: Hauptelement, unempfindlich gegen Anstellwinkel
+  notiz: >
+    Liebeck-Entwurf mit dem charakteristischen Druckverlauf für maximalen
+    Auftrieb. Auffällig stumpfe Nase - fast doppelter Nasenradius gegenüber
+    den Eppler-Profilen. Das macht ihn tolerant gegenüber wechselndem
+    Anstellwinkel, wie er am Frontflügel über Nicken und Federweg entsteht.
+  achtung: >
+    Läuft hinten früh dünn aus. Mit dickem Kern wird er schnell zu großen
+    Teilen Vollmaterial - ohne Kern unproblematisch.
+
+fx63137.dat:
+  name: Wortmann FX 63-137
+  eignung: Hauptelement, wenn Bauhöhe für Struktur gebraucht wird
+  notiz: >
+    Der dickste der brauchbaren Hochauftriebsprofile hier, knapp 14 Prozent.
+    Sehr gut vermessen und gutmütig bei niedriger Reynoldszahl. Die Dicke
+    bringt Bauraum für Sandwich und Anbindungen - der Flügel lässt sich
+    leichter steif bauen.
+  achtung: Etwas weniger Wölbung, also weniger Abtrieb als die Eppler-Reihe.
+
+e58.dat:
+  name: Eppler E58
+  eignung: Flap
+  notiz: >
+    Dünn und stark gewölbt - eine Flapform, kein Hauptelement. Für die
+    hinteren Elemente einer Kaskade, wo wenig Bauhöhe zur Verfügung steht.
+  achtung: >
+    Mit nur gut fünf Prozent Dicke wird das Bauteil bei kleiner Sehne kaum
+    noch als Schale baubar. Die Fertigungsampel im Werkzeug beachten.
+
+goe460.dat:
+  name: Göttingen GOE 460
+  eignung: Vergleichsprofil
+  notiz: >
+    Symmetrisch und dick. Kein Abtriebsprofil, sondern eine Referenz - etwa
+    für Streben, Endplattenprofile oder als Vergleichsfall, wenn man wissen
+    will, was ein Profil ohne Wölbung tut.
+
+goe797.dat:
+  name: Göttingen GOE 797
+  eignung: Vergleichsprofil
+  notiz: >
+    Älterer Göttinger Entwurf, dick und mäßig gewölbt. Als Arbeitsprofil
+    überholt, aber nützlich als Gegenprobe.
+  achtung: Nur 27 Punkte in der Quelldatei - grob aufgelöst.

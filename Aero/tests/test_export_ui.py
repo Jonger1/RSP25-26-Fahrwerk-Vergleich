@@ -16,6 +16,8 @@ from aerostudio.geometrie.profil import (Profil, aus_quelle, katalogprofile,
                                           profil_fuer)
 from aerostudio.spec.modell import ProfilAusDatei, ProfilNaca, Wirkrichtung
 from aerostudio.spec.projekt import AeroSpec, SperreBelegt, sperre
+from dash import html
+
 from aerostudio.ui import app as UI
 
 
@@ -26,11 +28,35 @@ def _profil() -> Profil:
                           / "profile" / "katalog" / "e423.dat")
 
 
-def test_export_teilt_in_zwei_sektionen():
-    """Ober- und Unterseite getrennt - sonst bekommt der Spline an der Nase eine Beule."""
+def test_export_liefert_eine_geschlossene_kurve():
+    """Der Normalfall. Zwei Kurven, die sich nur beruehren, sind fuer Creo
+    keine geschlossene Kontur - daraus laesst sich nichts extrudieren."""
     plan = export.plane_element(_profil(), 250.0, -4.0)
+    assert plan.geschlossen
+    assert len(plan.sektionen) == 1
+    assert plan.sektionen[0].shape[1] == 3
+    # Der Umlauf muss sich schliessen: Anfang und Ende am selben Ort.
+    umlauf = plan.sektionen[0]
+    assert np.allclose(umlauf[0], umlauf[-1])
+
+
+def test_geteilter_export_bleibt_moeglich():
+    """Die alte Form ist nicht verschwunden - sie braucht weniger Punkte und
+    legt den Knick genau auf die Kurvengrenze."""
+    plan = export.plane_element(_profil(), 250.0, -4.0, geschlossen=False)
+    assert not plan.geschlossen
     assert len(plan.sektionen) == 2
-    assert all(s.shape[1] == 3 for s in plan.sektionen)
+    oben, unten = plan.sektionen
+    assert np.allclose(oben[-1], unten[0])       # an der Nase
+    assert np.allclose(oben[0], unten[-1])       # an der Hinterkante
+
+
+def test_geschlossene_kurve_braucht_mehr_punkte():
+    """Der Preis der geschlossenen Form: Der Knick an der Hinterkante muss
+    durch dichte Stuetzpunkte erzwungen werden statt durch die Kurvengrenze."""
+    zu = export.plane_element(_profil(), 250.0, -4.0, geschlossen=True)
+    auf = export.plane_element(_profil(), 250.0, -4.0, geschlossen=False)
+    assert zu.punktzahl > auf.punktzahl
 
 
 def test_export_punktzahl_folgt_der_toleranz():
@@ -49,9 +75,37 @@ def test_geschriebene_ibl_ist_lesbar(tmp_path):
     plan = export.plane_element(_profil(), 250.0, -4.0)
     ziel = export.schreibe(plan, tmp_path / "FW_E1.ibl")
     text = ziel.read_text(encoding="ascii")
+    assert text.startswith("closed\narclength")
+    assert text.count("begin section") == 1
+    assert text.count("begin curve") == 1
+
+
+def test_geteilte_ibl_traegt_den_offenen_kopf(tmp_path):
+    plan = export.plane_element(_profil(), 250.0, -4.0, geschlossen=False)
+    text = export.schreibe(plan, tmp_path / "geteilt.ibl").read_text(encoding="ascii")
     assert text.startswith("open\narclength")
     assert text.count("begin section") == 2
-    assert text.count("begin curve") == 2
+
+
+def test_geschlossene_ibl_wiederholt_den_ersten_punkt_nicht(tmp_path):
+    """Creo schliesst bei "closed" selbst. Stuende der erste Punkt noch einmal
+    am Ende, entstuende ein Segment der Laenge null."""
+    plan = export.plane_element(_profil(), 250.0, -4.0)
+    zeilen = [z for z in export.schreibe(plan, tmp_path / "zu.ibl")
+              .read_text(encoding="ascii").splitlines()
+              if z[:5].strip().isdigit()]
+    erste = zeilen[0].split()[1:]
+    letzte = zeilen[-1].split()[1:]
+    assert erste != letzte
+    assert len(zeilen) == plan.sektionen[0].shape[0] - 1
+
+
+def test_dateiname_wird_brauchbar_gemacht():
+    assert export.dateiname("Frontflügel Hauptelement v3") == \
+        "Frontfluegel_Hauptelement_v3.ibl"
+    assert export.dateiname("A/B: C") == "A_B_C.ibl"
+    assert export.dateiname("") == "profil.ibl"
+    assert export.dateiname("   ") == "profil.ibl"
 
 
 def test_kommentare_landen_vor_dem_kopf(tmp_path):
@@ -59,7 +113,7 @@ def test_kommentare_landen_vor_dem_kopf(tmp_path):
     ziel = export.schreibe(plan, tmp_path / "k.ibl", kommentare=["AERO_SPEC_HASH: abc123"])
     zeilen = ziel.read_text(encoding="ascii").splitlines()
     assert zeilen[0].startswith("! AERO_SPEC_HASH")
-    assert "open" in zeilen[:5]
+    assert "closed" in zeilen[:5]
 
 
 def test_zu_enge_toleranz_wird_gelockert_statt_zu_scheitern():
@@ -157,8 +211,12 @@ def test_quelle_datei_und_naca():
 # Reihenfolge wie in _EINGABEN:
 # quelle, katalogdatei, naca-woelbung, naca-lage, naca-dicke, wirkrichtung,
 # sehne, aoa, verfahren, wandstaerke, kern, klebespalt
+# Reihenfolge wie _EINGABEN in app.py. Die letzten fuenf beschreiben den
+# Fluegel: Verteilung, Halbspannweite, Schnitte, Nase vor der Vorderachse,
+# Hoehe ueber Boden.
 WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
-         "prepreg", 0.6, 3.0, 0.2)
+         "prepreg", 0.6, 3.0, 0.2, "Frontfluegel Hauptelement",
+         "frontfluegel", 600.0, 13.0, 600.0, 90.0)
 
 
 def test_hauptcallback_liefert_spec_und_vier_figuren():
@@ -170,7 +228,8 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 
 def test_naca_zweig_erzeugt_ein_anderes_profil():
     naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
-            "nasslaminat", 1.2, 0.0, 0.2)
+            "nasslaminat", 1.2, 0.0, 0.2, "NACA-Versuch",
+            "gerade", 500.0, 9.0, 500.0, 80.0)
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
     assert AeroSpec.model_validate(a).hash() != AeroSpec.model_validate(b).hash()
@@ -189,11 +248,42 @@ def test_export_callback_schreibt_ohne_klick_nichts(tmp_path):
     """Vorschau und Diagramm entstehen bei jeder Aenderung, die Datei nur
     auf Klick - sonst laege bei jedem Reglerzucken eine neue IBL auf der Platte."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
-    info, vorschau, figur, status = UI._export(spec, 0.005, str(tmp_path), 0, 0)
+    info, vorschau, figur, status, regeln = UI._export(
+        spec, 0.005, str(tmp_path), "kurve", 0, 0)
     assert "begin section" in vorschau
     assert hasattr(figur, "data")
     assert status == ""
     assert not list(Path(tmp_path).glob("*.ibl"))
+
+
+def test_entwurfsname_landet_im_spec_und_im_dateinamen():
+    """Damit sich ein Export spaeter wiederfinden laesst."""
+    werte = list(WERTE)
+    werte[12] = "Heckflügel Flap 2"
+    spec, *_ = UI._profil_aktualisieren(*werte)
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.name == "Heckflügel Flap 2"
+    assert export.dateiname(element.anzeigename) == "Heckfluegel_Flap_2.ibl"
+
+
+def test_leerer_name_faellt_auf_die_id_zurueck():
+    """Eine namenlose Datei darf nie entstehen."""
+    werte = list(WERTE)
+    werte[12] = "   "
+    spec, *_ = UI._profil_aktualisieren(*werte)
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.anzeigename == element.id
+
+
+def test_katalognotiz_erscheint_und_faellt_weich_aus():
+    """Die Notiz sagt, wofuer ein Profil taugt. Fehlt sie, darf nichts brechen."""
+    from aerostudio.geometrie.profil import katalognotiz, katalogoptionen
+    assert "Hauptelement" in katalognotiz("e423.dat")["eignung"]
+    assert katalognotiz("gibtsnicht.dat") == {}
+    optionen = katalogoptionen()
+    assert {o["value"] for o in optionen} >= {"e423.dat", "s1223.dat"}
+    e423 = next(o for o in optionen if o["value"] == "e423.dat")
+    assert "E423" in e423["label"] and "Hauptelement" in e423["label"]
 
 
 # ------------------------------------------------------------- Spiegelung
@@ -311,3 +401,172 @@ def test_vorgaben_sind_kopien():
 def test_unbekanntes_verfahren_faellt_zurueck():
     from aerostudio.spec.modell import vorgaben_fuer
     assert vorgaben_fuer("gibtsnicht") == vorgaben_fuer("unbestimmt")
+
+
+# ------------------------------------------------- Punktabstand fuer Creo
+
+def test_kein_punktabstand_unter_der_creo_genauigkeit():
+    """Die Kosinusverteilung draengt an der Hinterkante Punkte zusammen. Liegen
+    zwei naeher als 0,01 mm, haelt Creo sie fuer denselben Punkt und der Spline
+    entartet - gemessen beim FX 63-137 bei 250 mm Sehne: 0,0070 mm."""
+    from aerostudio.geometrie.spline import CREO_GENAUIGKEIT_MM
+
+    for datei in ("e423.dat", "s1223.dat", "fx63137.dat", "e58.dat"):
+        profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                                / "profile" / "katalog" / datei).gespiegelt()
+        for sehne in (30.0, 250.0):
+            plan = export.plane_element(profil, sehne, -4.0)
+            umlauf = plan.sektionen[0][:-1]        # so steht es in der Datei
+            abstand = np.linalg.norm(
+                np.diff(np.vstack([umlauf, umlauf[:1]]), axis=0), axis=1)
+            assert abstand.min() >= CREO_GENAUIGKEIT_MM, \
+                f"{datei} bei {sehne} mm: {abstand.min():.4f} mm"
+
+
+def test_ausduennen_haelt_die_toleranz_ein():
+    """Was ausgeduennt wird, liegt unter der Modellgenauigkeit - es darf die
+    Kontur also nicht messbar veraendern."""
+    from aerostudio.geometrie.spline import abweichung_zur_kontur
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "fx63137.dat").gespiegelt()
+    plan = export.plane_element(profil, 250.0, -4.0)
+    assert plan.ausgeduennt > 0
+    wahr = profil.repanelisiert(1500).angestellt(-4.0, 250.0)
+    abw = abweichung_zur_kontur(plan.sektionen[0][:, [0, 2]], wahr,
+                                geschlossen=True)
+    assert abw < plan.toleranz_mm * 1.1
+
+
+def test_entdoppeln_behaelt_den_endpunkt_der_offenen_kurve():
+    """Bei zwei getrennten Haelften ist der Endpunkt die Nahtstelle zur
+    Nachbarkurve - er darf nie wegfallen."""
+    from aerostudio.geometrie.spline import entdoppeln
+
+    punkte = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0],
+                       [2.0005, 0.0], [2.001, 0.0]])
+    duenn = entdoppeln(punkte, 0.01, geschlossen=False)
+    assert np.allclose(duenn[0], punkte[0])
+    assert np.allclose(duenn[-1], punkte[-1])
+    assert len(duenn) < len(punkte)
+
+
+# ------------------------------------------------------- Drei Ausgabeformen
+
+def _text(komponente) -> str:
+    """Sammelt allen Text aus einem Dash-Baum.
+
+    str() auf einer Dash-Komponente kuerzt verschachtelte Kinder weg - ein
+    Test, der darauf prueft, bestaetigt dann nur die Kuerzung.
+    """
+    if komponente is None:
+        return ""
+    if isinstance(komponente, str):
+        return komponente
+    if isinstance(komponente, (list, tuple)):
+        return " ".join(_text(k) for k in komponente)
+    return _text(getattr(komponente, "children", None))
+
+
+def _werte(index, wert):
+    """Eine Stelle der Eingabefolge aendern, der Rest bleibt."""
+    werte = list(WERTE)
+    werte[index] = wert
+    return werte
+
+
+def test_die_drei_ausgabeformen_liefern_verschiedenes(tmp_path):
+    """Eine Kurve, ein Profil aus zwei Kurven, ein Schnittstapel."""
+    spec, *_ = UI._profil_aktualisieren(*WERTE)
+
+    kurve = UI._export(spec, 0.005, str(tmp_path), "kurve", 0, 0)
+    profil = UI._export(spec, 0.005, str(tmp_path), "profil", 0, 0)
+    fluegel = UI._export(spec, 0.005, str(tmp_path), "fluegel", 0, 0)
+
+    assert kurve[1].startswith("closed")
+    assert profil[1].startswith("open")
+    assert fluegel[1].startswith("closed")
+    # Die Vorschau ist gekuerzt; die Zahl der Schnitte steht in der Grafik.
+    assert len(fluegel[2].data) == 13
+
+
+def test_fluegelplan_hat_gleich_aufgebaute_schnitte():
+    """Ungleiche Schnitte verdrehen den Verbund in Creo - das ist keine
+    Schoenheitsfrage, sondern der haeufigste Grund fuer eine kaputte Flaeche."""
+    from aerostudio.spec.modell import Spannweite
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "e423.dat").gespiegelt()
+    plan = export.plane_fluegel(profil, Spannweite.frontfluegel_aussen(),
+                                250.0, -4.0, lage=(-600.0, 0.0, 90.0))
+    assert plan.ist_fluegel
+    assert len({len(s) for s in plan.sektionen}) == 1
+    assert len(plan.sektionen) == 13
+    for s in plan.sektionen:
+        assert np.allclose(s[0], s[-1])          # jeder Schnitt schliesst sich
+
+
+def test_fluegelschnitte_halten_den_creo_punktabstand_ein():
+    from aerostudio.geometrie.spline import CREO_GENAUIGKEIT_MM
+    from aerostudio.spec.modell import Spannweite
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "fx63137.dat").gespiegelt()
+    plan = export.plane_fluegel(profil, Spannweite.frontfluegel_aussen(),
+                                250.0, -4.0, lage=(-600.0, 0.0, 90.0))
+    for s in plan.sektionen:
+        d = np.linalg.norm(np.diff(s, axis=0), axis=1)
+        assert d.min() >= CREO_GENAUIGKEIT_MM
+
+
+def test_verteilung_laesst_sich_auf_die_spannweite_strecken():
+    from aerostudio.spec.modell import Spannweite
+
+    gestreckt = Spannweite.frontfluegel_aussen().skaliert(450.0)
+    assert max(s.y for s in gestreckt.stuetzstellen) == pytest.approx(450.0)
+    # Der Verlauf bleibt: innen Outwash, aussen die volle Sehne.
+    assert gestreckt.stuetzstellen[0].verwindung == pytest.approx(-10.0)
+    assert gestreckt.stuetzstellen[-1].sehne == pytest.approx(1.0)
+
+
+def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):
+    """Ein ebener Schnitt hat keine Lage am Fahrzeug - eine gruene Ampel waere
+    dort eine Falschaussage."""
+    spec, *_ = UI._profil_aktualisieren(*WERTE)
+    ohne = UI._export(spec, 0.005, str(tmp_path), "kurve", 0, 0)[4]
+    mit = UI._export(spec, 0.005, str(tmp_path), "fluegel", 0, 0)[4]
+    assert _text(ohne) == ""
+    assert "Regelprüfung" in _text(mit)
+    # Beide Regelstaende stehen nebeneinander.
+    assert "2026-v1.1" in _text(mit) and "2027-draft" in _text(mit)
+
+
+def test_zu_tiefer_fluegel_wird_in_der_oberflaeche_rot(tmp_path):
+    """Derselbe Flügel 40 mm tiefer muss die Bodenfreiheit reissen."""
+    hoch, *_ = UI._profil_aktualisieren(*_werte(17, 90.0))
+    tief, *_ = UI._profil_aktualisieren(*_werte(17, 50.0))
+    text_hoch = _text(UI._export(hoch, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
+    text_tief = _text(UI._export(tief, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
+    assert "Bodenfreiheit" in text_tief
+    assert "höher gesetzt" in text_tief
+    assert "höher gesetzt" not in text_hoch
+
+
+def test_eingabeliste_und_spec_bauer_passen_zusammen():
+    """Die Kopplung ist rein ueber die Reihenfolge - ein zusaetzliches Feld an
+    der falschen Stelle verschiebt stillschweigend alle folgenden Werte. Genau
+    das ist beim Bau dieser Tests passiert: Die Hoehe landete in der
+    Laengslage, und die Regelampel meldete trotzdem gruen."""
+    import inspect
+
+    parameter = inspect.signature(UI._baue_spec).parameters
+    assert len(UI._EINGABEN) == len(parameter)
+    assert len(WERTE) == len(parameter)
+
+
+def test_laengslage_wird_nach_vorne_gezaehlt():
+    """Im Bedienfeld steht "Nase vor der Vorderachse" - im Werkzeug zeigt x
+    nach hinten. Ein Vorzeichenfehler hier legt den Fluegel hinter das Auto."""
+    spec, *_ = UI._profil_aktualisieren(*_werte(16, 600.0))
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.pos_x == pytest.approx(-600.0)

@@ -80,6 +80,7 @@ def write_ibl(
     kommentare: Iterable[str] | None = None,
     nachkommastellen: int = 6,
     punktnummern: bool = True,
+    geschlossen: bool = False,
 ) -> Path:
     """Schreibt Sektionen als .ibl-Datei.
 
@@ -91,6 +92,15 @@ def write_ibl(
                      Ob Creo das akzeptiert, ist ein offener M0-Befund - im
                      Zweifel weglassen.
     punktnummern     Die fuehrende Nummer je Punkt ist laut PTC optional.
+    geschlossen      Schreibt "closed" statt "open" in den Kopf. Creo
+                     verbindet dann den letzten Punkt jeder Sektion wieder
+                     mit dem ersten und liefert EINE geschlossene Kurve statt
+                     zweier offener Haelften. Nur so laesst sich aus der
+                     importierten Kurve unmittelbar eine Skizze und daraus
+                     ein Extrudieren machen - zwei getrennte Kurven, die sich
+                     nur beruehren, sind dafuer keine geschlossene Kontur.
+                     Der letzte Punkt darf dann NICHT der erste sein, sonst
+                     entsteht ein Segment der Laenge null.
     """
     pfad = Path(pfad)
     zeilen: list[str] = []
@@ -98,12 +108,19 @@ def write_ibl(
     if kommentare:
         zeilen += [f"! {k}" for k in kommentare]
 
-    zeilen += ["open", "arclength", ""]
+    zeilen += ["closed" if geschlossen else "open", "arclength", ""]
 
     for nr, sektion in enumerate(sektionen, start=1):
         p = to_creo(sektion, frame)
         if len(p) < 2:
             raise ValueError(f"Sektion {nr} hat weniger als zwei Punkte.")
+        if geschlossen and np.allclose(p[0], p[-1]):
+            # Der Doppelpunkt waere ein Segment der Laenge null. Creo schliesst
+            # bei "closed" selbst - der letzte Punkt muss also weg.
+            p = p[:-1]
+        if geschlossen and len(p) < 3:
+            raise ValueError(f"Sektion {nr} hat fuer eine geschlossene Kurve "
+                             f"zu wenige Punkte.")
         zeilen.append(f"begin section ! {nr}")
         zeilen.append("        begin curve")
         for i, (x, y, z) in enumerate(p, start=1):

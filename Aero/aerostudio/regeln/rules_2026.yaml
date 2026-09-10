@@ -1,0 +1,101 @@
+# FS Rules 2026 v1.1 - der geltende Regelstand
+#
+# Quelle: FS-Rules_2026_v1.1.pdf, veroeffentlicht 25.11.2025
+#         https://www.formulastudent.de/fileadmin/user_upload/all/2026/rules/
+#
+# Aufbau bewusst identisch zu rules_2027_draft.yaml, damit derselbe Pruefer
+# ueber beide Staende laufen kann. Wo 2027 etwas aendert, steht es dort unter
+# alt_2026 - die Werte hier sind die Gegenprobe dazu.
+#
+# Alle Laengen in mm. Bezugsebene z = 0 ist der Boden.
+
+meta:
+  version: "2026-v1.1"
+  quelle: "FS-Rules_2026_v1.1, 25.11.2025"
+  status: gueltig
+  verbindlich: true
+  eingearbeitet_am: "2026-09-10"
+
+# --------------------------------------------------- T 2.1 Offene Raeder
+t2_1_3:
+  beschreibung: >
+    Keep-out-Zone: zwei Linien, senkrecht 75 mm vor und 75 mm hinter dem
+    Aussendurchmesser der Vorder- und Hinterreifen in der Seitenansicht,
+    Lenkung geradeaus. Lateral von der Aussen- bis zur Innenebene des
+    Rad/Reifen-Verbunds.
+  abstand_vor_reifen: 75
+  abstand_hinter_reifen: 75
+  # 2026 nennt keine Hoehenbegrenzung der Zone. 2027 kommt eine dazu (700 mm
+  # am Hinterrad) - das ist dort eine Praezisierung, keine Lockerung.
+  hoehe_hinterreifen: null
+
+# t2_1_4 gibt es 2026 noch nicht. Der Schluessel bleibt bewusst leer stehen,
+# damit im Vergleich sichtbar ist, dass die Regel neu ist und nicht etwa
+# vergessen wurde.
+t2_1_4: null
+
+# ----------------------------------------- T 8.2 Aerodynamische Anbauteile
+t8_2_1:
+  beschreibung: Hoehenbeschraenkungen
+
+  vor_vorderreifen:
+    # 2026 haengt die 250 mm an ZWEI Bedingungen gleichzeitig: vor der
+    # VORDERACHSE und weiter aussen als der innerste Punkt von Rad/Reifen.
+    # Innen zwischen den Raedern gelten stattdessen die 500 mm.
+    bezug: "Vertikalebene durch die Vorderachse"
+    zusatzbedingung: "weiter aussen als der innerste Punkt von Vorderrad/Reifen"
+    max_hoehe: 250
+
+  vor_kopfstuetze:
+    # Diese Regel entfaellt 2027 und wird durch die Reifenoberkante ersetzt.
+    bezug: >
+      Vertikalebene durch den hintersten Punkt der Vorderflaeche der
+      Kopfstuetzenaufnahme, ohne Polster, in hinterster Einstellposition
+    max_hoehe: 500
+
+  hinter_kopfstuetze:
+    bezug: >
+      Vertikalebene durch den hintersten Punkt der Vorderflaeche der
+      Kopfstuetzenaufnahme, ohne Polster, in hinterster Einstellposition
+    max_hoehe: 1100
+    # 2026 kennt keine Untergrenze. Die 700 mm kommen erst 2027.
+    min_hoehe: null
+
+  alle_uebrigen: null
+
+t8_2_2:
+  beschreibung: Breitenbeschraenkungen
+
+  unterhalb_reifenoberkante:
+    # 2026 ist die Schwelle eine feste Hoehe von 500 mm, nicht die
+    # Reifenoberkante, und der Laengsbezug ist die Vorderachse.
+    bedingung: "niedriger als 500 mm und hinter der Vertikalebene durch die Vorderachse"
+    schwelle_hoehe: 500
+    grenze: "Vertikalebene am aeussersten Punkt von Vorder- und Hinterrad"
+
+  oberhalb_reifenoberkante:
+    bedingung: "hoeher als 500 mm"
+    schwelle_hoehe: 500
+    grenze: "nicht ausserhalb des innersten Punktes des Hinterrads"
+
+t8_2_3:
+  beschreibung: Laengenbeschraenkungen
+  max_hinter_hinterreifen: 250
+  max_vor_vorderreifen: 700
+
+t8_2_4:
+  beschreibung: >
+    Alle Beschraenkungen gelten mit geradeaus stehenden Raedern und bei jedem
+    Federungssetup, mit oder ohne Fahrer im Fahrzeug.
+  ueber_envelope: true
+
+# ---------------------------------------------------------- Uebrige Regeln
+uebernommen_aus_2026:
+  t2_2_1_bodenfreiheit_min: 30
+  t2_2_2_schleifschuerzen_verboten: true
+  t2_4_1_radius_vorwaerts: 3
+  t2_4_1_radius_uebrige: 1
+  t8_3_1_last: 200          # N, verteilt auf min. 225 cm2
+  t8_3_1_verformung_max: 10 # mm
+  t8_3_2_last: 50           # N, beliebige Richtung
+  t8_3_2_verformung_max: 25 # mm
