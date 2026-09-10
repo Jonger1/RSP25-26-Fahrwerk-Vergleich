@@ -28,16 +28,19 @@ import webbrowser
 from pathlib import Path
 from threading import Timer
 
-from dash import (MATCH, Dash, Input, Output, State, callback_context, dcc, html,
+from dash import (MATCH, Dash, Input, Output, State, callback_context, dash_table,
+                  dcc, html,
                   no_update)
 
 from ..creo import starten as creo_starten
 from ..formate import export
 from .. import regeln
+from ..aero import traglinie
+from ..geometrie import spannweite
 from ..geometrie.profil import (katalognotiz, katalogoptionen,
                                 katalogprofile, profil_fuer)
 from ..spec.modell import (Fertigung, ProfilAusDatei, ProfilNaca, Spannweite,
-                           Wirkrichtung, vorgaben_fuer)
+                           Stuetzstelle, Wirkrichtung, vorgaben_fuer)
 from ..spec.projekt import AeroSpec
 from . import darstellung
 
@@ -235,6 +238,125 @@ def _ansicht_profil() -> html.Div:
     ])
 
 
+SPALTEN = [
+    {"id": "y", "name": "y [mm] ab Mitte", "type": "numeric"},
+    {"id": "sehne", "name": "Sehne × Wurzel", "type": "numeric"},
+    {"id": "verwindung", "name": "Eindrehen [°]", "type": "numeric"},
+    {"id": "z", "name": "Höhenversatz [mm]", "type": "numeric"},
+    {"id": "x", "name": "Längsversatz [mm]", "type": "numeric"},
+]
+
+
+def _tabellendaten(spannweite) -> list[dict]:
+    return [{"y": round(st.y, 1), "sehne": round(st.sehne, 3),
+             "verwindung": round(st.verwindung, 2), "z": round(st.z, 1),
+             "x": round(st.x, 1)} for st in spannweite.stuetzstellen]
+
+
+def _ansicht_fluegel() -> html.Div:
+    return html.Div([
+        _leiste("Flügel über die Spannweite", [
+            _feld("Vorgabe", html.Div([
+                dcc.Dropdown(
+                    id="verteilung", clearable=False, value="frontfluegel",
+                    options=[{"label": "Frontflügel außen (Outwash innen)",
+                              "value": "frontfluegel"},
+                             {"label": "Gerader Flügel ohne Verwindung",
+                              "value": "gerade"}],
+                    style={"fontSize": "13px"}),
+                html.Button("Vorgabe in die Tabelle laden", id="btn-vorgabe",
+                            n_clicks=0, className="as-knopf as-knopf-leer"),
+            ]),
+                "Setzt die Tabelle unten auf einen Startpunkt. Danach ist die "
+                "Tabelle maßgeblich — die Vorgabe überschreibt sie erst beim "
+                "nächsten Klick."),
+            _feld("Halbspannweite der Vorgabe [mm]",
+                  _zahlenfeld("halbspannweite", 600.0, 25.0, 50.0, 900.0),
+                  "Nur beim Laden der Vorgabe wirksam. Der äußerste Punkt des "
+                  "Vorderrads liegt bei 695 mm."),
+            _feld("Schnitte für den Export",
+                  _zahlenfeld("schnittzahl", 13.0, 2.0, 2.0, 101.0),
+                  "Wieviele Profilschnitte zwischen den Sektionen berechnet "
+                  "werden. Mehr bilden die Verwindung feiner ab, kosten in "
+                  "Creo aber Regenerationszeit."),
+            _feld("Nase vor der Vorderachse [mm]",
+                  _zahlenfeld("pos-x", 600.0, 25.0, -2000.0, 2000.0),
+                  "Positiv = vor der Achse."),
+            _feld("Höhe über Boden [mm]",
+                  _zahlenfeld("pos-z", 90.0, 5.0, 0.0, 1500.0),
+                  "Höhe der Wurzelsehne."),
+        ], spalten="240px"),
+
+        _karte([
+            _ueberschrift("Sektionen"),
+            html.Div([
+                "Jede Zeile ist eine Stützstelle über die Spannweite. Zwischen "
+                "den Zeilen wird formerhaltend interpoliert, es entsteht also "
+                "keine Sehne und kein Winkel, der größer wäre als beide "
+                "Nachbarn. ",
+                html.B("Eindrehen"), " wirkt additiv auf den Anstellwinkel aus "
+                "dem Reiter Profil: −10° dort bedeutet zehn Grad weiter Nase "
+                "nach unten als die Wurzel. ",
+                html.B("Sehne"), " ist ein Faktor auf die Wurzelsehne.",
+            ], className="as-hinweis", style={"marginBottom": "10px"}),
+            dash_table.DataTable(
+                id="stuetzstellen",
+                columns=SPALTEN,
+                data=_tabellendaten(Spannweite.frontfluegel_aussen()),
+                editable=True, row_deletable=True,
+                style_cell={"fontFamily": "Consolas, monospace",
+                            "fontSize": "13px", "padding": "6px 10px",
+                            "textAlign": "right"},
+                style_header={"fontFamily": "Segoe UI, sans-serif",
+                              "fontWeight": 600, "fontSize": "12px",
+                              "textAlign": "right",
+                              "backgroundColor": "#f4f5f7"},
+                style_data_conditional=[
+                    {"if": {"column_id": "verwindung"},
+                     "backgroundColor": "#fffdf5"}],
+            ),
+            html.Div([
+                html.Button("Sektion hinzufügen", id="btn-sektion", n_clicks=0,
+                            className="as-knopf as-knopf-leer",
+                            style={"width": "auto", "marginRight": "10px"}),
+                html.Span("Zeilen lassen sich über das Kreuz rechts löschen.",
+                          className="as-hinweis"),
+            ], style={"marginTop": "10px", "display": "flex",
+                      "alignItems": "center", "gap": "8px"}),
+            html.Div(id="sektionen-meldung", style={"marginTop": "9px"}),
+        ]),
+
+        html.Div([
+            html.Div(_karte([_ueberschrift("Verlauf über die Spannweite"),
+                             dcc.Graph(id="fig-verteilung", **_GRAPH)]),
+                     style={"flex": "1 1 0", "minWidth": 0,
+                            "marginRight": "14px"}),
+            html.Div(_karte([_ueberschrift("Flügel räumlich"),
+                             dcc.Graph(id="fig-fluegel3d", **_GRAPH)]),
+                     style={"flex": "1 1 0", "minWidth": 0}),
+        ], className="as-zeile"),
+
+        _karte([
+            _ueberschrift("Abtrieb — Abschätzung"),
+            html.Div([
+                _feld("Geschwindigkeit [m/s]",
+                      _zahlenfeld("tempo", 15.0, 1.0, 3.0, 45.0),
+                      "15 m/s sind 54 km/h — etwa das Mittel einer "
+                      "Autocross-Runde."),
+                html.Div([
+                    html.Button("Abtrieb rechnen", id="btn-aero", n_clicks=0,
+                                className="as-knopf as-knopf-voll"),
+                    html.Div("Dauert ein paar Sekunden.", className="as-hinweis",
+                             style={"marginTop": "6px"}),
+                ]),
+            ], className="as-leiste",
+                style={"gridTemplateColumns": "240px 240px",
+                       "marginBottom": "14px"}),
+            dcc.Loading(html.Div(id="aero-ergebnis"), type="dot"),
+        ]),
+    ])
+
+
 def _ansicht_creo() -> html.Div:
     return html.Div([
         _leiste("Export nach Creo", [
@@ -267,32 +389,6 @@ def _ansicht_creo() -> html.Div:
                          style={"marginTop": "9px"}),
             ]),
         ], spalten="250px"),
-
-        _leiste("Flügel (3D) — wirkt nur bei der Ausgabe 3D-Flügel", [
-            _feld("Verteilung", dcc.Dropdown(
-                id="verteilung", clearable=False, value="frontfluegel",
-                options=[{"label": "Frontflügel außen (Outwash innen)",
-                          "value": "frontfluegel"},
-                         {"label": "Gerader Flügel ohne Verwindung",
-                          "value": "gerade"}],
-                style={"fontSize": "13px"}),
-                "Frontflügel außen folgt veröffentlichten FS-Entwürfen: innen "
-                "−10° für den Outwash ums Vorderrad, außen die längste Sehne."),
-            _feld("Halbspannweite [mm]",
-                  _zahlenfeld("halbspannweite", 600.0, 25.0, 50.0, 900.0),
-                  "Ab Fahrzeugmitte. Der äußerste Punkt des Vorderrads liegt "
-                  "bei 695 mm."),
-            _feld("Schnitte", _zahlenfeld("schnittzahl", 13.0, 2.0, 2.0, 101.0),
-                  "Mehr Schnitte bilden die Verwindung feiner ab, kosten in "
-                  "Creo aber Regenerationszeit."),
-            _feld("Nase vor der Vorderachse [mm]",
-                  _zahlenfeld("pos-x", 600.0, 25.0, -2000.0, 2000.0),
-                  "Positiv = vor der Achse."),
-            _feld("Höhe über Boden [mm]",
-                  _zahlenfeld("pos-z", 90.0, 5.0, 0.0, 1500.0),
-                  "Höhe der Wurzelsehne. Der Regelcheck rechnet den Bremsfall "
-                  "dazu."),
-        ]),
 
         html.Div([
             html.Div(_karte([_ueberschrift("Diese Punkte gehen nach Creo"),
@@ -351,6 +447,7 @@ def layout() -> html.Div:
 
         dcc.Tabs(id="reiter", value="profil", className="as-reiter", children=[
             dcc.Tab(label="Profil", value="profil"),
+            dcc.Tab(label="Flügel", value="fluegel"),
             dcc.Tab(label="Creo", value="creo"),
             dcc.Tab(label="Projekt", value="projekt"),
         ]),
@@ -358,6 +455,7 @@ def layout() -> html.Div:
         # Alle Ansichten stehen dauerhaft hier, der Reiter blendet nur um.
         html.Div([
             html.Div(_ansicht_profil(), id="view-profil"),
+            html.Div(_ansicht_fluegel(), id="view-fluegel"),
             html.Div(_ansicht_creo(), id="view-creo"),
             html.Div(_ansicht_projekt(), id="view-projekt"),
         ], className="as-inhalt"),
@@ -370,11 +468,14 @@ app = Dash(__name__, title="Aero Studio")
 app.layout = layout
 
 
-@app.callback(Output("view-profil", "style"), Output("view-creo", "style"),
-              Output("view-projekt", "style"), Input("reiter", "value"))
+ANSICHTEN = ("profil", "fluegel", "creo", "projekt")
+
+
+@app.callback(*[Output(f"view-{r}", "style") for r in ANSICHTEN],
+              Input("reiter", "value"))
 def _reiter_umblenden(reiter):
     an, aus = {"display": "block"}, {"display": "none"}
-    return tuple(an if reiter == r else aus for r in ("profil", "creo", "projekt"))
+    return tuple(an if reiter == r else aus for r in ANSICHTEN)
 
 
 @app.callback(Output("quelle-katalog", "style"), Output("quelle-naca", "style"),
@@ -417,9 +518,51 @@ def schritt_rechnen(aktuell, schritt, richtung: str,
     return round(neu, stellen)
 
 
+def spannweite_aus_tabelle(zeilen, schnitte: int = 13) -> Spannweite:
+    """Macht aus den Tabellenzeilen eine gueltige Spannweitenverteilung.
+
+    Leere und unvollstaendige Zeilen werden uebersprungen statt abgelehnt: Wer
+    eine Zeile hinzufuegt und noch nicht ausgefuellt hat, soll nicht sofort
+    eine Fehlermeldung sehen. Bleibt gar nichts uebrig, greift die Vorgabe.
+    """
+    stellen = []
+    for zeile in (zeilen or []):
+        try:
+            y = float(zeile.get("y"))
+        except (TypeError, ValueError):
+            continue
+
+        def zahl(schluessel, vorgabe):
+            try:
+                return float(zeile.get(schluessel))
+            except (TypeError, ValueError):
+                return vorgabe
+
+        stellen.append(Stuetzstelle(
+            y=abs(y), sehne=max(zahl("sehne", 1.0), 1e-3),
+            verwindung=zahl("verwindung", 0.0),
+            z=zahl("z", 0.0), x=zahl("x", 0.0)))
+
+    # Doppelte Spannweitenpositionen faengt das Datenmodell ab. Hier wird die
+    # spaetere Zeile bevorzugt - beim Tippen entsteht ein Duplikat sonst
+    # sofort und macht die Tabelle unbenutzbar.
+    einmalig = {}
+    for st in stellen:
+        einmalig[round(st.y, 6)] = st
+    stellen = [einmalig[k] for k in sorted(einmalig)]
+
+    if not stellen:
+        return Spannweite.frontfluegel_aussen()
+    if len(stellen) == 1:
+        stellen.append(Stuetzstelle(y=stellen[0].y + 1.0, sehne=stellen[0].sehne,
+                                    verwindung=stellen[0].verwindung,
+                                    z=stellen[0].z, x=stellen[0].x))
+    return Spannweite(stuetzstellen=stellen, schnitte=int(schnitte))
+
+
 def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
                verfahren, wandstaerke, kern, klebespalt, entwurfsname,
-               verteilung, halbspannweite, schnittzahl, pos_x, pos_z) -> AeroSpec:
+               stuetzstellen, schnittzahl, pos_x, pos_z) -> AeroSpec:
     """Sammelt die Bedienelemente zu einem gueltigen Spec.
 
     Einzige Stelle, an der aus Bedienelementen Fachdaten werden - alles Weitere
@@ -441,11 +584,8 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
     # Die Spannweite steht immer im Spec, auch wenn gerade nur eine Kurve
     # ausgegeben wird. So geht die Einstellung beim Umschalten nicht verloren
     # - und der Regelcheck kann rechnen, ohne dass man erst exportieren muss.
-    weite = float(halbspannweite or 600.0)
-    grund = (Spannweite.gerade(weite) if verteilung == "gerade"
-             else Spannweite.frontfluegel_aussen().skaliert(weite))
-    grund.schnitte = int(schnittzahl or 13)
-    element.spannweite = grund
+    element.spannweite = spannweite_aus_tabelle(stuetzstellen,
+                                               int(schnittzahl or 13))
     # Im Werkzeug zeigt x nach hinten, im Bedienfeld wird nach VORNE gefragt -
     # "600 mm vor der Vorderachse" ist die Sprache, in der ein Aeroteam denkt.
     element.pos_x = -float(pos_x if pos_x is not None else 600.0)
@@ -467,9 +607,8 @@ _EINGABEN = [
     Input("verfahren", "value"), Input(wert("wandstaerke"), "value"),
     Input(wert("kern"), "value"), Input(wert("klebespalt"), "value"),
     Input("entwurfsname", "value"),
-    Input("verteilung", "value"), Input(wert("halbspannweite"), "value"),
-    Input(wert("schnittzahl"), "value"), Input(wert("pos-x"), "value"),
-    Input(wert("pos-z"), "value"),
+    Input("stuetzstellen", "data"), Input(wert("schnittzahl"), "value"),
+    Input(wert("pos-x"), "value"), Input(wert("pos-z"), "value"),
 ]
 
 
@@ -658,6 +797,173 @@ def _export(daten, toleranz, ordner, ausgabe, n_export, n_creo):
                 _regelkarte(plan))
     except Exception as fehler:
         return _fehlerkarte(fehler), "", leer, "", ""
+
+
+@app.callback(Output("stuetzstellen", "data"),
+              Input("btn-vorgabe", "n_clicks"), Input("btn-sektion", "n_clicks"),
+              State("verteilung", "value"),
+              State(wert("halbspannweite"), "value"),
+              State("stuetzstellen", "data"), prevent_initial_call=True)
+def _tabelle_fuellen(n_vorgabe, n_sektion, verteilung, weite, daten):
+    """Vorgabe laden oder eine Sektion anhaengen.
+
+    Beides in EINEM Callback, weil Dash sonst zwei Schreiber auf dieselbe
+    Tabelle haette und sich beschwert. Welcher Knopf gedrueckt wurde, sagt der
+    Ausloeser.
+    """
+    if _ausgeloest_von("btn-vorgabe"):
+        weite = float(weite or 600.0)
+        vorgabe = (Spannweite.gerade(weite) if verteilung == "gerade"
+                   else Spannweite.frontfluegel_aussen().skaliert(weite))
+        return _tabellendaten(vorgabe)
+
+    zeilen = list(daten or [])
+    if not zeilen:
+        return _tabellendaten(Spannweite.frontfluegel_aussen())
+
+    # Neue Sektion hinter der aeussersten, mit deren Werten. So bleibt der
+    # Fluegel beim Hinzufuegen unveraendert, bis jemand die Zeile bearbeitet -
+    # eine Sektion mit Nullwerten wuerde ihn dagegen sofort verbiegen.
+    letzte = max(zeilen, key=lambda z: float(z.get("y") or 0.0))
+    neue = dict(letzte)
+    neue["y"] = round(float(letzte.get("y") or 0.0) + 100.0, 1)
+    return zeilen + [neue]
+
+
+@app.callback(Output("sektionen-meldung", "children"),
+              Output("fig-verteilung", "figure"),
+              Output("fig-fluegel3d", "figure"),
+              Input("spec", "data"))
+def _fluegel_zeichnen(daten):
+    """Verlaeufe und Raumbild zum aktuellen Stand der Tabelle."""
+    leer = {"data": [], "layout": {"height": 260}}
+    if not daten:
+        return "", leer, leer
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        profil = profil_fuer(element)
+        stapel = spannweite.schnitte(
+            profil, element.spannweite, element.sehne, element.anstellwinkel, 40,
+            lage=(element.pos_x, element.pos_y, element.pos_z))
+
+        anzahl = len(element.spannweite.stuetzstellen)
+        werte = spannweite.huellwerte(stapel)
+        meldung = html.Div(
+            f"{anzahl} Sektionen, {element.spannweite.schnitte} Schnitte, "
+            f"Halbspannweite {werte['spannweite']:.0f} mm, "
+            f"Grundrissfläche je Seite {werte['flaeche'] / 100:.0f} cm².",
+            className="as-hinweis")
+        return (meldung, darstellung.spannweitenverlauf(stapel, element),
+                darstellung.fluegel3d(stapel, profil.name))
+    except Exception as fehler:
+        return _fehlerkarte(fehler), leer, leer
+
+
+@app.callback(Output("aero-ergebnis", "children"),
+              Input("btn-aero", "n_clicks"),
+              State("spec", "data"), State(wert("tempo"), "value"),
+              prevent_initial_call=True)
+def _abtrieb_rechnen(n, daten, tempo):
+    """Abtrieb abschaetzen. Auf Knopfdruck, nicht bei jeder Aenderung.
+
+    Die Traglinienrechnung braucht ein paar Sekunden. Liefe sie bei jedem
+    Reglerzug mit, waere die Oberflaeche unbenutzbar - und die Zahl ist eine
+    Abschaetzung, die man bewusst abruft, kein Live-Messwert.
+    """
+    if not daten:
+        return ""
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        profil = profil_fuer(element)
+        stapel = spannweite.schnitte(
+            profil, element.spannweite, element.sehne, element.anstellwinkel, 60,
+            lage=(element.pos_x, element.pos_y, element.pos_z))
+        v = float(tempo or 15.0)
+        ergebnis = traglinie.rechne(stapel, profil, geschwindigkeit=v)
+        kennlinie = traglinie.bodenkennlinie(
+            stapel, profil, [40, 60, 80, 120, 200], geschwindigkeit=v)
+        return _aerokarte(ergebnis, kennlinie)
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
+
+
+def _aerokarte(e, kennlinie) -> html.Div:
+    """Das Ergebnis der Abschaetzung, mit den Grenzen daneben.
+
+    Die Grenzen stehen bewusst NEBEN der Zahl und nicht im Kleingedruckten
+    weiter unten. Eine Abtriebszahl ohne den Hinweis, was sie nicht enthaelt,
+    wird als Messwert gelesen - und dann wird damit ausgelegt.
+    """
+    zahlen = html.Div([
+        html.Div([html.Div(f"{e.abtrieb:.0f} N", className="as-grosszahl"),
+                  html.Div("Abtrieb", className="as-hinweis")]),
+        html.Div([html.Div(f"{e.widerstand:.1f} N", className="as-grosszahl"),
+                  html.Div("Widerstand", className="as-hinweis")]),
+        html.Div([html.Div(f"{e.wirkungsgrad:.1f}", className="as-grosszahl"),
+                  html.Div("Abtrieb je Widerstand", className="as-hinweis")]),
+        html.Div([html.Div(f"{e.cl:+.2f}", className="as-grosszahl"),
+                  html.Div("CL auf die Grundrissfläche", className="as-hinweis")]),
+        html.Div([html.Div(f"{e.streckung:.1f}", className="as-grosszahl"),
+                  html.Div("Streckung", className="as-hinweis")]),
+    ], className="as-leiste",
+        style={"gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))",
+               "marginBottom": "14px"})
+
+    warnungen = []
+    if not e.konvergiert:
+        warnungen.append("Die Rechnung ist nicht auskonvergiert — die Zahl ist "
+                         "unsicher.")
+    if e.abgerissen > 0.02:
+        warnungen.append(f"Auf {e.abgerissen * 100:.0f} % der Fläche ist die "
+                         f"Strömung abgerissen. Anstellwinkel oder Verwindung "
+                         f"zurücknehmen.")
+    if e.vertrauen < 0.85:
+        warnungen.append(f"NeuralFoil ist sich bei diesem Arbeitspunkt selbst "
+                         f"nur zu {e.vertrauen * 100:.0f} % sicher.")
+
+    zeilen = [html.Div(w, className="as-status-hinweis",
+                       style={"marginBottom": "5px"}) for w in warnungen]
+
+    boden = html.Table([
+        html.Tr([html.Th("Höhe über Boden"), html.Th("Abtrieb"), html.Th("CL")])
+    ] + [
+        html.Tr([html.Td(f"{h:.0f} mm"), html.Td(f"{k.abtrieb:.0f} N"),
+                 html.Td(f"{k.cl:+.2f}")]) for h, k in kennlinie
+    ], className="as-tabelle")
+
+    return html.Div([
+        zahlen,
+        html.Div(zeilen) if zeilen else html.Div(),
+        html.Div([
+            html.Div([
+                html.Div("Über den Bodenabstand", className="as-untertitel-dunkel"),
+                boden,
+            ], style={"flex": "0 0 300px", "marginRight": "22px"}),
+            html.Div([
+                html.Div("Was diese Zahl ist — und was nicht",
+                         className="as-untertitel-dunkel"),
+                html.Div([
+                    html.P("Gerechnet mit NeuralFoil für das Profil und einer "
+                           "Traglinienrechnung mit Bodenspiegelung für die "
+                           "Spannweite. Das ist eine Abschätzung zum Vergleich "
+                           "von Entwürfen, kein CFD-Ersatz."),
+                    html.P([html.B("Nicht enthalten: "),
+                            "die Beschleunigung im Kanal zwischen Flügel und "
+                            "Boden — deshalb ist der Abtrieb bei kleinem "
+                            "Bodenabstand eher zu niedrig. Ebenso fehlen "
+                            "Endplatten, Räder, die Wirkung mehrerer Elemente "
+                            "aufeinander und der Aufstau vor dem Fahrzeug."]),
+                    html.P([html.B("Enthalten: "),
+                            "Reynoldszahl aus Geschwindigkeit und Sehne, "
+                            "Verwindung je Sektion, der induzierte Winkel über "
+                            "die Spannweite, Abriss, und der Bodeneinfluss auf "
+                            "die induzierte Strömung."]),
+                ], className="as-hinweis"),
+            ], style={"flex": "1 1 0", "minWidth": 0}),
+        ], className="as-zeile"),
+    ])
 
 
 def _regelkarte(plan) -> html.Div:

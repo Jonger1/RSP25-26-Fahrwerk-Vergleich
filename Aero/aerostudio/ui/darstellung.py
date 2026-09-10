@@ -229,3 +229,71 @@ def _fluegelpunkte(plan, name: str = "") -> go.Figure:
             zaxis=dict(title="z [mm] über Boden"),
         ))
     return fig
+
+
+def spannweitenverlauf(stapel, element) -> go.Figure:
+    """Sehne und Eindrehen ueber die Spannweite, mit den Sektionen markiert.
+
+    Zwei Groessen in einem Bild mit zwei Achsen: Sie haengen zusammen - wer
+    aussen die Sehne verlaengert und gleichzeitig weiter eindreht, bekommt
+    dort sehr viel mehr Last. Getrennte Bilder verstecken diesen Zusammenhang.
+    Die Sektionen stehen als senkrechte Linien darin, damit sichtbar ist,
+    welcher Knick von einer Stuetzstelle kommt und welcher aus der
+    Interpolation.
+    """
+    y = [s.y for s in stapel]
+    sehne = [s.sehne for s in stapel]
+    winkel = [s.anstellwinkel for s in stapel]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=y, y=sehne, name="Sehne [mm]", mode="lines",
+                             line=dict(color=FARBE_KONTUR, width=2),
+                             hovertemplate="y %{x:.0f} mm<br>Sehne %{y:.1f} mm"
+                                           "<extra></extra>"))
+    fig.add_trace(go.Scatter(x=y, y=winkel, name="Anstellwinkel [°]", mode="lines",
+                             yaxis="y2", line=dict(color=FARBE_AKZENT, width=2),
+                             hovertemplate="y %{x:.0f} mm<br>Winkel %{y:.2f}°"
+                                           "<extra></extra>"))
+
+    if element is not None and element.spannweite is not None:
+        for st in element.spannweite.stuetzstellen:
+            fig.add_vline(x=st.y, line=dict(color="#c8ccd4", width=1, dash="dot"))
+
+    fig.update_layout(**_grundlayout("Sehne und Eindrehen über die Spannweite"))
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(orientation="h", y=-0.28, font=dict(size=11)),
+        yaxis=dict(title="Sehne [mm]"),
+        yaxis2=dict(title="Anstellwinkel [°]", overlaying="y", side="right",
+                    showgrid=False))
+    fig.update_xaxes(title="y [mm] ab Fahrzeugmitte")
+    return fig
+
+
+def fluegel3d(stapel, name: str = "") -> go.Figure:
+    """Der Schnittstapel raeumlich, in Fahrzeugkoordinaten.
+
+    Achsen so beschriftet, wie das Reglement spricht: x nach hinten ab
+    Vorderachse, y ab Fahrzeugmitte, z ueber Boden. Wer hier eine Zahl
+    abliest, kann sie unmittelbar gegen T 8.2 halten.
+    """
+    fig = go.Figure()
+    anzahl = len(stapel)
+    for i, schnitt in enumerate(stapel):
+        p = schnitt.punkte
+        anteil = i / max(anzahl - 1, 1)
+        farbe = (FARBE_KONTUR if anteil < 0.001 else
+                 FARBE_AKZENT if anteil > 0.999 else "rgba(120,128,140,0.5)")
+        fig.add_trace(go.Scatter3d(
+            x=p[:, 0], y=p[:, 1], z=p[:, 2], mode="lines",
+            line=dict(color=farbe, width=2), showlegend=False,
+            hovertemplate="x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.0f} mm<extra></extra>"))
+
+    fig.update_layout(
+        title=dict(text=f"{name} — {anzahl} Schnitte", font=dict(size=12)),
+        margin=dict(l=0, r=0, t=32, b=0), height=340, paper_bgcolor="white",
+        scene=dict(aspectmode="data",
+                   xaxis=dict(title="x [mm] nach hinten"),
+                   yaxis=dict(title="y [mm] ab Mitte"),
+                   zaxis=dict(title="z [mm] über Boden")))
+    return fig

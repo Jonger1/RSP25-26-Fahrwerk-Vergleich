@@ -417,3 +417,54 @@ input[type="number"] {
 /* Die Notiz zum Katalogprofil steht jetzt neben der Ampel statt unter der
    Auswahl - dort ist Platz und sie verdraengt keine Bedienelemente. */
 .as-notiz { margin-top: 0; }
+
+/* ------------------------------------------------------ Fluegelansicht */
+
+/* Kennzahlen der Abtriebsabschaetzung. Gross gesetzt, weil sie das Ergebnis
+   sind - der erklaerende Text daneben ist wichtig, aber nicht das, wonach
+   jemand zuerst sucht. */
+.as-grosszahl {
+    font-family: var(--schrift-zahl);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--text);
+}
+
+.as-untertitel-dunkel {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-leise);
+    margin-bottom: 8px;
+}
+
+.as-tabelle {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.as-tabelle th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-leise);
+    border-bottom: 1px solid var(--rahmen);
+    padding: 4px 8px 6px 0;
+}
+.as-tabelle td {
+    font-family: var(--schrift-zahl);
+    padding: 4px 8px 4px 0;
+    border-bottom: 1px solid var(--rahmen);
+}
+
+/* Dash-Tabelle an das uebrige Erscheinungsbild angleichen. */
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td,
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+    border-color: var(--rahmen) !important;
+}
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner
+input.dash-cell-value:focus {
+    outline: 2px solid var(--rot) !important;
+    outline-offset: -2px;
+}

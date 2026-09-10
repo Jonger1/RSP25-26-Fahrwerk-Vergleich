@@ -78,7 +78,7 @@ if %errorlevel% neq 0 (
 echo   Pakete werden geladen...
 "%VPY%" -m pip install --upgrade --quiet pip
 "%VPY%" -m pip install --quiet --no-warn-script-location ^
-    dash plotly numpy scipy pydantic pyyaml ezdxf shapely
+    dash plotly numpy scipy pydantic pyyaml ezdxf shapely neuralfoil
 if %errorlevel% neq 0 (
     echo.
     echo   [FEHLER] Die Pakete liessen sich nicht installieren.

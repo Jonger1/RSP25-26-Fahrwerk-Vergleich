@@ -211,12 +211,20 @@ def test_quelle_datei_und_naca():
 # Reihenfolge wie in _EINGABEN:
 # quelle, katalogdatei, naca-woelbung, naca-lage, naca-dicke, wirkrichtung,
 # sehne, aoa, verfahren, wandstaerke, kern, klebespalt
-# Reihenfolge wie _EINGABEN in app.py. Die letzten fuenf beschreiben den
-# Fluegel: Verteilung, Halbspannweite, Schnitte, Nase vor der Vorderachse,
-# Hoehe ueber Boden.
+# Reihenfolge wie _EINGABEN in app.py. Die letzten vier beschreiben den
+# Fluegel: Sektionstabelle, Schnitte, Nase vor der Vorderachse, Hoehe ueber
+# Boden. Der Test test_eingabeliste_und_spec_bauer_passen_zusammen wacht
+# darueber, dass diese Folge zur Signatur passt.
+SEKTIONEN = [
+    {"y": 0.0, "sehne": 0.85, "verwindung": -10.0, "z": 0.0, "x": 0.0},
+    {"y": 250.0, "sehne": 0.95, "verwindung": -4.0, "z": 0.0, "x": 0.0},
+    {"y": 450.0, "sehne": 1.0, "verwindung": 0.0, "z": 8.0, "x": 0.0},
+    {"y": 600.0, "sehne": 1.0, "verwindung": 2.0, "z": 22.0, "x": 0.0},
+]
+
 WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
          "prepreg", 0.6, 3.0, 0.2, "Frontfluegel Hauptelement",
-         "frontfluegel", 600.0, 13.0, 600.0, 90.0)
+         SEKTIONEN, 13.0, 600.0, 90.0)
 
 
 def test_hauptcallback_liefert_spec_und_vier_figuren():
@@ -229,7 +237,7 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 def test_naca_zweig_erzeugt_ein_anderes_profil():
     naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
             "nasslaminat", 1.2, 0.0, 0.2, "NACA-Versuch",
-            "gerade", 500.0, 9.0, 500.0, 80.0)
+            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0)
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
     assert AeroSpec.model_validate(a).hash() != AeroSpec.model_validate(b).hash()
@@ -543,8 +551,8 @@ def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):
 
 def test_zu_tiefer_fluegel_wird_in_der_oberflaeche_rot(tmp_path):
     """Derselbe Flügel 40 mm tiefer muss die Bodenfreiheit reissen."""
-    hoch, *_ = UI._profil_aktualisieren(*_werte(17, 90.0))
-    tief, *_ = UI._profil_aktualisieren(*_werte(17, 50.0))
+    hoch, *_ = UI._profil_aktualisieren(*_werte(16, 90.0))
+    tief, *_ = UI._profil_aktualisieren(*_werte(16, 50.0))
     text_hoch = _text(UI._export(hoch, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
     text_tief = _text(UI._export(tief, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
     assert "Bodenfreiheit" in text_tief
@@ -567,6 +575,77 @@ def test_eingabeliste_und_spec_bauer_passen_zusammen():
 def test_laengslage_wird_nach_vorne_gezaehlt():
     """Im Bedienfeld steht "Nase vor der Vorderachse" - im Werkzeug zeigt x
     nach hinten. Ein Vorzeichenfehler hier legt den Fluegel hinter das Auto."""
-    spec, *_ = UI._profil_aktualisieren(*_werte(16, 600.0))
+    spec, *_ = UI._profil_aktualisieren(*_werte(15, 600.0))
     element = AeroSpec.model_validate(spec).elemente[0]
     assert element.pos_x == pytest.approx(-600.0)
+
+
+# ------------------------------------------------------- Sektionstabelle
+
+def test_tabelle_wird_zur_spannweite():
+    spw = UI.spannweite_aus_tabelle(SEKTIONEN, schnitte=15)
+    assert len(spw.stuetzstellen) == 4
+    assert spw.schnitte == 15
+    assert spw.stuetzstellen[0].verwindung == pytest.approx(-10.0)
+    assert spw.stuetzstellen[-1].y == pytest.approx(600.0)
+
+
+def test_halb_ausgefuellte_zeile_bricht_nichts():
+    """Wer eine Sektion hinzufuegt und noch tippt, darf keine Fehlermeldung
+    bekommen - die Zeile wird uebersprungen, bis sie brauchbar ist."""
+    spw = UI.spannweite_aus_tabelle(
+        [{"y": 0.0, "sehne": 1.0}, {"y": None}, {"y": "", "sehne": 2.0},
+         {"y": 400.0, "verwindung": -3.0}])
+    assert [st.y for st in spw.stuetzstellen] == [0.0, 400.0]
+    # Fehlende Spalten fallen auf sinnvolle Vorgaben zurueck.
+    assert spw.stuetzstellen[1].sehne == pytest.approx(1.0)
+    assert spw.stuetzstellen[1].verwindung == pytest.approx(-3.0)
+
+
+def test_doppelte_spannweitenposition_macht_die_tabelle_nicht_unbenutzbar():
+    """Beim Tippen entsteht kurzzeitig ein Duplikat. Das Datenmodell wuerde es
+    ablehnen - hier gewinnt die spaetere Zeile."""
+    spw = UI.spannweite_aus_tabelle(
+        [{"y": 0.0, "verwindung": -10.0}, {"y": 300.0, "verwindung": -4.0},
+         {"y": 300.0, "verwindung": -1.0}])
+    assert len(spw.stuetzstellen) == 2
+    assert spw.stuetzstellen[-1].verwindung == pytest.approx(-1.0)
+
+
+def test_leere_tabelle_faellt_auf_die_vorgabe_zurueck():
+    assert len(UI.spannweite_aus_tabelle([]).stuetzstellen) >= 2
+    assert len(UI.spannweite_aus_tabelle(None).stuetzstellen) >= 2
+
+
+def test_einzelne_sektion_wird_zu_einem_rechteckfluegel():
+    """Eine Stuetzstelle allein hat keine Spannweite. Statt zu scheitern wird
+    eine zweite gleiche angelegt."""
+    spw = UI.spannweite_aus_tabelle([{"y": 500.0, "sehne": 0.8}])
+    assert len(spw.stuetzstellen) == 2
+    assert spw.stuetzstellen[0].sehne == pytest.approx(0.8)
+
+
+def test_negative_spannweitenposition_wird_gespiegelt():
+    """Der Stapel beschreibt eine Haelfte. Wer -300 eintippt, meint 300."""
+    spw = UI.spannweite_aus_tabelle([{"y": 0.0}, {"y": -300.0}])
+    assert all(st.y >= 0 for st in spw.stuetzstellen)
+
+
+def test_sektion_hinzufuegen_veraendert_den_fluegel_nicht():
+    """Eine neue Sektion uebernimmt die Werte der aeussersten. Eine Zeile mit
+    Nullen wuerde den Fluegel sofort verbiegen."""
+    vorher = UI.spannweite_aus_tabelle(SEKTIONEN)
+    erweitert = list(SEKTIONEN) + [dict(SEKTIONEN[-1], y=700.0)]
+    nachher = UI.spannweite_aus_tabelle(erweitert)
+    assert nachher.stuetzstellen[-1].verwindung == \
+        pytest.approx(vorher.stuetzstellen[-1].verwindung)
+    assert nachher.stuetzstellen[-1].y == pytest.approx(700.0)
+
+
+def test_eindrehen_landet_im_spec():
+    """Der eigentliche Zweck des Editors: Verwindung je Sektion."""
+    sektionen = [{"y": 0.0, "sehne": 1.0, "verwindung": 0.0},
+                 {"y": 600.0, "sehne": 1.0, "verwindung": -7.5}]
+    spec, *_ = UI._profil_aktualisieren(*_werte(13, sektionen))
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.spannweite.stuetzstellen[-1].verwindung == pytest.approx(-7.5)
