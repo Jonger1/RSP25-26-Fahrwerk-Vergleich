@@ -649,3 +649,35 @@ def test_eindrehen_landet_im_spec():
     spec, *_ = UI._profil_aktualisieren(*_werte(13, sektionen))
     element = AeroSpec.model_validate(spec).elemente[0]
     assert element.spannweite.stuetzstellen[-1].verwindung == pytest.approx(-7.5)
+
+
+# --------------------------------------------------------- Vorschlag
+
+def test_vorschlag_uebernehmen_setzt_die_felder():
+    """Der Anwender soll die Zahlen nicht abtippen muessen."""
+    vorschlag = {"sehne": 260.0, "halbspannweite": 695.0,
+                 "anstellwinkel": -0.25, "hoehe": 101.9}
+    sehne, aoa, weite, hoehe, tabelle = UI._vorschlag_uebernehmen(
+        1, vorschlag, SEKTIONEN)
+    assert sehne == pytest.approx(260.0)
+    assert aoa == pytest.approx(-0.25)
+    assert weite == pytest.approx(695.0)
+    assert hoehe == pytest.approx(101.9)
+    assert max(z["y"] for z in tabelle) == pytest.approx(695.0)
+
+
+def test_uebernehmen_laesst_die_verwindung_stehen():
+    """Nur die Spannweite wird gestreckt. Die Verwindung ist die
+    Entwurfsabsicht des Anwenders - die Suche hat sie ohnehin nicht
+    angefasst."""
+    vorschlag = {"sehne": 200.0, "halbspannweite": 450.0,
+                 "anstellwinkel": -5.0, "hoehe": 95.0}
+    *_, tabelle = UI._vorschlag_uebernehmen(1, vorschlag, SEKTIONEN)
+    assert [z["verwindung"] for z in tabelle] == \
+        [s["verwindung"] for s in SEKTIONEN]
+    assert max(z["y"] for z in tabelle) == pytest.approx(450.0)
+
+
+def test_uebernehmen_ohne_vorschlag_aendert_nichts():
+    ergebnis = UI._vorschlag_uebernehmen(1, None, SEKTIONEN)
+    assert all(e is UI.no_update for e in ergebnis)

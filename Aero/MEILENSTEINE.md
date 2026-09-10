@@ -143,15 +143,14 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M2 | `rules_2026.yaml`, `rules_2027_draft.yaml`, `vehicle_ref.yaml` | `regeln/`, `spec/` |
 | M2 | Validator über den Fahrzustands-Envelope, beide Regelstände nebeneinander | `regeln/pruefung.py` |
 | M4 | Spannweitenverteilungen mit PCHIP, Sektionsstapel-Export mit identischem Aufbau | `geometrie/spannweite.py` |
+| M4 | Sektionseditor: Verwindung je Sektion, Sektionen hinzufügen und löschen | Reiter *Flügel* |
+| M3 | Profilpolare über NeuralFoil, Reynoldszahl aus Geschwindigkeit und Sehne | `aero/profilpolare.py` |
+| M3 | Traglinienrechnung mit Bodenspiegelung, gegen die Theorie geprüft | `aero/traglinie.py` |
+| M3 | Flügelvorschlag zu einem Zielabtrieb, mit Regelprüfung und Begründung | `aero/entwurf.py` |
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
-1. **M3 — Abtriebsvorhersage.** Der ausdrückliche Wunsch: Das Werkzeug soll den
-   Abtrieb abschätzen und zu einem Zielwert einen Flügel vorschlagen. Weg:
-   NeuralFoil für die Profilpolare, Traglinienrechnung für die Spannweite,
-   Bodeneffekt über `h/c`. Das ist eine **Abschätzung, keine CFD** — und genau
-   so muss es in der Oberfläche stehen, sonst wird damit ausgelegt.
-2. **M2 Rest — Kaskade.** Gap, Overlap und Anstellwinkel relativ zum Vorgänger,
+1. **M2 Rest — Kaskade.** Gap, Overlap und Anstellwinkel relativ zum Vorgänger,
    Kollisions- und Schlitzkonvergenzprüfung. Ein Frontflügel ist mehrelementig;
    solange nur ein Element steht, ist die Abtriebsrechnung ohnehin akademisch.
 3. **M4 Rest — Endplatten, Footplates, Creo-Skelett.** Die Endplatte ist der
@@ -167,6 +166,10 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
   Docstring von `regeln/pruefung.py`, damit sie auffindbar ist.
 * Echte Laminatdicken trägt das Team selbst ein; die Vorgaben je Verfahren
   sind Startwerte, keine Messwerte.
+* Die Abtriebszahlen sind eine **Abschätzung**. Nicht enthalten sind die
+  Kanalwirkung zwischen Flügel und Boden, Endplatten, Räder und die Wirkung
+  mehrerer Elemente aufeinander. Der Vergleich zweier Entwürfe untereinander
+  ist belastbarer als der Absolutwert.
 * Das Logo fehlt: `logo.png` oder `logo.svg` nach `aerostudio/ui/assets/`
   legen, dann erscheint es links oben von selbst.
 

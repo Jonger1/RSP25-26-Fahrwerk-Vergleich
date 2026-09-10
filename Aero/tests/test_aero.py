@@ -258,3 +258,109 @@ def test_ergebnis_meldet_abriss(e423):
                       lage=(-600.0, 0.0, 200.0))
     r = tl.rechne(stapel, e423, 15.0, panels_je_seite=12)
     assert r.abgerissen > 0.5
+
+
+# ------------------------------------------------------ Flügelvorschlag
+
+from aerostudio.aero import entwurf as ent
+
+
+@pytest.fixture(scope="module")
+def enge_grenzen():
+    """Kleines Raster - die Tests pruefen das Verhalten, nicht die Aufloesung."""
+    return ent.Grenzen(sehne=(150.0, 350.0), halbspannweite=(400.0, 695.0),
+                       stufen_sehne=4, stufen_spannweite=3)
+
+
+def test_vorschlag_trifft_den_zielwert(e423, enge_grenzen):
+    v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.gefunden
+    assert v.treffer.abtrieb == pytest.approx(60.0, abs=1.0)
+
+
+def test_alternativen_treffen_denselben_wert(e423, enge_grenzen):
+    """Ein frueher Fehler: Zuschnitte, die schon beim flachsten Winkel
+    ueberschossen, erschienen als 'weiterer Weg zum selben Ziel' - mit 69
+    statt 60 Newton."""
+    v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    for k in v.alternativen:
+        assert k.abtrieb == pytest.approx(60.0, abs=1.0)
+
+
+def test_vorschlag_haelt_die_bodenfreiheit_ein(e423, enge_grenzen):
+    """Die Einbauhoehe wird mitgesucht. Hoehensuche und Regelpruefer muessen
+    denselben Fahrzustand ansetzen - taten sie das nicht, war jeder Vorschlag
+    rechnerisch knapp legal und fiel in der Pruefung durch."""
+    from aerostudio import regeln
+
+    v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.gefunden
+    t = v.treffer
+    assert not t.verstoesse, t.verstoesse
+
+    stapel = schnitte(e423, Spannweite.frontfluegel_aussen().skaliert(t.halbspannweite),
+                      t.sehne, t.anstellwinkel, 24,
+                      lage=(-600.0, 0.0, t.hoehe))
+    befunde = regeln.pruefe_fluegel(stapel, regeln.lade("2026"))
+    boden = [b for b in befunde if b.regel == "T 2.2.1"][0]
+    assert boden.ok
+
+
+def test_hoeheres_ziel_braucht_mehr_flaeche_oder_winkel(e423, enge_grenzen):
+    klein = ent.suche(45.0, e423, Spannweite.frontfluegel_aussen(),
+                      geschwindigkeit=15.0, grenzen=enge_grenzen)
+    gross = ent.suche(75.0, e423, Spannweite.frontfluegel_aussen(),
+                      geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert klein.gefunden and gross.gefunden
+    a, b = klein.treffer, gross.treffer
+    mehr_flaeche = b.sehne * b.halbspannweite > a.sehne * a.halbspannweite
+    steiler = abs(b.anstellwinkel) > abs(a.anstellwinkel)
+    assert mehr_flaeche or steiler
+
+
+def test_unerreichbares_ziel_sagt_was_geht(e423, enge_grenzen):
+    v = ent.suche(400.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert not v.gefunden
+    assert v.erreichbar_max > 0.0
+    # Die Begruendung muss sagen, was stattdessen ginge - sonst steht der
+    # Anwender vor einem "geht nicht" ohne Ausweg.
+    text = " ".join(v.begruendung)
+    assert f"{v.erreichbar_max:.0f} N" in text
+    assert "Kaskade" in text or "Profil" in text
+
+
+def test_verwindung_bleibt_unangetastet(e423, enge_grenzen):
+    """Die Entwurfsabsicht des Anwenders darf die Suche nicht ueberschreiben."""
+    vorlage = Spannweite.frontfluegel_aussen()
+    v = ent.suche(60.0, e423, vorlage, geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.gefunden
+    skaliert = vorlage.skaliert(v.treffer.halbspannweite)
+    assert [st.verwindung for st in skaliert.stuetzstellen] == \
+        [st.verwindung for st in vorlage.stuetzstellen]
+
+
+def test_bester_wirkungsgrad_gewinnt(e423, enge_grenzen):
+    v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    regelkonform = [v.treffer] + [k for k in v.alternativen if k.regelkonform]
+    assert v.treffer.wirkungsgrad == max(k.wirkungsgrad for k in regelkonform)
+
+
+def test_entwurfsregeln_blockieren_keinen_vorschlag(e423, enge_grenzen):
+    """T 2.1.4 steht nur im 2027-Entwurf. Wuerde sie hart zaehlen, faende die
+    Suche fuer einen Fluegel bis zur Radaussenkante gar nichts mehr."""
+    v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
+                  geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.gefunden and v.treffer.regelkonform
+    # Der Entwurfshinweis geht dabei nicht verloren.
+    alle = v.treffer.hinweise + v.treffer.verstoesse
+    assert any("2.1.4" in h for h in alle) or v.treffer.halbspannweite < 620.0
+
+
+def test_verdrehte_grenzen_werden_abgelehnt():
+    with pytest.raises(ValueError, match="verdreht"):
+        ent.Grenzen(sehne=(400.0, 120.0))

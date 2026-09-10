@@ -35,6 +35,7 @@ from dash import (MATCH, Dash, Input, Output, State, callback_context, dash_tabl
 from ..creo import starten as creo_starten
 from ..formate import export
 from .. import regeln
+from ..aero import entwurf as aero_entwurf
 from ..aero import traglinie
 from ..geometrie import spannweite
 from ..geometrie.profil import (katalognotiz, katalogoptionen,
@@ -354,6 +355,44 @@ def _ansicht_fluegel() -> html.Div:
                        "marginBottom": "14px"}),
             dcc.Loading(html.Div(id="aero-ergebnis"), type="dot"),
         ]),
+
+        _karte([
+            _ueberschrift("Flügel zu einem Zielabtrieb vorschlagen"),
+            html.Div("Die Verwindung aus der Tabelle oben bleibt erhalten — "
+                     "gesucht werden Wurzelsehne, Halbspannweite, "
+                     "Anstellwinkel und Einbauhöhe. Unter allem, was das Ziel "
+                     "trifft und das Reglement einhält, gewinnt der beste "
+                     "Wirkungsgrad.", className="as-hinweis",
+                     style={"marginBottom": "12px"}),
+            html.Div([
+                _feld("Zielabtrieb [N]",
+                      _zahlenfeld("zielabtrieb", 60.0, 5.0, 1.0, 2000.0),
+                      "Für den Flügel allein, bei der Geschwindigkeit darüber."),
+                _feld("Sehne von … bis [mm]", html.Div([
+                    _zahlenfeld("sehne-min", 120.0, 10.0, 30.0, 1000.0),
+                    html.Div(style={"height": "6px"}),
+                    _zahlenfeld("sehne-max", 400.0, 10.0, 30.0, 1000.0),
+                ])),
+                _feld("Halbspannweite von … bis [mm]", html.Div([
+                    _zahlenfeld("weite-min", 300.0, 25.0, 50.0, 900.0),
+                    html.Div(style={"height": "6px"}),
+                    _zahlenfeld("weite-max", 695.0, 25.0, 50.0, 900.0),
+                ]), "695 mm ist die Außenkante des Vorderrads."),
+                _feld("Steilster Anstellwinkel [°]",
+                      _zahlenfeld("winkel-min", -16.0, 1.0, -40.0, 0.0),
+                      "Grenze für die Suche. Der Abriss begrenzt zusätzlich."),
+                html.Div([
+                    html.Button("Flügel vorschlagen", id="btn-vorschlag",
+                                n_clicks=0, className="as-knopf as-knopf-voll"),
+                    html.Div("Rechnet einige hundert Varianten durch, "
+                             "etwa zehn Sekunden.", className="as-hinweis",
+                             style={"marginTop": "6px"}),
+                ]),
+            ], className="as-leiste",
+                style={"gridTemplateColumns": "repeat(auto-fit, minmax(210px, 1fr))",
+                       "marginBottom": "14px"}),
+            dcc.Loading(html.Div(id="vorschlag-ergebnis"), type="dot"),
+        ]),
     ])
 
 
@@ -433,6 +472,9 @@ def layout() -> html.Div:
         # Bedienkomfort und nicht Teil des Spec: Es beschreibt nicht den
         # Entwurf, sondern die Gewohnheit des Bearbeiters.
         dcc.Store(id="verfahrensspeicher", data={}),
+        # Der zuletzt gerechnete Vorschlag, damit der Uebernehmen-Knopf
+        # ihn anwenden kann, ohne noch einmal zu rechnen.
+        dcc.Store(id="vorschlag"),
 
         html.Div([
             html.Div(marke, className="as-marke"),
@@ -799,7 +841,7 @@ def _export(daten, toleranz, ordner, ausgabe, n_export, n_creo):
         return _fehlerkarte(fehler), "", leer, "", ""
 
 
-@app.callback(Output("stuetzstellen", "data"),
+@app.callback(Output("stuetzstellen", "data", allow_duplicate=True),
               Input("btn-vorgabe", "n_clicks"), Input("btn-sektion", "n_clicks"),
               State("verteilung", "value"),
               State(wert("halbspannweite"), "value"),
@@ -887,6 +929,145 @@ def _abtrieb_rechnen(n, daten, tempo):
         return _aerokarte(ergebnis, kennlinie)
     except Exception as fehler:
         return _fehlerkarte(fehler)
+
+
+@app.callback(Output("vorschlag-ergebnis", "children"),
+              Output("vorschlag", "data"),
+              Input("btn-vorschlag", "n_clicks"),
+              State("spec", "data"), State(wert("tempo"), "value"),
+              State(wert("zielabtrieb"), "value"),
+              State(wert("sehne-min"), "value"), State(wert("sehne-max"), "value"),
+              State(wert("weite-min"), "value"), State(wert("weite-max"), "value"),
+              State(wert("winkel-min"), "value"),
+              prevent_initial_call=True)
+def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
+                       weite_min, weite_max, winkel_min):
+    if not daten:
+        return "", None
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        profil = profil_fuer(element)
+
+        grenzen = aero_entwurf.Grenzen(
+            sehne=(float(sehne_min or 120.0), float(sehne_max or 400.0)),
+            halbspannweite=(float(weite_min or 300.0), float(weite_max or 695.0)),
+            anstellwinkel=(float(winkel_min or -16.0), 0.0))
+
+        v = aero_entwurf.suche(
+            float(ziel or 60.0), profil, element.spannweite,
+            geschwindigkeit=float(tempo or 15.0),
+            lage=(element.pos_x, element.pos_y, element.pos_z),
+            grenzen=grenzen)
+        gemerkt = None
+        if v.treffer:
+            gemerkt = {"sehne": v.treffer.sehne,
+                       "halbspannweite": v.treffer.halbspannweite,
+                       "anstellwinkel": v.treffer.anstellwinkel,
+                       "hoehe": v.treffer.hoehe}
+        return _vorschlagskarte(v), gemerkt
+    except Exception as fehler:
+        return _fehlerkarte(fehler), None
+
+
+def _vorschlagskarte(v) -> html.Div:
+    """Der Vorschlag, mit Begruendung und Alternativen."""
+    if not v.gefunden:
+        return html.Div([
+            html.Div(f"{v.ziel:.0f} N sind in diesem Rahmen nicht erreichbar.",
+                     className="as-ampel-kopf fehl"),
+            html.Div([html.Div(b, style={"marginBottom": "5px"})
+                      for b in v.begruendung], className="as-hinweis"),
+        ])
+
+    t = v.treffer
+    kopf = html.Div(
+        "Vorschlag" if t.regelkonform else "Vorschlag — hält das Reglement NICHT ein",
+        className=f"as-ampel-kopf {'ok' if t.regelkonform else 'fehl'}")
+
+    zahlen = html.Div([
+        html.Div([html.Div(f"{t.sehne:.0f} mm", className="as-grosszahl"),
+                  html.Div("Wurzelsehne", className="as-hinweis")]),
+        html.Div([html.Div(f"{t.halbspannweite:.0f} mm", className="as-grosszahl"),
+                  html.Div("Halbspannweite", className="as-hinweis")]),
+        html.Div([html.Div(f"{t.anstellwinkel:+.1f}°", className="as-grosszahl"),
+                  html.Div("Anstellwinkel", className="as-hinweis")]),
+        html.Div([html.Div(f"{t.hoehe:.0f} mm", className="as-grosszahl"),
+                  html.Div("Höhe über Boden", className="as-hinweis")]),
+        html.Div([html.Div(f"{t.abtrieb:.0f} N", className="as-grosszahl"),
+                  html.Div("Abtrieb", className="as-hinweis")]),
+        html.Div([html.Div(f"{t.wirkungsgrad:.1f}", className="as-grosszahl"),
+                  html.Div("Abtrieb je Widerstand", className="as-hinweis")]),
+    ], className="as-leiste",
+        style={"gridTemplateColumns": "repeat(auto-fit, minmax(140px, 1fr))",
+               "marginBottom": "14px"})
+
+    teile = [kopf, zahlen]
+
+    if t.verstoesse:
+        teile.append(html.Div(
+            [html.B("Verstöße: ")] + [html.Div(x) for x in t.verstoesse],
+            className="as-status-fehler", style={"marginBottom": "10px"}))
+
+    teile.append(html.Div([html.Div(b, style={"marginBottom": "5px"})
+                           for b in v.begruendung], className="as-hinweis",
+                          style={"marginBottom": "14px"}))
+
+    if v.alternativen:
+        teile.append(html.Div("Weitere Wege zum selben Ziel",
+                              className="as-untertitel-dunkel"))
+        teile.append(html.Table(
+            [html.Tr([html.Th("Sehne"), html.Th("Halbspannw."),
+                      html.Th("Winkel"), html.Th("Höhe"),
+                      html.Th("Abtrieb"), html.Th("L/D"), html.Th("Regeln")])]
+            + [html.Tr([html.Td(f"{k.sehne:.0f} mm"),
+                        html.Td(f"{k.halbspannweite:.0f} mm"),
+                        html.Td(f"{k.anstellwinkel:+.1f}°"),
+                        html.Td(f"{k.hoehe:.0f} mm"),
+                        html.Td(f"{k.abtrieb:.0f} N"),
+                        html.Td(f"{k.wirkungsgrad:.1f}"),
+                        html.Td("ok" if k.regelkonform else "Verstoß",
+                                className="as-status-ok" if k.regelkonform
+                                else "as-status-fehler")])
+               for k in v.alternativen],
+            className="as-tabelle"))
+
+    teile.append(html.Div([
+        html.Button("Vorschlag übernehmen", id="btn-uebernehmen", n_clicks=0,
+                    className="as-knopf as-knopf-voll",
+                    style={"width": "auto"}),
+        html.Div("Setzt Sehne, Anstellwinkel, Halbspannweite und Höhe. Die "
+                 "Verwindung aus der Tabelle bleibt erhalten und wird nur auf "
+                 "die neue Spannweite gestreckt.",
+                 className="as-hinweis", style={"marginTop": "6px"}),
+    ], style={"marginTop": "14px"}))
+    return html.Div(teile)
+
+
+@app.callback(Output(wert("sehne"), "value"), Output(wert("aoa"), "value"),
+              Output(wert("halbspannweite"), "value"),
+              Output(wert("pos-z"), "value"),
+              Output("stuetzstellen", "data", allow_duplicate=True),
+              Input("btn-uebernehmen", "n_clicks"),
+              State("vorschlag", "data"), State("stuetzstellen", "data"),
+              prevent_initial_call=True)
+def _vorschlag_uebernehmen(n, vorschlag, tabelle):
+    """Schreibt den Vorschlag in die Bedienelemente.
+
+    Die Verwindung wird NICHT ueberschrieben, nur auf die neue Spannweite
+    gestreckt - sie ist die Entwurfsabsicht des Anwenders, und die Suche hat
+    sie ohnehin unangetastet gelassen.
+    """
+    if not vorschlag:
+        return (no_update,) * 5
+
+    gestreckt = spannweite_aus_tabelle(tabelle).skaliert(
+        float(vorschlag["halbspannweite"]))
+    return (round(float(vorschlag["sehne"]), 1),
+            round(float(vorschlag["anstellwinkel"]), 2),
+            round(float(vorschlag["halbspannweite"]), 1),
+            round(float(vorschlag["hoehe"]), 1),
+            _tabellendaten(gestreckt))
 
 
 def _aerokarte(e, kennlinie) -> html.Div:
