@@ -128,6 +128,50 @@ Begründung: passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly au
 
 ---
 
+---
+
+## Stand am 10.09.2026
+
+Was **läuft**, quer über die Meilensteine hinweg — die Reihenfolge oben ist ein
+Plan, keine Reihenfolge, in der gearbeitet werden muss:
+
+| Aus | Was steht | Wo |
+|-----|-----------|-----|
+| M0 | Creo-Spline nachgebaut und gegen Creo verifiziert (210.184 zu 210.1857 mm) | `geometrie/spline.py` |
+| M1 | Profilkern, Katalog mit 11 Profilen und Notizen, Fertigungsprüfung, IBL-Export | `geometrie/profil.py`, `formate/` |
+| M1 | Oberfläche mit Profil-, Creo- und Projektansicht | `ui/app.py` |
+| M2 | `rules_2026.yaml`, `rules_2027_draft.yaml`, `vehicle_ref.yaml` | `regeln/`, `spec/` |
+| M2 | Validator über den Fahrzustands-Envelope, beide Regelstände nebeneinander | `regeln/pruefung.py` |
+| M4 | Spannweitenverteilungen mit PCHIP, Sektionsstapel-Export mit identischem Aufbau | `geometrie/spannweite.py` |
+
+Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
+
+1. **M3 — Abtriebsvorhersage.** Der ausdrückliche Wunsch: Das Werkzeug soll den
+   Abtrieb abschätzen und zu einem Zielwert einen Flügel vorschlagen. Weg:
+   NeuralFoil für die Profilpolare, Traglinienrechnung für die Spannweite,
+   Bodeneffekt über `h/c`. Das ist eine **Abschätzung, keine CFD** — und genau
+   so muss es in der Oberfläche stehen, sonst wird damit ausgelegt.
+2. **M2 Rest — Kaskade.** Gap, Overlap und Anstellwinkel relativ zum Vorgänger,
+   Kollisions- und Schlitzkonvergenzprüfung. Ein Frontflügel ist mehrelementig;
+   solange nur ein Element steht, ist die Abtriebsrechnung ohnehin akademisch.
+3. **M4 Rest — Endplatten, Footplates, Creo-Skelett.** Die Endplatte ist der
+   Teil, den T 2.1.3 und die neue T 2.1.4 am härtesten treffen.
+4. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
+   keine Toolkit-Anwendungen. Bis zur Vollversion bleibt es beim Weg
+   "Werkzeug schreibt .ibl, Import in Creo in vier Klicks".
+
+**Offene Punkte aus der Anwendung**
+
+* Die Lesart der neuen T 2.1.4 ist eine Auslegung des Entwurfstextes. Sobald
+  der endgültige 2027er-Text da ist, gehört sie überprüft — sie steht im
+  Docstring von `regeln/pruefung.py`, damit sie auffindbar ist.
+* Echte Laminatdicken trägt das Team selbst ein; die Vorgaben je Verfahren
+  sind Startwerte, keine Messwerte.
+* Das Logo fehlt: `logo.png` oder `logo.svg` nach `aerostudio/ui/assets/`
+  legen, dann erscheint es links oben von selbst.
+
+---
+
 ## M0 — Umgebung und Machbarkeitsnachweis
 
 **Ziel:** Bevor eine Zeile Anwendungscode entsteht, ist bewiesen, dass der Creo-Weg trägt.
