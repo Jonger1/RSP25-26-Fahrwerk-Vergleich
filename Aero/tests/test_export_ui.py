@@ -530,11 +530,15 @@ def test_fluegelschnitte_halten_den_creo_punktabstand_ein():
 def test_verteilung_laesst_sich_auf_die_spannweite_strecken():
     from aerostudio.spec.modell import Spannweite
 
-    gestreckt = Spannweite.frontfluegel_aussen().skaliert(450.0)
+    vorlage = Spannweite.frontfluegel_aussen()
+    gestreckt = vorlage.skaliert(450.0)
     assert max(s.y for s in gestreckt.stuetzstellen) == pytest.approx(450.0)
-    # Der Verlauf bleibt: innen Outwash, aussen die volle Sehne.
-    assert gestreckt.stuetzstellen[0].verwindung == pytest.approx(-10.0)
-    assert gestreckt.stuetzstellen[-1].sehne == pytest.approx(1.0)
+    # Der VERLAUF bleibt unveraendert - nur die Spannweite wird gestreckt.
+    # Bewusst gegen die Vorlage geprueft und nicht gegen feste Zahlen: Sonst
+    # faellt der Test um, sobald die Vorgabe geaendert wird, ohne dass an der
+    # Streckung etwas kaputt waere.
+    assert [s.verwindung for s in gestreckt.stuetzstellen] ==         [s.verwindung for s in vorlage.stuetzstellen]
+    assert [s.sehne for s in gestreckt.stuetzstellen] ==         [s.sehne for s in vorlage.stuetzstellen]
 
 
 def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):

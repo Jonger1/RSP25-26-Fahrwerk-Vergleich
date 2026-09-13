@@ -36,8 +36,9 @@ from ..creo import starten as creo_starten
 from ..formate import export
 from .. import regeln
 from ..aero import entwurf as aero_entwurf
+from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
-from ..geometrie import spannweite
+from ..geometrie import spannweite, verwindung
 from ..geometrie.profil import (katalognotiz, katalogoptionen,
                                 katalogprofile, profil_fuer)
 from ..spec.modell import (Fertigung, ProfilAusDatei, ProfilNaca, Spannweite,
@@ -904,11 +905,34 @@ def _fluegel_zeichnen(daten, ansicht):
 
         anzahl = len(element.spannweite.stuetzstellen)
         werte = spannweite.huellwerte(stapel)
-        meldung = html.Div(
+        zeilen = [html.Div(
             f"{anzahl} Sektionen, {element.spannweite.schnitte} Schnitte, "
             f"Halbspannweite {werte['spannweite']:.0f} mm, "
             f"Grundrissfläche je Seite {werte['flaeche'] / 100:.0f} cm².",
-            className="as-hinweis")
+            className="as-hinweis")]
+
+        # Abrisswinkel nur holen, wenn NeuralFoil da ist - ohne das Paket
+        # bleibt die Ratenpruefung, die braucht keine Aerodynamik.
+        abriss = None
+        if aero_verfuegbar():
+            try:
+                from ..aero.profilpolare import polare, reynolds
+                abriss = polare(profil, reynolds(15.0, element.sehne)).abriss_winkel
+            except Exception:
+                abriss = None
+
+        for befund in verwindung.pruefe(element.spannweite,
+                                        element.anstellwinkel, abriss):
+            zeilen.append(html.Div([
+                html.Span("!" if befund.stufe == "warnung" else "i",
+                          className=f"as-zeichen "
+                                    f"{'fehler' if befund.stufe == 'warnung' else 'hinweis'}"),
+                html.Span(befund.text),
+                html.Span(f"  {befund.ort}", className="as-regel") if befund.ort
+                else html.Span(),
+            ], className="as-befund-hinweis", style={"marginLeft": 0}))
+
+        meldung = html.Div(zeilen)
         return (meldung, darstellung.spannweitenverlauf(stapel, element),
                 darstellung.fluegel3d(stapel, profil.name,
                                       darstellung=ansicht or "flaeche"))

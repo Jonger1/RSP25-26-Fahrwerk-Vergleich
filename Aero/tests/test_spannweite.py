@@ -52,16 +52,24 @@ def test_lage_verschiebt_alles_gleich(profil):
         assert np.allclose(versatz, [-600.0, 25.0, 90.0])
 
 
+# Eigene Verteilung statt der Vorgabe: Die Tests pruefen, DASS Sehne
+# multiplikativ und Verwindung additiv wirken - nicht, welche Zahlen gerade
+# in der Vorgabe stehen. Vorher hingen sie an 0.85 und -10 Grad und fielen
+# um, als die Vorgabe entschaerft wurde.
+EIGENE = Spannweite(stuetzstellen=[
+    Stuetzstelle(y=0.0, sehne=0.80, verwindung=-6.0),
+    Stuetzstelle(y=600.0, sehne=1.00, verwindung=+3.0)], schnitte=13)
+
+
 def test_verwindung_wirkt_additiv(profil):
-    """Die Wurzel des Frontfluegel-Presets steht -10 Grad gegen den Grundwinkel."""
-    stapel = _fluegel(profil, winkel=-4.0)
-    assert stapel[0].anstellwinkel == pytest.approx(-14.0)
-    assert stapel[-1].anstellwinkel == pytest.approx(-2.0)
+    stapel = _fluegel(profil, spannweite=EIGENE, winkel=-4.0)
+    assert stapel[0].anstellwinkel == pytest.approx(-10.0)
+    assert stapel[-1].anstellwinkel == pytest.approx(-1.0)
 
 
 def test_sehne_wirkt_multiplikativ(profil):
-    stapel = _fluegel(profil, sehne=250.0)
-    assert stapel[0].sehne == pytest.approx(0.85 * 250.0)
+    stapel = _fluegel(profil, spannweite=EIGENE, sehne=250.0)
+    assert stapel[0].sehne == pytest.approx(0.80 * 250.0)
     assert stapel[-1].sehne == pytest.approx(1.00 * 250.0)
 
 
@@ -309,3 +317,71 @@ def test_reserve_zeigt_in_die_richtige_richtung(profil, bezug):
     for b in pruefe_fluegel(stapel, lade("2026"), bezug,
                             Fahrzustand.bremsend(600.0)):
         assert (b.reserve >= -1e-9) == b.ok
+
+
+# ----------------------------------------------------- Verwindungspruefung
+
+from aerostudio.geometrie import verwindung
+
+
+def test_zu_schnelle_verwindung_wird_gemeldet():
+    """Aufgefallen im CAD: Die erste Vorgabe verdrehte sich mit 24 Grad je
+    Meter, und der Berandungsverbund schnuerte in der Mitte sichtbar ein."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(), -4.0)
+    warnungen = [b for b in befunde if b.stufe == "warnung"]
+    assert warnungen
+    assert any("eingeschnürt" in b.text for b in warnungen)
+
+
+def test_massvolle_vorgabe_wird_nicht_beanstandet():
+    assert verwindung.pruefe(Spannweite.frontfluegel_aussen(), -4.0, -12.0) == []
+
+
+def test_schnitt_jenseits_des_abrisses_wird_gemeldet():
+    """Die alte Vorgabe stellte die Wurzel auf -14 Grad, bei einem Abriss des
+    E423 bei -12 Grad. Das faellt sonst erst in der Abtriebsrechnung auf und
+    ist dort schwer zuzuordnen."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(),
+                                -4.0, -12.0)
+    assert any("JENSEITS des Abrisses" in b.text for b in befunde)
+    ueber = [b for b in befunde if "JENSEITS" in b.text][0]
+    assert "y 0 mm" in ueber.ort
+
+
+def test_knappe_abrissreserve_wird_gemeldet():
+    spw = Spannweite(stuetzstellen=[Stuetzstelle(y=0.0, verwindung=-7.0),
+                                    Stuetzstelle(y=600.0, verwindung=-6.0)])
+    befunde = verwindung.pruefe(spw, -4.0, -12.0)
+    assert any("Reserve bis zum Abriss" in b.text for b in befunde)
+
+
+def test_ohne_abrisswinkel_bleibt_die_ratenpruefung():
+    """Ohne NeuralFoil laesst sich der Abriss nicht bestimmen - die
+    Verwindungsrate braucht aber keine Aerodynamik."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(), -4.0,
+                                abrisswinkel=None)
+    assert befunde
+    assert all("Abriss" not in b.text for b in befunde)
+
+
+def test_verwindungsrate_rechnet_je_meter():
+    spw = Spannweite(stuetzstellen=[Stuetzstelle(y=0.0, verwindung=-10.0),
+                                    Stuetzstelle(y=250.0, verwindung=-4.0)])
+    (von, bis, rate), = verwindung.verwindungsrate(spw)
+    assert (von, bis) == (0.0, 250.0)
+    assert rate == pytest.approx(24.0)
+
+
+def test_neue_vorgabe_haelt_abstand_zum_abriss(profil):
+    """Der eigentliche Zweck der Aenderung: Reserve fuer Nicken und Federn."""
+    from aerostudio.aero.profilpolare import polare
+    abriss = polare(profil, 250_000.0).abriss_winkel
+    for st in Spannweite.frontfluegel_aussen().stuetzstellen:
+        assert (-4.0 + st.verwindung) - abriss >= 3.0
+
+
+def test_alte_vorgabe_bleibt_fuer_den_vergleich_erhalten():
+    """Sie ist nicht falsch, sondern nur fuer eine durchgehende Flaeche
+    ungeeignet - als segmentierter Fluegel waere sie sinnvoll."""
+    alt = Spannweite.frontfluegel_stark_verwunden()
+    assert alt.stuetzstellen[0].verwindung == pytest.approx(-10.0)

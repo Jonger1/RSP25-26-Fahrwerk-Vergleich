@@ -22,6 +22,21 @@ Was andere Formula-Student-Teams machen, und woher das kommt:
 Diese drei Punkte sind der Grund, warum hier Sehne, Verwindung, Höhe und
 Längsversatz einzeln über die Spannweite verteilbar sind statt über einen
 einzigen Verjüngungsfaktor.
+
+ACHTUNG bei der Übertragung des zweiten Punktes - hier ist schon einmal ein
+Fehler passiert:
+
+Die −10 Grad gelten für ein eigenes ELEMENT eines segmentierten Flügels, nicht
+für die Verwindung einer durchgehenden Fläche. Als Verwindung eingetragen
+ergaben sie 24 Grad je Meter; der Berandungsverbund in Creo schnürte in der
+Mitte sichtbar ein, und die Wurzel stand zwei Grad jenseits des Abrisses. Ein
+segmentierter Flügel hat dort eine KANTE zwischen zwei Bauteilen - eine
+durchgehende Haut muss den Unterschied über die Spannweite verteilen und
+verdreht sich dabei.
+
+Die Vorgabe in spec.modell.Spannweite ist deshalb maßvoll gehalten, und
+geometrie.verwindung warnt, sobald die Rate zu groß wird oder ein Schnitt an
+den Abriss kommt.
 """
 
 from __future__ import annotations

@@ -295,12 +295,52 @@ class Spannweite(BaseModel):
 
     @staticmethod
     def frontfluegel_aussen() -> "Spannweite":
-        """Aussenabschnitt eines Frontfluegels, nach veroeffentlichten Entwuerfen.
+        """Aussenabschnitt eines Frontfluegels, massvoll verwunden.
 
-        Aussen laengste Sehne und groesster Anstellwinkel - so beschreibt es
-        eMotorsports Cologne. Innen negativ angestellt fuer den Outwash um das
-        Vorderrad; eine Arbeit aus Joenkoeping misst dafuer -10 Grad als bestes
-        Ergebnis, nachgewiesen ueber den gesunkenen Widerstand der Vorderraeder.
+        Innen etwas staerker angestellt als aussen - das leitet Luft nach
+        aussen um das Vorderrad herum (Outwash) und entlastet gleichzeitig die
+        Fluegelspitze, wo die Stroemung ohnehin um die Kante laeuft.
+
+        WARUM NUR -3 GRAD UND NICHT -10:
+
+        Eine erste Fassung stand innen auf -10 Grad, nach Arbeiten zu
+        SEGMENTIERTEN Frontfluegeln. Das war eine falsche Uebertragung: Dort
+        sind die inneren Elemente eigene BAUTEILE mit eigenem Anstellwinkel,
+        keine Verwindung einer durchgehenden Flaeche. Gerechnet ergab das:
+
+          * Verwindungsrate 24 Grad je Meter. Eine durchgehende Haut wird
+            dabei sichtbar eingeschnuert - in Creo faellt das sofort auf.
+          * Die Wurzel stand bei -14 Grad und damit ZWEI GRAD JENSEITS des
+            Abrisses des E423 (-12 Grad). Sie ueberlebte nur, weil der
+            induzierte Winkel sie knapp zurueckholte.
+          * Der oertliche Beiwert lief von -2.03 innen (genau CLmax) auf
+            -0.32 aussen. Die hoechste Last lag also dort, wo die Sehne am
+            KUERZESTEN war - genau die Stelle, die im CAD spitz aussieht.
+
+        Der Handel: 58,8 N mit der alten Fassung gegen 54,6 N mit dieser -
+        sieben Prozent weniger Abtrieb fuer fuenf Grad Abrissreserve und eine
+        Verwindungsrate von 6,7 statt 24 Grad je Meter. Am Fahrzeug bewegt
+        Nicken und Federn den wirksamen Winkel um mehrere Grad; ohne Reserve
+        reisst die Wurzel in der ersten Bremszone ab.
+
+        Wer den starken Outwash will, baut ihn als eigenes ELEMENT - dafuer
+        ist die Kaskade da, nicht die Verwindung.
+        """
+        return Spannweite(stuetzstellen=[
+            Stuetzstelle(y=0.0, sehne=0.95, verwindung=-3.0, z=0.0),
+            Stuetzstelle(y=300.0, sehne=1.00, verwindung=-1.0, z=4.0),
+            Stuetzstelle(y=600.0, sehne=1.00, verwindung=1.0, z=14.0),
+        ], schnitte=13)
+
+    @staticmethod
+    def frontfluegel_stark_verwunden() -> "Spannweite":
+        """Die alte, aggressive Fassung - fuer den Vergleich aufgehoben.
+
+        Bringt rund sieben Prozent mehr Abtrieb, stellt die Wurzel dafuer an
+        den Abriss und laesst eine durchgehende Flaeche in der Mitte
+        einschnueren. Sinnvoll nur, wenn der innere Bereich als eigenes
+        Element gebaut wird. Die Zahlen stehen im Docstring von
+        frontfluegel_aussen().
         """
         return Spannweite(stuetzstellen=[
             Stuetzstelle(y=0.0, sehne=0.85, verwindung=-10.0, z=0.0),
