@@ -1,4 +1,4 @@
-"""Interaktiver Editor fuer Mehr­element-Kaskaden.
+"""Interaktiver Editor fuer MehrElement-Kaskaden.
 
 Der Editor ist absichtlich als eigenes UI-Modul aufgebaut. Die eigentliche
 Geometrie und Aerodynamik bleiben in ``geometrie.kaskade`` bzw.
@@ -9,7 +9,7 @@ Aufruf::
 
     python -m aerostudio.ui.kaskade_editor
 
-Damit ist der M4-Kaskadenentwurf bereits benutzbar, ohne die bestehende
+Damit ist der Kaskadenentwurf bereits benutzbar, ohne die bestehende
 Aero-Studio-Oberflaeche mit einer zweiten Kopie der Fachlogik zu belasten.
 Eine spaetere Einbindung als Reiter kann dieselben Funktionen direkt nutzen.
 """
@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import traceback
 import webbrowser
-from dataclasses import asdict
 from threading import Timer
 
 import plotly.graph_objects as go
@@ -158,7 +157,7 @@ def layout():
     profile = katalogoptionen()
     return html.Div([
         html.H2("Aero Studio — Kaskaden-Editor"),
-        html.P("Mehr­element-Frontflügel parametrisch über Gap, Overlap, Sehne und Winkel auslegen."),
+        html.P("MehrElement-Frontflügel parametrisch über Gap, Overlap, Sehne und Winkel auslegen."),
         html.Div([
             html.Div([
                 html.Label("Hauptelement"),
