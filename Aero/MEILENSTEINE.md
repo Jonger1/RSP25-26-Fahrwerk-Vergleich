@@ -147,14 +147,27 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M3 | Profilpolare über NeuralFoil, Reynoldszahl aus Geschwindigkeit und Sehne | `aero/profilpolare.py` |
 | M3 | Traglinienrechnung mit Bodenspiegelung, gegen die Theorie geprüft | `aero/traglinie.py` |
 | M3 | Flügelvorschlag zu einem Zielabtrieb, mit Regelprüfung und Begründung | `aero/entwurf.py` |
+| M3 | Maximaler Abtrieb als Suchziel | `aero/entwurf.py` |
+| M2 | 2D-Panelverfahren für mehrere Profile, gegen Zylinder und Theorie geprüft | `aero/panel.py` |
+| M2 | Kaskade: Anordnung über Spalt und Überlappung, zähe Rechnung, Abriss über die Saugspitze | `geometrie/kaskade.py`, `aero/kaskade.py` |
+| M2 | Generator: Profilpaarungen und Elementzahl für maximalen Abtrieb | `aero/generator.py` |
+| M4 | Skelett für Creo — Drehachsen, Querlinie, Bezugslinien des Reglements | `formate/skelett.py` |
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
-1. **M2 Rest — Kaskade.** Gap, Overlap und Anstellwinkel relativ zum Vorgänger,
-   Kollisions- und Schlitzkonvergenzprüfung. Ein Frontflügel ist mehrelementig;
-   solange nur ein Element steht, ist die Abtriebsrechnung ohnehin akademisch.
-3. **M4 Rest — Endplatten, Footplates, Creo-Skelett.** Die Endplatte ist der
-   Teil, den T 2.1.3 und die neue T 2.1.4 am härtesten treffen.
+1. **Kaskadenmodell kalibrieren.** Das Verfahren steht, aber sein
+   Abrisskriterium ist STRENG: Von 80 durchgerechneten Kombinationen fielen
+   68 durch, und keine einzige dreielementige überlebte. Reale
+   FS-Frontflügel sind dreielementig. Die Ursache ist bekannt und im Modul
+   beschrieben — die Grenzschicht über den Spalt hinweg wird nicht
+   gerechnet, und genau die hält die Strömung an. Bis zur Kalibrierung an
+   gemessenen oder CFD-Daten sind die Absolutwerte nicht belastbar; der
+   Vergleich zweier Entwürfe untereinander ist es eher.
+2. **Kaskaden-Editor in der Oberfläche.** Rechnen kann das Werkzeug die
+   Kaskade, einstellen lässt sie sich nur im Code.
+3. **M4 Rest — Endplatten und Footplates.** Sie sind der Teil, den T 2.1.3
+   und die neue T 2.1.4 am härtesten treffen, und sie fehlen in der
+   Traglinienrechnung, wo sie der größte Zugewinn an Genauigkeit wären.
 4. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
    keine Toolkit-Anwendungen. Bis zur Vollversion bleibt es beim Weg
    "Werkzeug schreibt .ibl, Import in Creo in vier Klicks".

@@ -163,3 +163,57 @@ Zwei Dinge, die daraus folgen:
   0,01 mm, werden vor dem Schreiben entfernt. Creo hielte sie für denselben
   Punkt und lehnte den Spline ab. Das Werkzeug sagt in der Exportinfo, wie
   viele es waren.
+
+---
+
+## Skelett — Flügel parametrisch verstellen
+
+Der Weg oben bringt fertige Flächen nach Creo. Wer den Anstellwinkel später
+noch ändern will, hat dann ein Problem: Jede Änderung heißt neu exportieren
+und neu importieren.
+
+Das Skelett dreht das um. Es enthält nur **Linien**: je Element eine
+Drehachse auf der Viertelsehne, dazu die Querlinie als festen Bezug und die
+Bezugslinien des Reglements. Der Flügel hängt in Creo an seiner Achse, und der
+Anstellwinkel wird zu einem Maß, das sich ändern lässt.
+
+**Warum die Viertelsehne:** Dort liegt näherungsweise der Neutralpunkt. Das
+Moment ändert sich beim Verstellen am wenigsten, und die Hinterkante wandert
+nicht davon. Eine Achse an der Nase führt beim Verstellen zu beidem.
+
+### Ablauf
+
+1. Im Werkzeug, Reiter **Creo**: **Skelett schreiben (nur Achsen)**. Die Datei
+   heißt wie dein Entwurf, mit dem Zusatz *Skelett*.
+2. In Creo ein **neues Bauteil** anlegen — das wird das Skelett, und es bleibt
+   dauerhaft bestehen.
+3. **Modell** → *Daten abrufen* → **Importierte Bezugskurve**, die
+   Skelett-Datei wählen, Standard-Koordinatensystem, **OK**.
+4. Du bekommst ein Kurvenfeature mit mehreren Geraden. Welche Linie welche
+   ist, steht als Kommentar im **Kopf der Datei** — mit Texteditor öffnen,
+   die ersten Zeilen lesen.
+5. Für jede Drehachse: **Modell** → *Bezug* → **Achse**, die zugehörige Gerade
+   auswählen. Jetzt hast du benannte Achsen statt Kurven.
+6. Für jedes Element eine **Bezugsebene** anlegen: **Modell** → *Bezug* →
+   **Ebene**, als Referenzen die Achse und die Querlinie wählen, und als Maß
+   den **Winkel** eintragen. Genau dieses Maß ist später dein Anstellwinkel.
+7. Den Flügel in einem eigenen Bauteil bauen und über **Copy Geometry** oder
+   eine Baugruppenbedingung an Achse und Ebene hängen.
+
+Danach änderst du den Anstellwinkel, indem du das Winkelmaß aus Schritt 6
+änderst und regenerierst. Kein Export, kein Import.
+
+### Was in der Skelettdatei steht
+
+| Linie | Wozu |
+|---|---|
+| Drehachse je Element | Die Achse, um die der Flügel verstellt wird |
+| Querlinie | Fester Bezug quer zum Fahrzeug, damit die Elemente zueinander nicht verrutschen |
+| Bodenebene z = 0 | Bezug für alle Höhenmaße des Reglements |
+| Vorderachse x = 0 | Ursprung der Längsmaße |
+| Vorderkante Vorderreifen | Die Ebene, auf die sich T 8.2.1 im 2027-Entwurf bezieht |
+| T 8.2.1 Höhengrenze 350 mm | Darüber darf vor dem Rad nichts stehen |
+| T 8.2.2 Breitengrenze | Äußerster Punkt des Vorderrads |
+| T 2.2.1 Bodenfreiheit 30 mm | Die Linie, die im Bremsfall nicht unterschritten werden darf |
+
+Damit steht das Reglement im CAD und nicht nur im Kopf des Aerodynamikers.

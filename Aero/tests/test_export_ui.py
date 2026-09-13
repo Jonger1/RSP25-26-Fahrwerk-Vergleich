@@ -657,12 +657,34 @@ def test_eindrehen_landet_im_spec():
 
 # --------------------------------------------------------- Vorschlag
 
+VORSCHLAEGE = [
+    {"sehne": 260.0, "halbspannweite": 695.0, "anstellwinkel": -0.25,
+     "hoehe": 101.9},
+    {"sehne": 200.0, "halbspannweite": 450.0, "anstellwinkel": -5.0,
+     "hoehe": 95.0},
+]
+
+
+def _klick(nr, vorschlaege=None, tabelle=None):
+    """Simuliert den Klick auf den Uebernehmen-Knopf der Zeile `nr`."""
+    from dash import callback_context
+
+    klicks = [0] * len(vorschlaege or VORSCHLAEGE)
+    klicks[nr] = 1
+    original = type(callback_context).triggered_id
+    try:
+        type(callback_context).triggered_id = property(
+            lambda self, _nr=nr: {"typ": "uebernehmen", "nr": _nr})
+        return UI._vorschlag_uebernehmen(
+            klicks, vorschlaege or VORSCHLAEGE,
+            SEKTIONEN if tabelle is None else tabelle)
+    finally:
+        type(callback_context).triggered_id = original
+
+
 def test_vorschlag_uebernehmen_setzt_die_felder():
     """Der Anwender soll die Zahlen nicht abtippen muessen."""
-    vorschlag = {"sehne": 260.0, "halbspannweite": 695.0,
-                 "anstellwinkel": -0.25, "hoehe": 101.9}
-    sehne, aoa, weite, hoehe, tabelle = UI._vorschlag_uebernehmen(
-        1, vorschlag, SEKTIONEN)
+    sehne, aoa, weite, hoehe, tabelle, meldung = _klick(0)
     assert sehne == pytest.approx(260.0)
     assert aoa == pytest.approx(-0.25)
     assert weite == pytest.approx(695.0)
@@ -674,17 +696,33 @@ def test_uebernehmen_laesst_die_verwindung_stehen():
     """Nur die Spannweite wird gestreckt. Die Verwindung ist die
     Entwurfsabsicht des Anwenders - die Suche hat sie ohnehin nicht
     angefasst."""
-    vorschlag = {"sehne": 200.0, "halbspannweite": 450.0,
-                 "anstellwinkel": -5.0, "hoehe": 95.0}
-    *_, tabelle = UI._vorschlag_uebernehmen(1, vorschlag, SEKTIONEN)
+    *_, tabelle, _meldung = _klick(1)
     assert [z["verwindung"] for z in tabelle] == \
         [s["verwindung"] for s in SEKTIONEN]
     assert max(z["y"] for z in tabelle) == pytest.approx(450.0)
 
 
 def test_uebernehmen_ohne_vorschlag_aendert_nichts():
-    ergebnis = UI._vorschlag_uebernehmen(1, None, SEKTIONEN)
+    ergebnis = UI._vorschlag_uebernehmen([0], None, SEKTIONEN)
     assert all(e is UI.no_update for e in ergebnis)
+
+
+def test_jede_alternative_ist_einzeln_waehlbar():
+    """Jannis: aus den Vorschlaegen einen auswaehlen und uebernehmen. Vorher
+    gab es nur einen Knopf fuer den besten."""
+    erster = _klick(0)
+    zweiter = _klick(1)
+    assert erster[0] == pytest.approx(260.0)
+    assert zweiter[0] == pytest.approx(200.0)
+    assert zweiter[2] == pytest.approx(450.0)
+    # Die Meldung sagt, welcher uebernommen wurde.
+    assert "beste" in _text(erster[5]).lower()
+    assert "Alternative 1" in _text(zweiter[5])
+
+
+def test_uebernehmen_meldet_den_naechsten_schritt():
+    """Sonst weiss niemand, dass jetzt der Export folgt."""
+    assert "Creo" in _text(_klick(0)[5])
 
 
 # -------------------------------------------- Genauigkeit der Messfunktion

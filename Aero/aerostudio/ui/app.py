@@ -28,12 +28,13 @@ import webbrowser
 from pathlib import Path
 from threading import Timer
 
-from dash import (MATCH, Dash, Input, Output, State, callback_context, dash_table,
+from dash import (ALL, MATCH, Dash, Input, Output, State, callback_context,
+                  dash_table,
                   dcc, html,
                   no_update)
 
 from ..creo import starten as creo_starten
-from ..formate import export
+from ..formate import export, skelett
 from .. import regeln
 from ..aero import entwurf as aero_entwurf
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
@@ -438,8 +439,12 @@ def _ansicht_creo() -> html.Div:
                             className="as-knopf as-knopf-voll"),
                 html.Button("Schreiben und in Creo öffnen", id="btn-creo",
                             n_clicks=0, className="as-knopf as-knopf-leer"),
+                html.Button("Skelett schreiben (nur Achsen)", id="btn-skelett",
+                            n_clicks=0, className="as-knopf as-knopf-leer"),
                 html.Div(id="creo-status", className="as-hinweis",
                          style={"marginTop": "9px"}),
+                html.Div(id="skelett-status", className="as-hinweis",
+                         style={"marginTop": "6px"}),
             ]),
         ], spalten="250px"),
 
@@ -997,12 +1002,11 @@ def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
             geschwindigkeit=float(tempo or 15.0),
             lage=(element.pos_x, element.pos_y, element.pos_z),
             grenzen=grenzen)
-        gemerkt = None
-        if v.treffer:
-            gemerkt = {"sehne": v.treffer.sehne,
-                       "halbspannweite": v.treffer.halbspannweite,
-                       "anstellwinkel": v.treffer.anstellwinkel,
-                       "hoehe": v.treffer.hoehe}
+        # ALLE Vorschlaege merken, nicht nur den besten - der Anwender soll
+        # auswaehlen koennen, welchen er uebernimmt.
+        gemerkt = [{"sehne": k.sehne, "halbspannweite": k.halbspannweite,
+                    "anstellwinkel": k.anstellwinkel, "hoehe": k.hoehe}
+                   for k in ([v.treffer] + v.alternativen) if k is not None]
         return _vorschlagskarte(v), gemerkt
     except Exception as fehler:
         return _fehlerkarte(fehler), None
@@ -1040,7 +1044,13 @@ def _vorschlagskarte(v) -> html.Div:
         style={"gridTemplateColumns": "repeat(auto-fit, minmax(140px, 1fr))",
                "marginBottom": "14px"})
 
-    teile = [kopf, zahlen]
+    teile = [kopf, zahlen,
+             html.Div([
+                 html.Button("Diesen Vorschlag übernehmen",
+                             id={"typ": "uebernehmen", "nr": 0}, n_clicks=0,
+                             className="as-knopf as-knopf-voll",
+                             style={"width": "auto"}),
+             ], style={"marginBottom": "14px"})]
 
     if t.verstoesse:
         teile.append(html.Div(
@@ -1057,7 +1067,8 @@ def _vorschlagskarte(v) -> html.Div:
         teile.append(html.Table(
             [html.Tr([html.Th("Sehne"), html.Th("Halbspannw."),
                       html.Th("Winkel"), html.Th("Höhe"),
-                      html.Th("Abtrieb"), html.Th("L/D"), html.Th("Regeln")])]
+                      html.Th("Abtrieb"), html.Th("L/D"), html.Th("Regeln"),
+                      html.Th("")])]
             + [html.Tr([html.Td(f"{k.sehne:.0f} mm"),
                         html.Td(f"{k.halbspannweite:.0f} mm"),
                         html.Td(f"{k.anstellwinkel:+.1f}°"),
@@ -1066,19 +1077,22 @@ def _vorschlagskarte(v) -> html.Div:
                         html.Td(f"{k.wirkungsgrad:.1f}"),
                         html.Td("ok" if k.regelkonform else "Verstoß",
                                 className="as-status-ok" if k.regelkonform
-                                else "as-status-fehler")])
-               for k in v.alternativen],
+                                else "as-status-fehler"),
+                        html.Td(html.Button(
+                            "übernehmen",
+                            id={"typ": "uebernehmen", "nr": i}, n_clicks=0,
+                            className="as-knopf as-knopf-leer",
+                            style={"width": "auto", "padding": "3px 10px",
+                                   "fontSize": "11.5px", "marginTop": 0}))])
+               for i, k in enumerate(v.alternativen, start=1)],
             className="as-tabelle"))
 
-    teile.append(html.Div([
-        html.Button("Vorschlag übernehmen", id="btn-uebernehmen", n_clicks=0,
-                    className="as-knopf as-knopf-voll",
-                    style={"width": "auto"}),
-        html.Div("Setzt Sehne, Anstellwinkel, Halbspannweite und Höhe. Die "
-                 "Verwindung aus der Tabelle bleibt erhalten und wird nur auf "
-                 "die neue Spannweite gestreckt.",
-                 className="as-hinweis", style={"marginTop": "6px"}),
-    ], style={"marginTop": "14px"}))
+    teile.append(html.Div(
+        "Übernehmen setzt Sehne, Anstellwinkel, Halbspannweite und Höhe. Die "
+        "Verwindung aus der Sektionstabelle bleibt erhalten und wird nur auf "
+        "die neue Spannweite gestreckt. Danach im Reiter Creo exportieren.",
+        className="as-hinweis", style={"marginTop": "12px"}))
+    teile.append(html.Div(id="uebernommen", style={"marginTop": "8px"}))
     return html.Div(teile)
 
 
@@ -1086,26 +1100,48 @@ def _vorschlagskarte(v) -> html.Div:
               Output(wert("halbspannweite"), "value"),
               Output(wert("pos-z"), "value"),
               Output("stuetzstellen", "data", allow_duplicate=True),
-              Input("btn-uebernehmen", "n_clicks"),
+              Output("uebernommen", "children"),
+              Input({"typ": "uebernehmen", "nr": ALL}, "n_clicks"),
               State("vorschlag", "data"), State("stuetzstellen", "data"),
               prevent_initial_call=True)
-def _vorschlag_uebernehmen(n, vorschlag, tabelle):
-    """Schreibt den Vorschlag in die Bedienelemente.
+def _vorschlag_uebernehmen(klicks, vorschlaege, tabelle):
+    """Schreibt den GEWAEHLTEN Vorschlag in die Bedienelemente.
+
+    Jede Zeile der Vorschlagsliste hat einen eigenen Knopf. Welcher gedrueckt
+    wurde, sagt der Ausloeser - deshalb Mustererkennung ueber ALL und nicht
+    ein Knopf je fester Kennung: Die Zahl der Alternativen steht erst zur
+    Laufzeit fest.
 
     Die Verwindung wird NICHT ueberschrieben, nur auf die neue Spannweite
     gestreckt - sie ist die Entwurfsabsicht des Anwenders, und die Suche hat
     sie ohnehin unangetastet gelassen.
     """
-    if not vorschlag:
-        return (no_update,) * 5
+    leer = (no_update,) * 6
+    if not vorschlaege or not klicks or not any(k for k in klicks):
+        return leer
 
+    ausloeser = callback_context.triggered_id
+    if not isinstance(ausloeser, dict):
+        return leer
+    nummer = int(ausloeser.get("nr", 0))
+    if nummer >= len(vorschlaege):
+        return leer
+
+    gewaehlt = vorschlaege[nummer]
     gestreckt = spannweite_aus_tabelle(tabelle).skaliert(
-        float(vorschlag["halbspannweite"]))
-    return (round(float(vorschlag["sehne"]), 1),
-            round(float(vorschlag["anstellwinkel"]), 2),
-            round(float(vorschlag["halbspannweite"]), 1),
-            round(float(vorschlag["hoehe"]), 1),
-            _tabellendaten(gestreckt))
+        float(gewaehlt["halbspannweite"]))
+    bezeichnung = ("Der beste Vorschlag" if nummer == 0
+                   else f"Alternative {nummer}")
+    return (round(float(gewaehlt["sehne"]), 1),
+            round(float(gewaehlt["anstellwinkel"]), 2),
+            round(float(gewaehlt["halbspannweite"]), 1),
+            round(float(gewaehlt["hoehe"]), 1),
+            _tabellendaten(gestreckt),
+            html.Div(f"{bezeichnung} ist übernommen: {gewaehlt['sehne']:.0f} mm "
+                     f"Sehne, {gewaehlt['anstellwinkel']:+.1f} Grad, "
+                     f"{gewaehlt['halbspannweite']:.0f} mm Halbspannweite, "
+                     f"{gewaehlt['hoehe']:.0f} mm Höhe. Jetzt im Reiter Creo "
+                     f"exportieren.", className="as-status-ok"))
 
 
 def _aerokarte(e, kennlinie) -> html.Div:
@@ -1183,6 +1219,40 @@ def _aerokarte(e, kennlinie) -> html.Div:
             ], style={"flex": "1 1 0", "minWidth": 0}),
         ], className="as-zeile"),
     ])
+
+
+@app.callback(Output("skelett-status", "children"),
+              Input("btn-skelett", "n_clicks"),
+              State("spec", "data"), State("exportordner", "value"),
+              prevent_initial_call=True)
+def _skelett_schreiben(n, daten, ordner):
+    """Schreibt die Drehachsen statt der Flaechen.
+
+    Eigener Knopf und eigene Datei: Das Skelett wird EINMAL importiert und
+    bleibt dann stehen. Die Fluegel haengen daran und lassen sich in Creo
+    ueber ihren Anstellwinkel verstellen, ohne dass etwas neu importiert
+    werden muss - genau das ist der Zweck.
+    """
+    if not daten:
+        return ""
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        profil = profil_fuer(element)
+        achse = skelett.aus_element(element, profil)
+        plan = skelett.plane_skelett([achse], regeln.Bezugsgeometrie.aus_datei())
+        ziel = (PROJEKT / (ordner or "export")
+                / export.dateiname(element.anzeigename + " Skelett"))
+        skelett.schreibe(plan, ziel)
+        return html.Div([
+            html.Div(f"Skelett geschrieben: {ziel}", className="as-status-ok"),
+            html.Div(f"{len(plan.sektionen)} Linien — Drehachse, Querlinie und "
+                     f"die Bezugslinien des Reglements. Die Reihenfolge steht "
+                     f"als Kommentar im Kopf der Datei.",
+                     style={"marginTop": "4px"}),
+        ])
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
 
 
 def _regelkarte(plan) -> html.Div:
