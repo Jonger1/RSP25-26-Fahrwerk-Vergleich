@@ -94,18 +94,34 @@ def abweichung_zur_kontur(stuetzpunkte: np.ndarray, referenz: np.ndarray,
     s = abtasten(stuetzpunkte, n, geschlossen=geschlossen)
     r = np.asarray(referenz, dtype=float)
 
-    # naechster Abtastpunkt, dann die beiden angrenzenden Strecken pruefen
-    _, idx = cKDTree(s).query(r)
+    # Die NACHBARN des naechsten Abtastpunkts genuegen nicht.
+    #
+    # Gemessen am GOE 797: Mit nur zwei angrenzenden Strecken kam einmal
+    # 0.0037 mm heraus und nach einer Drehung derselben Geometrie 0.0125 mm -
+    # bei einer Funktion, die drehinvariant sein muss. Ursache: An der duennen
+    # Hinterkante kommt die Kurve sich selbst nahe. Der naechstgelegene
+    # Abtastpunkt liegt dann auf der GEGENUEBERLIEGENDEN Seite, und die zwei
+    # Strecken daneben enthalten den echten Fusspunkt gar nicht.
+    #
+    # Deshalb werden die acht naechsten Abtastpunkte geprueft und jeweils
+    # beide angrenzenden Strecken. Das faengt auch den Fall ab, dass die
+    # Kurve sich selbst beruehrt. Mit 120001 Abtastpunkten lieferte die alte
+    # Fassung dasselbe Ergebnis - der Fehler war also reine Unterabtastung.
+    nachbarn = min(8, len(s))
+    _, idx = cKDTree(s).query(r, k=nachbarn)
+    idx = np.atleast_2d(idx.T).T if nachbarn > 1 else idx[:, None]
+
     bester = np.full(len(r), np.inf)
-    for versatz in (-1, 0):
-        i = np.clip(idx + versatz, 0, len(s) - 2)
-        a, b = s[i], s[i + 1]
-        ab = b - a
-        laenge2 = np.sum(ab * ab, axis=1)
-        laenge2 = np.where(laenge2 > 0, laenge2, 1.0)
-        t = np.clip(np.sum((r - a) * ab, axis=1) / laenge2, 0.0, 1.0)
-        fuss = a + t[:, None] * ab
-        bester = np.minimum(bester, np.linalg.norm(r - fuss, axis=1))
+    for k in range(idx.shape[1]):
+        for versatz in (-1, 0):
+            i = np.clip(idx[:, k] + versatz, 0, len(s) - 2)
+            a, b = s[i], s[i + 1]
+            ab = b - a
+            laenge2 = np.sum(ab * ab, axis=1)
+            laenge2 = np.where(laenge2 > 0, laenge2, 1.0)
+            t = np.clip(np.sum((r - a) * ab, axis=1) / laenge2, 0.0, 1.0)
+            fuss = a + t[:, None] * ab
+            bester = np.minimum(bester, np.linalg.norm(r - fuss, axis=1))
     return float(bester.max())
 
 
@@ -162,9 +178,18 @@ def punktzahl_fuer_toleranz(kontur_fn, toleranz_mm: float = CREO_GENAUIGKEIT_MM 
     Hinweis auf eine Kontur mit einem Knick, nicht auf zu wenige Punkte.
     """
     referenz = kontur_fn(4001)
+    treffer = None
     for n in range(n_min, n_max + 1, schritt):
         if abweichung_zur_kontur(kontur_fn(n), referenz) < toleranz_mm:
-            return n
+            # ZWEI aufeinanderfolgende Treffer, nicht einer. Begruendung siehe
+            # punktzahl_fuer_umlauf - bei grob aufgeloesten Quelldateien faellt
+            # die Abweichung nicht monoton, und ein einzelner Treffer kann ein
+            # Gluecksfall der Abtastung sein.
+            if treffer is not None:
+                return treffer
+            treffer = n
+        else:
+            treffer = None
     return None
 
 
@@ -181,9 +206,24 @@ def punktzahl_fuer_umlauf(umlauf_fn, toleranz_mm: float = CREO_GENAUIGKEIT_MM / 
     eine geschlossene Kurve unter etwa zwanzig Punkten je Seite an der
     Hinterkante ohnehin ausbeult.
     """
-    referenz = umlauf_fn(2001)
+    referenz = umlauf_fn(4001)
+    treffer = None
     for n in range(n_min, n_max + 1, schritt):
         if abweichung_zur_kontur(umlauf_fn(n), referenz,
                                  geschlossen=True) < toleranz_mm:
-            return n
+            # Verlangt werden ZWEI aufeinanderfolgende Treffer.
+            #
+            # Grund: Bei einer grob aufgeloesten Quelldatei faellt die
+            # Abweichung NICHT monoton mit der Punktzahl. Gemessen fuer das
+            # GOE 797 (27 Punkte in der Quelle) bei 250 mm Sehne:
+            #   n=200 -> 0.0125 mm,  n=324 -> 0.0037 mm,  n=400 -> 0.0046 mm
+            # Die Kosinusverteilung trifft die Knicke der Quellkontur je nach
+            # Punktzahl unterschiedlich gut. Ein einzelner Treffer kann also
+            # ein Gluecksfall sein - und dann steht in der Oberflaeche eine
+            # Toleranz, die die Kurve gar nicht einhaelt.
+            if treffer is not None:
+                return treffer
+            treffer = n
+        else:
+            treffer = None
     return None

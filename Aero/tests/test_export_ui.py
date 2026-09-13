@@ -681,3 +681,165 @@ def test_uebernehmen_laesst_die_verwindung_stehen():
 def test_uebernehmen_ohne_vorschlag_aendert_nichts():
     ergebnis = UI._vorschlag_uebernehmen(1, None, SEKTIONEN)
     assert all(e is UI.no_update for e in ergebnis)
+
+
+# -------------------------------------------- Genauigkeit der Messfunktion
+
+def test_abweichungsmessung_ist_drehinvariant():
+    """Eine Drehung darf einen Abstand nicht aendern. Die alte Fassung sah nur
+    die zwei Nachbarstrecken des naechsten Abtastpunkts; an der duennen
+    Hinterkante des GOE 797 lag der aber auf der GEGENUEBERLIEGENDEN Seite.
+    Ergebnis: 0.0037 mm ungedreht, 0.0125 mm nach einer Drehung derselben
+    Geometrie - und darauf beruhte die zugesagte Exporttoleranz."""
+    import math
+    from aerostudio.geometrie.spline import abweichung_zur_kontur
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "goe797.dat").gespiegelt()
+    kurve = profil.repanelisiert(324).punkte[:-1] * 250.0
+    referenz = profil.repanelisiert(2001).punkte[:-1] * 250.0
+
+    def dreh(p, grad):
+        c, s = math.cos(math.radians(grad)), math.sin(math.radians(grad))
+        return p @ np.array([[c, s], [-s, c]])
+
+    ohne = abweichung_zur_kontur(kurve, referenz, geschlossen=True)
+    for grad in (6.0, 37.0, 90.0):
+        mit = abweichung_zur_kontur(dreh(kurve, grad), dreh(referenz, grad),
+                                    geschlossen=True)
+        assert mit == pytest.approx(ohne, rel=1e-6), f"bei {grad} Grad"
+
+
+def test_zugesagte_toleranz_wird_eingehalten():
+    """Der Export nennt eine Toleranz. Sie muss unabhaengig nachmessbar sein -
+    auch fuer grob aufgeloeste Quelldateien wie das GOE 797 mit 27 Punkten."""
+    from aerostudio.geometrie.spline import abweichung_zur_kontur
+
+    wurzel = Path(__file__).resolve().parents[1] / "profile" / "katalog"
+    for datei in ("e423.dat", "s1223.dat", "goe797.dat", "fx63137.dat"):
+        profil = Profil.aus_dat(wurzel / datei).gespiegelt()
+        for sehne in (250.0, 600.0):
+            plan = export.plane_element(profil, sehne, -6.0)
+            wahr = profil.repanelisiert(2001).angestellt(-6.0, sehne)
+            abw = abweichung_zur_kontur(plan.sektionen[0][:, [0, 2]], wahr,
+                                        geschlossen=True)
+            assert abw <= plan.toleranz_mm * 1.05, \
+                f"{datei} bei {sehne} mm: {abw:.5f} statt {plan.toleranz_mm:.5f}"
+
+
+def test_punktzahlsuche_nimmt_keinen_gluecksstreffer():
+    """Bei grob aufgeloesten Profilen faellt die Abweichung nicht monoton mit
+    der Punktzahl. Verlangt werden deshalb zwei aufeinanderfolgende Treffer."""
+    from aerostudio.geometrie.spline import punktzahl_fuer_umlauf
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "goe797.dat").gespiegelt()
+
+    def umlauf(n):
+        return profil.repanelisiert(n).punkte[:-1] * 250.0
+
+    n = punktzahl_fuer_umlauf(umlauf, 0.005)
+    assert n is not None
+    # Der gefundene Wert und der naechste Schritt muessen beide halten.
+    from aerostudio.geometrie.spline import abweichung_zur_kontur
+    referenz = umlauf(4001)
+    for versuch in (n, n + 4):
+        assert abweichung_zur_kontur(umlauf(versuch), referenz,
+                                     geschlossen=True) < 0.005
+
+
+def test_neuralfoil_fehlt_meldet_sich_verstaendlich(monkeypatch):
+    """Genau das ist passiert: NeuralFoil lag im System-Python, das Werkzeug
+    laeuft aber aus der projekteigenen .venv. In der Oberflaeche stand nur
+    eine Fehlermeldung ohne Ausweg."""
+    import builtins
+    from aerostudio.aero import profilpolare
+
+    profilpolare._rechne.cache_clear()
+    echt = builtins.__import__
+
+    def ohne_neuralfoil(name, *rest):
+        if name == "neuralfoil":
+            raise ImportError("kein neuralfoil")
+        return echt(name, *rest)
+
+    monkeypatch.setattr(builtins, "__import__", ohne_neuralfoil)
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "e423.dat")
+    with pytest.raises(RuntimeError, match="Aero Studio.bat"):
+        profilpolare.polare(profil, 250_000.0)
+    profilpolare._rechne.cache_clear()
+
+
+# ------------------------------------------------------- 3D-Ansicht
+
+def test_ganzer_fluegel_wird_als_flaeche_gezeichnet():
+    """Ein Stapel Ringe zeigt nicht, ob der Fluegel verdreht ist - eine
+    durchgehende Haut schon."""
+    from aerostudio.geometrie.spannweite import schnitte
+    from aerostudio.spec.modell import Spannweite
+    from aerostudio.ui import darstellung
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "e423.dat").gespiegelt()
+    stapel = schnitte(profil, Spannweite.frontfluegel_aussen(), 250.0, -4.0, 30,
+                      lage=(-600.0, 0.0, 110.0))
+
+    flaeche = darstellung.fluegel3d(stapel, "E423", darstellung="flaeche")
+    assert [t.type for t in flaeche.data] == ["surface"]
+
+    linien = darstellung.fluegel3d(stapel, "E423", darstellung="schnitte")
+    assert len(linien.data) == len(stapel)
+    assert all(t.type == "scatter3d" for t in linien.data)
+
+    beides = darstellung.fluegel3d(stapel, "E423", darstellung="beides")
+    assert len(beides.data) == len(stapel) + 1
+
+
+def test_jeder_schnitt_ist_einzeln_abschaltbar():
+    """Eigene Spur je Schnitt, sonst laesst sich in der Legende nichts
+    einzeln ausblenden."""
+    from aerostudio.geometrie.spannweite import schnitte
+    from aerostudio.spec.modell import Spannweite
+    from aerostudio.ui import darstellung
+
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "e423.dat").gespiegelt()
+    stapel = schnitte(profil, Spannweite.gerade(600.0), 250.0, -4.0, 30,
+                      lage=(-600.0, 0.0, 110.0))
+    fig = darstellung.fluegel3d(stapel, darstellung="schnitte")
+    namen = [t.name for t in fig.data]
+    assert len(set(namen)) == len(namen)          # jeder Eintrag eindeutig
+    assert all("y =" in n for n in namen)
+
+
+def test_schnittfarben_sind_innen_dunkel():
+    """Die alte Anzeige war innen hellgrau auf weissem Grund - praktisch
+    unsichtbar. Innen muss dunkel sein."""
+    from aerostudio.ui import darstellung
+
+    def helligkeit(farbe):
+        werte = [int(v) for v in farbe.removeprefix("rgb(").removesuffix(")").split(",")]
+        return sum(werte) / 3.0
+
+    innen = helligkeit(darstellung._schnittfarbe(0.0))
+    mitte = helligkeit(darstellung._schnittfarbe(0.5))
+    aussen = helligkeit(darstellung._schnittfarbe(1.0))
+    assert innen < 80                       # deutlich dunkler als der Grund
+    assert innen < mitte < aussen           # durchgehender Verlauf
+
+
+def test_ungleiche_schnitte_brechen_die_anzeige_nicht():
+    """Der Export sorgt fuer gleiche Punktzahlen. Die Anzeige darf sich aber
+    nicht darauf verlassen - sonst faellt sie bei einem Zwischenstand aus."""
+    import numpy as np
+    from aerostudio.geometrie.spannweite import Schnitt
+    from aerostudio.ui import darstellung
+
+    stapel = [Schnitt(y=float(y), sehne=200.0, anstellwinkel=-4.0,
+                      punkte=np.column_stack([
+                          np.linspace(0, 200, n), np.full(n, float(y)),
+                          np.linspace(100, 90, n)]))
+              for y, n in ((0, 40), (200, 35), (400, 50))]
+    fig = darstellung.fluegel3d(stapel, darstellung="flaeche")
+    assert len(fig.data) == 1

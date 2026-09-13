@@ -39,6 +39,19 @@ KINEMATISCHE_ZAEHIGKEIT = 1.48e-5   # m2/s
 VERTRAUENSSCHWELLE = 0.80
 
 
+def verfuegbar() -> bool:
+    """Laesst sich die Polare ueberhaupt rechnen?
+
+    Die Oberflaeche fragt das, bevor sie einen Knopf anbietet, der ohnehin
+    nur in einer Fehlermeldung enden wuerde.
+    """
+    try:
+        import neuralfoil  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def reynolds(geschwindigkeit_ms: float, sehne_mm: float) -> float:
     """Reynoldszahl aus Fahrgeschwindigkeit und Sehnenlänge.
 
@@ -154,7 +167,23 @@ def _rechne(punkte_bytes, form, alpha_bytes, n_alpha, re, modell):
     Millisekunden -, sondern weil die Traglinienrechnung dieselbe Polare
     dutzendfach je Iteration anfordert.
     """
-    import neuralfoil as nf
+    try:
+        import neuralfoil as nf
+    except ImportError as fehlt:
+        # Klartext statt Stacktrace. Genau das ist passiert: NeuralFoil lag im
+        # System-Python, das Werkzeug laeuft aber aus der projekteigenen .venv -
+        # und in der Oberflaeche stand nur eine Fehlermeldung ohne Ausweg.
+        raise RuntimeError(
+            "NeuralFoil ist nicht installiert - ohne das Paket laesst sich "
+            "keine Profilpolare und damit kein Abtrieb rechnen. "
+            "So wird es nachgeholt: Aero Studio schliessen und ueber "
+            "'Aero Studio.bat' neu starten; der Starter installiert "
+            "fehlende Pakete von selbst. Hilft das nicht, den Ordner "
+            ".venv loeschen und die .bat erneut starten - die Umgebung "
+            "wird dann neu angelegt. Alles ausser dem Abtrieb "
+            "funktioniert ohne NeuralFoil weiter: Profilentwurf, "
+            "Fertigungspruefung, Regelpruefung und der Export nach Creo."
+        ) from fehlt
 
     punkte = np.frombuffer(punkte_bytes, dtype=float).reshape(form)
     alpha = np.frombuffer(alpha_bytes, dtype=float).reshape(n_alpha)

@@ -332,8 +332,21 @@ def _ansicht_fluegel() -> html.Div:
                              dcc.Graph(id="fig-verteilung", **_GRAPH)]),
                      style={"flex": "1 1 0", "minWidth": 0,
                             "marginRight": "14px"}),
-            html.Div(_karte([_ueberschrift("Flügel räumlich"),
-                             dcc.Graph(id="fig-fluegel3d", **_GRAPH)]),
+            html.Div(_karte([
+                _ueberschrift("Flügel räumlich"),
+                dcc.RadioItems(
+                    id="ansicht3d", value="flaeche",
+                    options=[{"label": " Ganzer Flügel", "value": "flaeche"},
+                             {"label": " Nur Schnitte", "value": "schnitte"},
+                             {"label": " Beides", "value": "beides"}],
+                    inline=True,
+                    style={"fontSize": "12.5px", "marginBottom": "8px"}),
+                html.Div("Bei „Nur Schnitte“ und „Beides“ lässt sich "
+                         "jeder Schnitt über die Legende einzeln ein- und "
+                         "ausblenden. Die Farbe läuft von dunkelrot innen "
+                         "nach gelb außen.", className="as-hinweis",
+                         style={"marginBottom": "8px"}),
+                dcc.Graph(id="fig-fluegel3d", **_GRAPH)]),
                      style={"flex": "1 1 0", "minWidth": 0}),
         ], className="as-zeile"),
 
@@ -875,8 +888,8 @@ def _tabelle_fuellen(n_vorgabe, n_sektion, verteilung, weite, daten):
 @app.callback(Output("sektionen-meldung", "children"),
               Output("fig-verteilung", "figure"),
               Output("fig-fluegel3d", "figure"),
-              Input("spec", "data"))
-def _fluegel_zeichnen(daten):
+              Input("spec", "data"), Input("ansicht3d", "value"))
+def _fluegel_zeichnen(daten, ansicht):
     """Verlaeufe und Raumbild zum aktuellen Stand der Tabelle."""
     leer = {"data": [], "layout": {"height": 260}}
     if not daten:
@@ -897,7 +910,8 @@ def _fluegel_zeichnen(daten):
             f"Grundrissfläche je Seite {werte['flaeche'] / 100:.0f} cm².",
             className="as-hinweis")
         return (meldung, darstellung.spannweitenverlauf(stapel, element),
-                darstellung.fluegel3d(stapel, profil.name))
+                darstellung.fluegel3d(stapel, profil.name,
+                                      darstellung=ansicht or "flaeche"))
     except Exception as fehler:
         return _fehlerkarte(fehler), leer, leer
 

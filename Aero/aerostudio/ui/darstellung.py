@@ -270,30 +270,104 @@ def spannweitenverlauf(stapel, element) -> go.Figure:
     return fig
 
 
-def fluegel3d(stapel, name: str = "") -> go.Figure:
-    """Der Schnittstapel raeumlich, in Fahrzeugkoordinaten.
+def fluegel3d(stapel, name: str = "", darstellung: str = "flaeche") -> go.Figure:
+    """Der Flügel räumlich, in Fahrzeugkoordinaten.
 
     Achsen so beschriftet, wie das Reglement spricht: x nach hinten ab
-    Vorderachse, y ab Fahrzeugmitte, z ueber Boden. Wer hier eine Zahl
-    abliest, kann sie unmittelbar gegen T 8.2 halten.
+    Vorderachse, y ab Fahrzeugmitte, z über Boden. Wer hier eine Zahl abliest,
+    kann sie unmittelbar gegen T 8.2 halten.
+
+    `darstellung` wählt zwischen:
+
+    * ``"flaeche"`` — die Schnitte sind zu einer durchgehenden Haut verbunden.
+      So sieht man den FLÜGEL statt eines Stapels Ringe, und eine Verdrehung
+      fällt sofort auf.
+    * ``"schnitte"`` — nur die Linien, jede in eigener Farbe. Zum Nachmessen
+      einzelner Stationen.
+    * ``"beides"`` — Haut und Linien übereinander.
+
+    Die Linien waren vorher innen durchgehend hellgrau und auf weißem Grund
+    kaum zu erkennen. Jetzt läuft eine Farbskala von innen nach außen, und
+    jeder Schnitt ist einzeln in der Legende an- und abschaltbar.
     """
     fig = go.Figure()
     anzahl = len(stapel)
-    for i, schnitt in enumerate(stapel):
-        p = schnitt.punkte
-        anteil = i / max(anzahl - 1, 1)
-        farbe = (FARBE_KONTUR if anteil < 0.001 else
-                 FARBE_AKZENT if anteil > 0.999 else "rgba(120,128,140,0.5)")
-        fig.add_trace(go.Scatter3d(
-            x=p[:, 0], y=p[:, 1], z=p[:, 2], mode="lines",
-            line=dict(color=farbe, width=2), showlegend=False,
-            hovertemplate="x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.0f} mm<extra></extra>"))
+    if anzahl == 0:
+        return fig
+
+    if darstellung in ("flaeche", "beides"):
+        _haut(fig, stapel)
+    if darstellung in ("schnitte", "beides"):
+        _schnittlinien(fig, stapel, nur_linien=(darstellung == "schnitte"))
 
     fig.update_layout(
         title=dict(text=f"{name} — {anzahl} Schnitte", font=dict(size=12)),
-        margin=dict(l=0, r=0, t=32, b=0), height=340, paper_bgcolor="white",
+        margin=dict(l=0, r=0, t=32, b=0), height=420, paper_bgcolor="white",
+        showlegend=(darstellung != "flaeche"),
+        legend=dict(font=dict(size=10), itemsizing="constant"),
         scene=dict(aspectmode="data",
                    xaxis=dict(title="x [mm] nach hinten"),
                    yaxis=dict(title="y [mm] ab Mitte"),
                    zaxis=dict(title="z [mm] über Boden")))
     return fig
+
+
+def _haut(fig: go.Figure, stapel) -> None:
+    """Verbindet die Schnitte zu einer durchgehenden Fläche.
+
+    Voraussetzung ist, dass alle Schnitte gleich viele Punkte haben und in
+    derselben Richtung laufen - genau das stellt der Export sicher, weil Creo
+    sonst den Verbund verdreht. Ist es hier nicht erfüllt, wird auf die
+    kleinste Punktzahl gekürzt statt die Anzeige zu verweigern.
+    """
+    laenge = min(len(s.punkte) for s in stapel)
+    netz = np.stack([s.punkte[:laenge] for s in stapel])     # (Schnitte, Punkte, 3)
+
+    # Einfärbung nach der Höhe: Die Unterseite eines Abtriebsflügels ist die
+    # arbeitende Seite, und die hebt sich damit ab.
+    fig.add_trace(go.Surface(
+        x=netz[:, :, 0], y=netz[:, :, 1], z=netz[:, :, 2],
+        surfacecolor=netz[:, :, 2],
+        colorscale=[[0.0, "#8c1a1f"], [0.35, "#cf2027"],
+                    [0.7, "#ea7317"], [1.0, "#f4c20d"]],
+        showscale=False, opacity=1.0,
+        lighting=dict(ambient=0.55, diffuse=0.8, specular=0.15, roughness=0.85),
+        hovertemplate="x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.0f} mm<extra></extra>",
+        name="Haut", showlegend=False))
+
+
+def _schnittlinien(fig: go.Figure, stapel, nur_linien: bool = True) -> None:
+    """Jeden Schnitt als eigene Spur, mit eigener Farbe und Legendeneintrag.
+
+    Eigene Spuren und nicht eine gemeinsame: Nur so lässt sich in der Legende
+    ein einzelner Schnitt aus- und wieder einblenden.
+    """
+    anzahl = len(stapel)
+    for i, schnitt in enumerate(stapel):
+        p = schnitt.punkte
+        anteil = i / max(anzahl - 1, 1)
+        fig.add_trace(go.Scatter3d(
+            x=p[:, 0], y=p[:, 1], z=p[:, 2], mode="lines",
+            line=dict(color=_schnittfarbe(anteil), width=3 if nur_linien else 2),
+            name=f"y = {schnitt.y:.0f} mm",
+            legendgroup=f"schnitt{i}",
+            hovertemplate=f"Schnitt y {schnitt.y:.0f} mm<br>"
+                          "x %{x:.0f}<br>z %{z:.0f} mm<extra></extra>"))
+
+
+def _schnittfarbe(anteil: float) -> str:
+    """Farbverlauf von innen nach außen, aus der Lackierung des Fahrzeugs.
+
+    Dunkelrot innen über Rot und Orange nach Gelb außen. Bewusst dunkel
+    beginnend: Auf weißem Grund war die alte hellgraue Mitte praktisch
+    unsichtbar.
+    """
+    stufen = [(0.0, (60, 14, 17)), (0.33, (176, 24, 30)),
+              (0.66, (224, 112, 24)), (1.0, (232, 176, 20))]
+    for (a1, c1), (a2, c2) in zip(stufen[:-1], stufen[1:]):
+        if anteil <= a2 or a2 == 1.0:
+            t = 0.0 if a2 == a1 else (anteil - a1) / (a2 - a1)
+            t = min(max(t, 0.0), 1.0)
+            rgb = [round(v1 + t * (v2 - v1)) for v1, v2 in zip(c1, c2)]
+            return f"rgb({rgb[0]},{rgb[1]},{rgb[2]})"
+    return "rgb(60,14,17)"
