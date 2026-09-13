@@ -32,7 +32,6 @@ from ..geometrie import kaskade as geo_k
 from ..geometrie.fluegel_system import FluegelElement, FluegelSystem, Spannweitenbereich
 from ..geometrie.profil import KATALOG, Profil, katalogoptionen
 
-
 MAX_ELEMENTE = 6
 
 ELEMENT_SPALTEN = [
@@ -143,8 +142,7 @@ def flaps_aus_zeilen(zeilen: list[dict] | None, abtrieb: bool = True) -> tuple[s
     if len(haupt_rows) != 1:
         raise ValueError("Jede Gruppe braucht genau ein Hauptelement.")
     haupt = haupt_rows[0]
-    if rows[0] is not haupt:
-        rows = [haupt] + [r for r in rows if r is not haupt]
+    rows = [haupt] + [r for r in rows if r is not haupt]
 
     haupt_sehne = _float(haupt, "sehne_faktor", 1.0) * 250.0
     haupt_winkel = _float(haupt, "winkel_relativ", 0.0)
@@ -197,23 +195,21 @@ def figur(elemente) -> go.Figure:
 
 def spannweiten_figur(system: FluegelSystem) -> go.Figure:
     fig = go.Figure()
-    for i, element in enumerate(system.elemente):
+    for element in system.elemente:
         y0, y1 = element.spannweite.y_von, element.spannweite.y_bis
         fig.add_trace(go.Bar(
             x=[y1 - y0], y=[element.name], base=[y0], orientation="h",
             hovertemplate=(f"{element.name}<br>Gruppe: {element.gruppe}<br>"
-                           "y=%{base:.0f} bis %{x_end:.0f} mm<extra></extra>"),
+                           "y=%{base:.0f} bis %{customdata[0]:.0f} mm<extra></extra>"),
             customdata=[[y1]],
             name=element.gruppe,
             showlegend=False,
         ))
     fig.update_layout(
         title="Spannweiten- und Segmentaufteilung",
-        xaxis_title="y [mm] — Fahrzeugmitte = 0",
-        yaxis_title="Element",
+        xaxis_title="y [mm] — Fahrzeugmitte = 0", yaxis_title="Element",
         template="plotly_white", height=max(260, 55 * len(system.elemente) + 100),
-        margin=dict(l=120, r=20, t=55, b=50),
-        barmode="overlay")
+        margin=dict(l=120, r=20, t=55, b=50), barmode="overlay")
     fig.add_vline(x=0.0, line_dash="dash", annotation_text="Fahrzeugmitte")
     return fig
 
@@ -244,8 +240,7 @@ def _ergebniskarte(elemente, b):
             "ist keine CFD- oder Messwert-Ersatzgröße.",
             className="as-hinweis", style={"marginBottom": "12px"}),
         html.Table([
-            html.Thead(html.Tr([html.Th("Element"), html.Th("Sehne"), html.Th("Winkel"),
-                                html.Th("CL"), html.Th("Verbundgewinn"), html.Th("Abrissreserve")])),
+            html.Thead(html.Tr([html.Th("Element"), html.Th("Sehne"), html.Th("Winkel"), html.Th("CL"), html.Th("Verbundgewinn"), html.Th("Abrissreserve")])),
             html.Tbody(zeilen),
         ], className="as-tabelle"),
     ])
@@ -260,30 +255,17 @@ def layout():
             "Getrennte Gruppen bilden getrennte 2D-Kaskaden — geeignet als Grundlage für "
             "Frontflügel, Seitenkasten-Flügel, Bullwings und Heckflügel."),
         html.Div([
-            html.Div([
-                html.Label("Berechnungsgruppe"),
-                dcc.Dropdown(id="k-gruppe", options=[], value=None, clearable=False),
-            ]),
-            html.Div([
-                html.Label("Geschwindigkeit [m/s]"),
-                dcc.Input(id="k-v", type="number", value=15.0),
-            ]),
-            html.Div([
-                html.Label("Bodenhöhe [mm]"),
-                dcc.Input(id="k-boden", type="number", value=90.0),
-            ]),
+            html.Div([html.Label("Berechnungsgruppe"), dcc.Dropdown(id="k-gruppe", options=[], value=None, clearable=False)]),
+            html.Div([html.Label("Geschwindigkeit [m/s]"), dcc.Input(id="k-v", type="number", value=15.0)]),
+            html.Div([html.Label("Bodenhöhe [mm]"), dcc.Input(id="k-boden", type="number", value=90.0)]),
         ], style={"display": "grid", "gridTemplateColumns": "2fr 1fr 1fr", "gap": "12px", "marginBottom": "12px"}),
         html.H4("Flügelelemente"),
         html.P(
             "Rolle = Haupt oder Flap. Das Hauptelement ist die Referenz der lokalen Gruppe. "
             "y von/y bis erlaubt Lücken und getrennte linke/rechte Segmente."),
         dash_table.DataTable(
-            id="k-elemente", columns=ELEMENT_SPALTEN, data=vorgabe_zeilen(2),
-            editable=True, row_deletable=True,
-            dropdown={
-                "profil": {"options": profile},
-                "rolle": {"options": ["Haupt", "Flap"]},
-            },
+            id="k-elemente", columns=ELEMENT_SPALTEN, data=vorgabe_zeilen(2), editable=True, row_deletable=True,
+            dropdown={"profil": {"options": profile}, "rolle": {"options": ["Haupt", "Flap"]}},
             style_table={"overflowX": "auto"},
             style_cell={"padding": "6px", "fontFamily": "Consolas, monospace", "minWidth": "95px"},
             style_header={"fontWeight": "bold"}),
@@ -302,11 +284,8 @@ app = Dash(__name__, title="Aero Studio — Flügel/Kaskade")
 app.layout = layout
 
 
-@app.callback(
-    Output("k-gruppe", "options"), Output("k-gruppe", "value"),
-    Output("k-spannweite", "figure"), Output("k-hinweis", "children"),
-    Input("k-elemente", "data"), State("k-gruppe", "value"),
-)
+@app.callback(Output("k-gruppe", "options"), Output("k-gruppe", "value"), Output("k-spannweite", "figure"), Output("k-hinweis", "children"),
+              Input("k-elemente", "data"), State("k-gruppe", "value"))
 def _system_aktualisieren(daten, bisherige_gruppe):
     try:
         system = system_aus_zeilen(daten)
@@ -314,8 +293,7 @@ def _system_aktualisieren(daten, bisherige_gruppe):
         value = bisherige_gruppe if bisherige_gruppe in gruppen else (gruppen[0] if gruppen else None)
         optionen = [{"label": g, "value": g} for g in gruppen]
         return optionen, value, spannweiten_figur(system), (
-            f"{len(system.elemente)} / {MAX_ELEMENTE} Elemente. "
-            f"Gruppen: {', '.join(gruppen) if gruppen else 'keine'}. "
+            f"{len(system.elemente)} / {MAX_ELEMENTE} Elemente. Gruppen: {', '.join(gruppen) if gruppen else 'keine'}. "
             "Eine Gruppe ist ein lokaler 2D-Querschnitt; die Spannweitenkarte ist die gemeinsame 3D-Geometrieebene."
         )
     except Exception as fehler:
@@ -329,17 +307,14 @@ def _element_hinzufuegen(_n, daten):
         return daten
     index = len(daten) + 1
     return daten + [{
-        "name": f"Element {index}", "gruppe": "Frontfluegel", "rolle": "Flap",
-        "profil": "e58.dat", "sehne_faktor": 0.25, "winkel_relativ": -12.0,
-        "spalt": 0.018, "ueberlappung": 0.020, "y_von": -600.0, "y_bis": 600.0,
-        "x": 0.0, "z": 90.0,
+        "name": f"Element {index}", "gruppe": "Frontfluegel", "rolle": "Flap", "profil": "e58.dat",
+        "sehne_faktor": 0.25, "winkel_relativ": -12.0, "spalt": 0.018, "ueberlappung": 0.020,
+        "y_von": -600.0, "y_bis": 600.0, "x": 0.0, "z": 90.0,
     }]
 
 
-@app.callback(Output("k-figur", "figure"), Output("k-ergebnis", "children"),
-              Input("k-rechnen", "n_clicks"),
-              State("k-gruppe", "value"), State("k-elemente", "data"),
-              State("k-v", "value"), State("k-boden", "value"),
+@app.callback(Output("k-figur", "figure"), Output("k-ergebnis", "children"), Input("k-rechnen", "n_clicks"),
+              State("k-gruppe", "value"), State("k-elemente", "data"), State("k-v", "value"), State("k-boden", "value"),
               prevent_initial_call=True)
 def _rechnen(_n, gruppe, daten, v, boden):
     try:
