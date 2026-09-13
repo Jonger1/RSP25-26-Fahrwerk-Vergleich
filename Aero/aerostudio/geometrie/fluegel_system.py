@@ -1,18 +1,8 @@
 """Allgemeines Datenmodell fuer segmentierte Fluegelsysteme.
 
-Die bisherige Kaskadenrechnung ist zweidimensional: Ein Querschnitt besteht aus
-mehreren Profilen hintereinander. Ein realer Formula-Student-Fluegel ist dagegen
-3D und muss nicht ueber die komplette Fahrzeugbreite durchlaufen.
-
-Dieses Modul trennt deshalb die beiden Ebenen:
-
-* ``FluegelElement`` beschreibt ein Profilsegment mit Spannweitenbereich.
-* ``FluegelSystem`` verwaltet bis zu sechs Elemente und ihre Gruppen.
-* Eine Gruppe ist ein lokaler 2D-Kaskadenquerschnitt, z. B. Frontfluegel links,
-  Frontfluegel rechts, Bullwing oder Heckfluegel.
-
-Die eigentliche 3D-Traglinien-/CFD-Kopplung bleibt bewusst spaeteren Modulen
-vorbehalten. Das Modell erzeugt deshalb noch keine erfundenen 3D-Kraefte.
+Die Kaskadenrechnung bleibt lokal zweidimensional. Dieses Modul beschreibt die
+3D-Architektur davor: Elemente duerfen getrennte Spannweitenbereiche haben und
+werden einer wiederverwendbaren Aero-Baugruppe zugeordnet.
 """
 
 from __future__ import annotations
@@ -21,6 +11,14 @@ from dataclasses import dataclass, field
 
 
 MAX_ELEMENTE = 6
+BAUGRUPPEN = (
+    "Frontfluegel",
+    "Seitenkasten",
+    "Bullwing",
+    "Heckfluegel",
+    "Beamwing",
+    "Sonstige",
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +54,7 @@ class FluegelElement:
     sehne_mm: float
     winkel_grad: float
     spannweite: Spannweitenbereich
+    baugruppe: str = "Frontfluegel"
     x_mm: float = 0.0
     z_mm: float = 0.0
     vorheriger_elementname: str | None = None
@@ -67,17 +66,13 @@ class FluegelElement:
             raise ValueError("Ein Fluegelelement braucht einen Namen.")
         if not self.gruppe.strip():
             raise ValueError("Ein Fluegelelement braucht eine Gruppe.")
+        if self.baugruppe not in BAUGRUPPEN:
+            raise ValueError(f"Unbekannte Baugruppe: {self.baugruppe}")
 
 
 @dataclass
 class FluegelSystem:
-    """Verwaltet eine segmentierte 3D-Fluegelarchitektur.
-
-    Sechs Elemente sind absichtlich das UI-Limit des aktuellen Editors. Das
-    Datenmodell kennt keine aerodynamische Sonderbehandlung fuer Front-/Heck-
-    fluegel; damit koennen spaeter dieselben Bausteine fuer alle Baugruppen
-    verwendet werden.
-    """
+    """Verwaltet eine segmentierte Aero-Architektur mit bis zu sechs Elementen."""
 
     elemente: list[FluegelElement] = field(default_factory=list)
 
@@ -87,7 +82,6 @@ class FluegelSystem:
     def validiere(self) -> None:
         if len(self.elemente) > MAX_ELEMENTE:
             raise ValueError(f"Maximal {MAX_ELEMENTE} Fluegelelemente erlaubt.")
-
         namen = [e.name for e in self.elemente]
         if len(set(namen)) != len(namen):
             raise ValueError("Fluegelelementnamen muessen eindeutig sein.")
@@ -95,8 +89,14 @@ class FluegelSystem:
     def gruppen(self) -> list[str]:
         return list(dict.fromkeys(e.gruppe for e in self.elemente))
 
+    def baugruppen(self) -> list[str]:
+        return list(dict.fromkeys(e.baugruppe for e in self.elemente))
+
     def elemente_der_gruppe(self, gruppe: str) -> list[FluegelElement]:
         return [e for e in self.elemente if e.gruppe == gruppe]
+
+    def elemente_der_baugruppe(self, baugruppe: str) -> list[FluegelElement]:
+        return [e for e in self.elemente if e.baugruppe == baugruppe]
 
     def elemente_bei_y(self, y: float) -> list[FluegelElement]:
         return [e for e in self.elemente if e.spannweite.enthaelt(y)]
