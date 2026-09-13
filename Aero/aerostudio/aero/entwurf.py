@@ -323,6 +323,137 @@ def suche(ziel_abtrieb: float, profil, spannweite,
         begruendung=begruendung)
 
 
+def suche_maximum(profil, spannweite, geschwindigkeit: float = 15.0,
+                  lage: tuple[float, float, float] = (-600.0, 0.0, 90.0),
+                  grenzen: Grenzen | None = None,
+                  regelsaetze=None, bezug=None, zustand=None,
+                  anzahl_alternativen: int = 4) -> Vorschlag:
+    """Sucht den Flügel mit dem GRÖSSTEN Abtrieb im zulässigen Rahmen.
+
+    Der andere Fall: Nicht ein Zielwert bei bestem Wirkungsgrad, sondern
+    soviel Abtrieb wie möglich. Das ist keine akademische Variante — mit
+    genug Drehmoment ist der Widerstand zweitrangig, und dann zählt allein,
+    was vorne und hinten an Last anliegt.
+
+    Gesucht wird über dasselbe Raster. Je Zuschnitt wird der Anstellwinkel
+    bis zum Abriss ausgereizt; gewonnen hat der größte Abtrieb, der das
+    Reglement einhält. Der Widerstand wird weiterhin ausgewiesen, nur nicht
+    mehr zum Auswahlkriterium gemacht — wer ihn braucht, sieht ihn.
+    """
+    grenzen = grenzen or Grenzen()
+    if zustand is None:
+        from ..regeln import Fahrzustand
+        zustand = Fahrzustand()
+
+    sehnen = np.linspace(*grenzen.sehne, grenzen.stufen_sehne)
+    weiten = np.linspace(*grenzen.halbspannweite, grenzen.stufen_spannweite)
+
+    kandidaten: list[Kandidat] = []
+    for weite in weiten:
+        for sehne in sehnen:
+            bestes = _bester_winkel(profil, spannweite, float(sehne), float(weite),
+                                    lage, geschwindigkeit, grenzen, zustand)
+            if bestes is None:
+                continue
+            winkel, kraefte, eigene_lage = bestes
+            kandidaten.append(Kandidat(sehne=float(sehne),
+                                       halbspannweite=float(weite),
+                                       anstellwinkel=winkel,
+                                       hoehe=float(eigene_lage[2]),
+                                       kraefte=kraefte))
+
+    _regeln_pruefen(kandidaten, profil, spannweite, lage, regelsaetze, bezug,
+                    zustand)
+    # Regelkonforme zuerst, darin der groesste Abtrieb.
+    kandidaten.sort(key=lambda k: (not k.regelkonform, -k.abtrieb))
+
+    return Vorschlag(
+        ziel=float("inf"), geschwindigkeit=float(geschwindigkeit),
+        treffer=kandidaten[0] if kandidaten else None,
+        alternativen=_streuen(kandidaten[1:], anzahl_alternativen),
+        erreichbar_max=max((k.abtrieb for k in kandidaten), default=0.0),
+        begruendung=_begruenden_maximum(kandidaten, grenzen))
+
+
+def _bester_winkel(profil, spannweite, sehne, weite, lage, geschwindigkeit,
+                   grenzen, zustand):
+    """Der Anstellwinkel mit dem größten Abtrieb, bevor die Strömung abreisst.
+
+    Erst grob abtasten bis zur Abrissgrenze, dann um das Maximum herum
+    verfeinern. Ein Nullstellensucher hilft hier nicht - gesucht wird ein
+    Maximum, keine Nullstelle.
+    """
+    unten, oben = grenzen.anstellwinkel
+
+    def bei(w):
+        eigene_lage = _hoehe_setzen(profil, spannweite, sehne, weite, float(w),
+                                    lage, grenzen, zustand)
+        return eigene_lage, _auswerten(profil, spannweite, sehne, weite,
+                                       float(w), eigene_lage, geschwindigkeit)
+
+    brauchbar = []
+    for w in np.linspace(oben, unten, 13):
+        eigene_lage, k = bei(w)
+        if k.abgerissen > grenzen.abriss_max:
+            break
+        brauchbar.append((float(w), k, eigene_lage))
+
+    if not brauchbar:
+        return None
+
+    i = int(np.argmax([k.abtrieb for _, k, _ in brauchbar]))
+    bestes = brauchbar[i]
+
+    # Um das Maximum herum nachschaerfen, aber nur zwischen den Nachbarn -
+    # jenseits davon liegt entweder der Abriss oder der flachere Ast.
+    a = brauchbar[max(i - 1, 0)][0]
+    b = brauchbar[min(i + 1, len(brauchbar) - 1)][0]
+    for w in np.linspace(a, b, 9):
+        eigene_lage, k = bei(w)
+        if k.abgerissen <= grenzen.abriss_max and k.abtrieb > bestes[1].abtrieb:
+            bestes = (float(w), k, eigene_lage)
+    return bestes
+
+
+def _begruenden_maximum(kandidaten, grenzen) -> list[str]:
+    if not kandidaten:
+        return ["Im vorgegebenen Rahmen reisst die Strömung ab, bevor "
+                "brauchbarer Abtrieb entsteht. Ein gutmütigeres Profil oder "
+                "weniger Verwindung innen hilft."]
+
+    regelkonform = [k for k in kandidaten if k.regelkonform]
+    if not regelkonform:
+        return [f"{len(kandidaten)} Zuschnitte gerechnet, KEINER hält das "
+                f"Reglement ein. Der Vorschlag oben ist der beste unzulässige; "
+                f"die Verstöße stehen dabei."]
+
+    bester = regelkonform[0]
+    texte = [f"Größter regelkonformer Abtrieb: {bester.abtrieb:.0f} N. "
+             f"Ausgereizt bis {bester.anstellwinkel:+.1f} Grad — darüber "
+             f"reisst die Strömung ab."]
+    texte.append(f"Der Widerstand dabei: {bester.kraefte.widerstand:.1f} N "
+                 f"(Wirkungsgrad {bester.wirkungsgrad:.1f}). Wenn Drehmoment "
+                 f"genug da ist, ist das der Preis.")
+
+    sparsam = max(regelkonform, key=lambda k: k.wirkungsgrad)
+    if sparsam is not bester and sparsam.wirkungsgrad > bester.wirkungsgrad * 1.15:
+        verlust = 100.0 * (1.0 - sparsam.abtrieb / max(bester.abtrieb, 1e-9))
+        texte.append(
+            f"Zum Abwägen: {sparsam.sehne:.0f} mm Sehne bei "
+            f"{sparsam.halbspannweite:.0f} mm Halbspannweite und "
+            f"{sparsam.anstellwinkel:+.1f} Grad liefert {verlust:.0f} % weniger "
+            f"Abtrieb, dafür Wirkungsgrad {sparsam.wirkungsgrad:.1f} statt "
+            f"{bester.wirkungsgrad:.1f}.")
+
+    if bester.hinweise:
+        texte.append(f"Nach geltendem Reglement zulässig, aber der "
+                     f"2027-Entwurf stört sich daran: {bester.hinweise[0]}.")
+    texte.append("Ein einzelnes Element ist damit ausgereizt. Mehr Abtrieb "
+                 "geht nur über eine Kaskade — ein zweites und drittes "
+                 "Element im Schlepp des ersten.")
+    return texte
+
+
 def _grenzleistung(profil, spannweite, sehne, weite, lage, geschwindigkeit,
                    grenzen, zustand) -> Fluegelkraefte | None:
     """Was dieser Zuschnitt maximal hergibt, ohne abzureissen."""

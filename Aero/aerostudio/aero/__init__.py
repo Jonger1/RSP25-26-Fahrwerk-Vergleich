@@ -9,7 +9,7 @@ Ersatz fuer CFD. Die Grenzen stehen in den Modul-Docstrings und muessen in
 jeder Anzeige mit auftauchen.
 """
 
-from .entwurf import Grenzen, Kandidat, Vorschlag, suche
+from .entwurf import Grenzen, Kandidat, Vorschlag, suche, suche_maximum
 from .profilpolare import DICHTE, Polare, polare, polarenschar, reynolds
 from .traglinie import (Fluegelkraefte, Streifen, bodenkennlinie,
                         einflussmatrix, rechne, streifen_aus_stapel)
@@ -17,4 +17,5 @@ from .traglinie import (Fluegelkraefte, Streifen, bodenkennlinie,
 __all__ = ["DICHTE", "Fluegelkraefte", "Grenzen", "Kandidat", "Polare",
            "Streifen", "Vorschlag", "bodenkennlinie", "einflussmatrix",
            "polare", "polarenschar", "rechne", "reynolds", "suche",
+           "suche_maximum",
            "streifen_aus_stapel"]

@@ -446,3 +446,48 @@ def test_mehr_anstellwinkel_mehr_abtrieb_auch_geometrisch(e423):
     steil = panel.loese([panel.aus_profil(e423, 1.0, -10.0, punkte=160)],
                         bezugssehne=1.0)
     assert steil.cl_gesamt < flach.cl_gesamt          # negativer = mehr Abtrieb
+
+
+# ------------------------------------------------------ Maximaler Abtrieb
+
+def test_maximumsuche_liefert_mehr_als_ein_zielwert(e423, enge_grenzen):
+    """Wer auf Maximum stellt, muss mehr bekommen als bei einem Zielwert -
+    sonst waere der Schalter sinnlos."""
+    ziel = ent.suche(45.0, e423, Spannweite.frontfluegel_aussen(),
+                     geschwindigkeit=15.0, grenzen=enge_grenzen)
+    maximum = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
+                                geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert maximum.gefunden and ziel.gefunden
+    assert maximum.treffer.abtrieb > ziel.treffer.abtrieb
+
+
+def test_maximumsuche_haelt_die_abrissgrenze_ein(e423, enge_grenzen):
+    """Ausgereizt wird bis zum Abriss, nicht darueber. Ein Fluegel, dessen
+    halbe Flaeche abgerissen ist, erreicht seinen Wert nie im Fahrzeug."""
+    v = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
+                          geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.treffer.kraefte.abgerissen <= enge_grenzen.abriss_max + 1e-9
+
+
+def test_maximumsuche_waehlt_nach_abtrieb_nicht_nach_wirkungsgrad(e423, enge_grenzen):
+    """Der Unterschied zur Zielwertsuche: Hier gewinnt die groesste Last,
+    auch wenn sie mehr Widerstand kostet."""
+    v = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
+                          geschwindigkeit=15.0, grenzen=enge_grenzen)
+    regelkonform = [v.treffer] + [k for k in v.alternativen if k.regelkonform]
+    assert v.treffer.abtrieb == max(k.abtrieb for k in regelkonform)
+
+
+def test_maximumsuche_haelt_das_reglement_ein(e423, enge_grenzen):
+    v = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
+                          geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert v.treffer.regelkonform
+    assert not v.treffer.verstoesse
+
+
+def test_maximumsuche_verweist_auf_die_kaskade(e423, enge_grenzen):
+    """Wenn ein Element ausgereizt ist, muss das Werkzeug sagen, wie es
+    weitergeht - sonst steht der Anwender vor einer Zahl ohne Ausweg."""
+    v = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
+                          geschwindigkeit=15.0, grenzen=enge_grenzen)
+    assert any("Kaskade" in b for b in v.begruendung)
