@@ -364,3 +364,85 @@ def test_entwurfsregeln_blockieren_keinen_vorschlag(e423, enge_grenzen):
 def test_verdrehte_grenzen_werden_abgelehnt():
     with pytest.raises(ValueError, match="verdreht"):
         ent.Grenzen(sehne=(400.0, 120.0))
+
+
+# --------------------------------------------------- Panelverfahren (2D)
+
+from aerostudio.aero import panel
+
+
+def test_zylinder_ohne_zirkulation():
+    """Die klassische Loesung: cp = 1 - 4 sin^2(theta), Auftrieb null.
+    Prueft die Quellbelegung und die Tangentialbedingung."""
+    n = 200
+    t = np.linspace(0.0, 2 * np.pi, n + 1)
+    pts = np.column_stack([np.cos(-t), np.sin(-t)])      # im Uhrzeigersinn
+    r = panel.loese([panel.Koerper(punkte=pts)], alpha_grad=0.0)
+    mitte = -(t[:-1] + t[1:]) / 2
+    assert np.abs(r.cp[0] - (1 - 4 * np.sin(mitte) ** 2)).max() < 1e-6
+    assert abs(r.cl_gesamt) < 1e-6
+
+
+def test_umlaufsinn_ist_egal():
+    """Profildateien laufen mal so und mal so herum. Ein erster Entwurf nahm
+    fest die linke Senkrechte als Aussennormale - beim Zylinder stimmte das,
+    beim Profil zeigten alle Normalen nach innen."""
+    n = 200
+    t = np.linspace(0.0, 2 * np.pi, n + 1)
+    rechts = panel.loese([panel.Koerper(punkte=np.column_stack([np.cos(-t), np.sin(-t)]))])
+    links = panel.loese([panel.Koerper(punkte=np.column_stack([np.cos(t), np.sin(t)]))])
+    assert np.abs(rechts.cp[0] - links.cp[0][::-1]).max() < 1e-6
+
+
+def test_duennes_profil_trifft_die_theorie():
+    """cl = 2 pi alpha, mit einem Dickenzuschlag von etwa 0,77 t/c."""
+    p = Profil.aus_naca(0.0, 0.4, 0.08, n=401)
+    k = panel.aus_profil(p, 1.0, 0.0, punkte=150)
+    for a in (2.0, 4.0, 6.0):
+        r = panel.loese([k], alpha_grad=a)
+        erwartet = 2 * np.pi * np.radians(a) * (1 + 0.77 * 0.08)
+        assert r.cl_gesamt == pytest.approx(erwartet, rel=0.02)
+
+
+def test_reibungsfrei_heisst_widerstandsfrei():
+    """Das Paradoxon von d'Alembert als Selbstpruefung: Kommt hier
+    nennenswert Widerstand heraus, ist die Loesung krumm."""
+    p = Profil.aus_naca(0.02, 0.4, 0.12, n=401)
+    k = panel.aus_profil(p, 1.0, 0.0, punkte=160)
+    for a in (0.0, 4.0, 8.0):
+        r = panel.loese([k], alpha_grad=a)
+        assert abs(r.cd_scheinbar) < 0.002
+
+
+def test_koerper_drehen_und_anstroemung_drehen_ist_dasselbe(e423):
+    """Die Probe, die den Vorzeichenfehler in angestellt() aufgedeckt hat:
+    Ein um -4 Grad gedrehter Fluegel in gerader Anstroemung muss dasselbe
+    liefern wie ein gerader Fluegel in um -4 Grad gedrehter Anstroemung.
+    Vorher unterschieden sich die beiden um fast einen ganzen Beiwert."""
+    for a in (-12.0, -4.0, 0.0, 4.0):
+        koerper = panel.loese([panel.aus_profil(e423, 1.0, a, punkte=160)],
+                              alpha_grad=0.0, bezugssehne=1.0)
+        stroemung = panel.loese([panel.aus_profil(e423, 1.0, 0.0, punkte=160)],
+                                alpha_grad=a, bezugssehne=1.0)
+        assert koerper.cl_gesamt == pytest.approx(stroemung.cl_gesamt, abs=1e-6)
+
+
+def test_negativer_winkel_dreht_die_nase_nach_unten(e423):
+    """Geometrie und Aerodynamik muessen dasselbe Vorzeichen meinen. Sie taten
+    es nicht: Bei -8 Grad rechnete das Werkzeug mehr Abtrieb, exportierte nach
+    Creo aber einen Fluegel mit der Nase nach OBEN."""
+    for winkel, nase_tiefer in ((-8.0, True), (+8.0, False)):
+        pts = e423.angestellt(winkel, 250.0)
+        hinten = pts[0]
+        nase = pts[int(np.argmax(np.linalg.norm(pts - hinten, axis=1)))]
+        # bool() ist noetig: numpy liefert np.bool_, und das ist nicht True.
+        assert bool(nase[1] < hinten[1]) is nase_tiefer
+
+
+def test_mehr_anstellwinkel_mehr_abtrieb_auch_geometrisch(e423):
+    """Dieselbe Aussage noch einmal ueber die Kraft statt ueber die Lage."""
+    flach = panel.loese([panel.aus_profil(e423, 1.0, -2.0, punkte=160)],
+                        bezugssehne=1.0)
+    steil = panel.loese([panel.aus_profil(e423, 1.0, -10.0, punkte=160)],
+                        bezugssehne=1.0)
+    assert steil.cl_gesamt < flach.cl_gesamt          # negativer = mehr Abtrieb

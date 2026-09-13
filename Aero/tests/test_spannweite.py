@@ -161,7 +161,12 @@ def test_zu_tiefer_fluegel_faellt_ueber_die_bodenfreiheit(profil, bezug):
 def test_bremsfall_ist_strenger_als_die_konstruktionslage(profil, bezug):
     """Genau der Fall, den T 8.2.4 meint: statisch in Ordnung, im Fahrzustand
     nicht mehr."""
-    stapel = _fluegel(profil, lage=(-600.0, 0.0, 78.0))
+    # 70 mm ist so gewaehlt, dass der tiefste Punkt bei 35,4 mm liegt: ueber
+    # den geforderten 30 mm, aber weniger als die 6,6 mm Absinken darueber,
+    # die der Bremsfall kostet. Genau dieses schmale Fenster ist der Sinn des
+    # Tests. (Vor der Korrektur der Drehrichtung in angestellt() lag es bei
+    # 78 mm - der Fluegel war damals andersherum gedreht.)
+    stapel = _fluegel(profil, lage=(-600.0, 0.0, 70.0))
     statisch = _befund(pruefe_fluegel(stapel, lade("2026"), bezug,
                                       Fahrzustand.statisch()),
                        "T 2.2.1", "Bodenfreiheit")

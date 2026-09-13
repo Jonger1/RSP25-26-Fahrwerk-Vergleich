@@ -434,13 +434,27 @@ class Profil:
                    drehpunkt: float = 0.25) -> np.ndarray:
         """Um den Drehpunkt gedrehte Punkte, in Millimetern.
 
-        Positiver Winkel = Nase nach oben. Fuer Abtrieb sind die Winkel also
-        negativ. Der Drehpunkt liegt standardmaessig bei einem Viertel der
-        Sehne, weil sich dort das Moment am wenigsten aendert.
+        Positiver Winkel = Nase nach oben, negativer = Nase nach unten. Fuer
+        Abtrieb sind die Winkel also negativ. Der Drehpunkt liegt
+        standardmaessig bei einem Viertel der Sehne, weil sich dort das Moment
+        am wenigsten aendert.
+
+        ACHTUNG, hier steckte ein Vorzeichenfehler: Eine gewoehnliche
+        mathematische Drehung um +a hebt die HINTERKANTE (sie liegt bei
+        x > Drehpunkt) und senkt die Nase - also genau andersherum als
+        beschrieben. Gemessen fuer das E423 bei 250 mm Sehne und -8 Grad: Die
+        Nase lag 8,7 mm UEBER der Hinterkante statt darunter.
+
+        Aufgefallen ist es erst durch das Panelverfahren: Die Aerodynamik
+        rechnet dieselbe Zahl als Anstellwinkel, und dort bedeutet -8 Grad
+        eindeutig mehr Abtrieb. Geometrie und Aerodynamik liefen also
+        gegeneinander - gerechnet wurde ein Abtriebsfluegel, exportiert nach
+        Creo ein nach oben gedrehter. Deshalb wird hier mit dem NEGATIVEN
+        Winkel gedreht.
         """
         p = self.punkte.copy()
         p[:, 0] -= drehpunkt
-        a = math.radians(winkel_grad)
+        a = math.radians(-winkel_grad)
         c, s = math.cos(a), math.sin(a)
         gedreht = np.column_stack([p[:, 0] * c - p[:, 1] * s,
                                    p[:, 0] * s + p[:, 1] * c])
