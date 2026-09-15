@@ -428,6 +428,13 @@ def _ansicht_kaskade() -> html.Div:
     return html.Div([
         _karte([
             _ueberschrift("Elemente hinter dem Hauptelement"),
+            html.Div(_feld(
+                "Geschwindigkeit [m/s]",
+                _zahlenfeld("kaskadentempo", 15.0, 1.0, 3.0, 45.0),
+                "Gilt für die Beiwerte, die Kraft und den Generator in diesem "
+                "Reiter. 15 m/s sind 54 km/h. Vorher stand das Feld nur im "
+                "Reiter Flügel und wurde hier unsichtbar mitgelesen."),
+                style={"maxWidth": "320px", "marginBottom": "12px"}),
             html.Div([
                 "Ein Formula-Student-Frontflügel ist fast nie ein einzelnes "
                 "Profil. Der Gewinn kommt nicht aus mehr Fläche, sondern aus "
@@ -1471,7 +1478,7 @@ def _stufe_hinzufuegen(n, daten):
 
 @app.callback(Output("fig-kaskade", "figure"),
               Output("kaskaden-beiwerte", "children"),
-              Input("spec", "data"), Input(wert("tempo"), "value"))
+              Input("spec", "data"), Input(wert("kaskadentempo"), "value"))
 def _kaskade_zeichnen(daten, tempo):
     """Schnittbild und Beiwerte der Kaskade."""
     leer = {"data": [], "layout": {"height": 300}}
@@ -1499,17 +1506,50 @@ def _kaskade_zeichnen(daten, tempo):
         # werden.
         beiwert = aero_kaskade.rechne(elemente, float(tempo or 15.0),
                                       mit_boden=False)
-        return bild, _kaskadenkarte(elemente, beiwert)
+        return bild, _kaskadenkarte(
+            elemente, beiwert, float(tempo or 15.0),
+            max(st.y for st in element.spannweite.stuetzstellen)
+            if element.spannweite is not None else 600.0)
     except Exception as fehler:
         return leer, _fehlerkarte(fehler)
 
 
-def _kaskadenkarte(elemente, b) -> html.Div:
-    """Die Beiwerte, mit der Unsicherheit daneben statt im Kleingedruckten."""
+def _kaskadenkarte(elemente, b, tempo: float = 15.0,
+                   halbspannweite: float = 600.0) -> html.Div:
+    """Die Beiwerte, mit der Unsicherheit daneben statt im Kleingedruckten.
+
+    Der Beiwert allein beantwortet die Frage "wieviel Abtrieb" nicht - dafuer
+    braucht es Geschwindigkeit und Flaeche. Beides steht jetzt dabei, samt
+    der Reynoldszahl, ueber die die Geschwindigkeit auch in den Beiwert
+    selbst eingeht.
+    """
+    from ..aero.profilpolare import DICHTE
+
+    staudruck = 0.5 * DICHTE * tempo ** 2
+    flaeche = b.gesamtsehne / 1000.0 * 2.0 * halbspannweite / 1000.0
+    kraft_2d = -b.cl * staudruck * flaeche
+
     kopf = html.Div([
-        html.Div(f"{b.cl:+.2f}", className="as-grosszahl"),
-        html.Div(f"CL auf die Gesamtsehne von {b.gesamtsehne:.0f} mm",
-                 className="as-hinweis"),
+        html.Div([
+            html.Div([html.Div(f"{b.cl:+.2f}", className="as-grosszahl"),
+                      html.Div(f"CL auf die Gesamtsehne von "
+                               f"{b.gesamtsehne:.0f} mm", className="as-hinweis")]),
+            html.Div([html.Div(f"{kraft_2d:.0f} N", className="as-grosszahl"),
+                      html.Div(f"bei {tempo:.1f} m/s ({tempo * 3.6:.0f} km/h), "
+                               f"{2 * halbspannweite:.0f} mm Spannweite",
+                               className="as-hinweis")]),
+        ], className="as-leiste",
+            style={"gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))"}),
+        html.Div(f"Reynoldszahl {b.reynolds:,.0f}".replace(",", " ")
+                 + " — die Geschwindigkeit geht auch darüber in den Beiwert "
+                   "ein: Langsamer heißt dünnere Luftschicht am Profil und "
+                   "früherer Abriss.", className="as-hinweis",
+                 style={"marginTop": "6px"}),
+        html.Div("Die Kraft ist ein Streifenwert über die ganze Spannweite, "
+                 "ohne Verluste an den Flügelenden. Am endlichen Flügel liegt "
+                 "sie rund ein Drittel darunter — die Traglinie im Reiter "
+                 "Flügel rechnet das genauer.", className="as-hinweis",
+                 style={"marginTop": "4px"}),
     ], style={"marginBottom": "10px"})
 
     zeilen = [html.Tr([html.Th("Element"), html.Th("Winkel"), html.Th("Spalt"),
@@ -1554,7 +1594,7 @@ def _kaskadenkarte(elemente, b) -> html.Div:
 @app.callback(Output("generator-ergebnis", "children"),
               Output("kombinationen", "data"),
               Input("btn-generator", "n_clicks"),
-              State("spec", "data"), State(wert("tempo"), "value"),
+              State("spec", "data"), State(wert("kaskadentempo"), "value"),
               State(wert("maxelemente"), "value"),
               prevent_initial_call=True)
 def _generator_rechnen(n, daten, tempo, maxelemente):
