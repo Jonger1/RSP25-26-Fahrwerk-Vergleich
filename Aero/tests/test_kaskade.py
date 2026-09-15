@@ -487,3 +487,112 @@ def test_uebernommene_kombination_laesst_sich_rechnen(haupt):
     assert len(elemente) == 3
     beiwert = aero_k.rechne(elemente, 15.0)
     assert beiwert.cl < 0.0            # Abtrieb
+
+
+# ---------------------------------------------------- Kaskade nach Creo
+
+from aerostudio.formate import export
+
+
+def test_kaskadenexport_schreibt_je_element_eine_kurve(haupt, flap):
+    """Jannis: alles in die GUI, damit es nutzbar ist. Eine Kaskade, die sich
+    nicht nach Creo bringen laesst, ist es nicht - vorher schrieb der Export
+    nur das Hauptelement."""
+    plan = export.plane_kaskade(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02),
+         geo_k.Kaskadenvorgabe(flap, 0.28, -16.0, 0.015, 0.02)])
+    assert plan.ausgabe == "kaskade"
+    assert len(plan.sektionen) == 3
+    for s in plan.sektionen:
+        assert np.allclose(s[0], s[-1])          # geschlossen
+        assert np.allclose(s[:, 1], 0.0)         # in der Schnittebene
+
+
+def test_kaskadenexport_hat_dieselbe_lage_wie_die_anzeige(haupt, flap):
+    """Die Anordnung wird mit der Exportpunktzahl neu gesucht. Sie muss dabei
+    dieselbe bleiben - sonst sitzt der Flap in Creo woanders als im Bild."""
+    vorgaben = [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)]
+    plan = export.plane_kaskade(haupt, 250.0, -4.0, vorgaben)
+    angezeigt = geo_k.platziere(haupt, 250.0, -4.0, vorgaben)
+
+    flap_export = plan.sektionen[1][:, [0, 2]]
+    nase_export = flap_export[int(np.argmax(np.linalg.norm(
+        flap_export - flap_export[0], axis=1)))]
+    assert np.allclose(nase_export, angezeigt[1].nase, atol=0.3)
+
+
+def test_kaskadenexport_haelt_die_creo_genauigkeit(haupt, flap):
+    from aerostudio.geometrie.spline import CREO_GENAUIGKEIT_MM
+
+    plan = export.plane_kaskade(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+    for s in plan.sektionen:
+        abstand = np.linalg.norm(np.diff(s, axis=0), axis=1)
+        assert abstand.min() >= CREO_GENAUIGKEIT_MM
+
+
+def test_kaskadenexport_ohne_flaps_ist_ein_element(haupt):
+    plan = export.plane_kaskade(haupt, 250.0, -4.0, [])
+    assert len(plan.sektionen) == 1
+
+
+def test_elemente_im_export_durchdringen_sich_nicht(haupt, flap):
+    plan = export.plane_kaskade(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02),
+         geo_k.Kaskadenvorgabe(flap, 0.28, -16.0, 0.015, 0.02)])
+    ebenen = [s[:, [0, 2]] for s in plan.sektionen]
+    for a, b in zip(ebenen[:-1], ebenen[1:]):
+        assert not geo_k.schneiden_sich(a, b)
+
+
+# ----------------------------------------- Geschwindigkeit im Kaskadenreiter
+
+def _text(komponente) -> str:
+    if komponente is None:
+        return ""
+    if isinstance(komponente, str):
+        return komponente
+    if isinstance(komponente, (list, tuple)):
+        return " ".join(_text(k) for k in komponente)
+    return _text(getattr(komponente, "children", None))
+
+
+def test_kaskadenreiter_hat_eigene_geschwindigkeit():
+    """Jannis: 'bei welcher Geschwindigkeit wird das berechnet, da ich ja
+    selbst nichts angeben kann'. Das einzige Feld stand im Reiter Fluegel und
+    wurde hier unsichtbar mitgelesen."""
+    assert "kaskadentempo" in UI._SCHRITTE
+    layout = _text(UI._ansicht_kaskade())
+    assert "Geschwindigkeit" in layout
+
+
+def test_kaskadenkarte_nennt_kraft_und_geschwindigkeit(haupt, flap):
+    elemente = geo_k.platziere(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+    b = aero_k.rechne(elemente, 20.0)
+    text = _text(UI._kaskadenkarte(elemente, b, 20.0, 600.0))
+    assert "20.0 m/s" in text and "72 km/h" in text
+    assert " N" in text
+    assert "Reynoldszahl" in text
+
+
+def test_kraft_waechst_mit_dem_quadrat_der_geschwindigkeit(haupt, flap):
+    """Staudruck geht mit v^2. Der Beiwert aendert sich ueber die
+    Reynoldszahl nur wenig - die Kraft muss also rund vierfach werden."""
+    import re
+
+    elemente = geo_k.platziere(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+
+    def kraft(v):
+        b = aero_k.rechne(elemente, v)
+        text = _text(UI._kaskadenkarte(elemente, b, v, 600.0))
+        return float(re.search(r"(-?\d+) N", text).group(1))
+
+    verhaeltnis = kraft(30.0) / kraft(15.0)
+    assert verhaeltnis == pytest.approx(4.0, rel=0.25)
