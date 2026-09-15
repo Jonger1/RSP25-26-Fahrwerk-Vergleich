@@ -22,6 +22,7 @@ aus aerostudio.* auf und geben das Ergebnis zurueck. Fachlogik steht hier keine.
 
 from __future__ import annotations
 
+import json
 import math
 import traceback
 import webbrowser
@@ -39,6 +40,8 @@ from .. import regeln
 from ..aero import entwurf as aero_entwurf
 from ..aero import kaskade as aero_kaskade
 from ..aero import generator as aero_generator
+from ..aero import boden as aero_boden
+from ..aero import kaskade3d as aero_kaskade3d
 from ..geometrie import kaskade as geo_kaskade
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
@@ -224,8 +227,9 @@ def _fertigungsleiste() -> html.Div:
 
 
 def _ansicht_profil() -> html.Div:
+    # Die Profilleiste steht NICHT hier, sondern als gemeinsamer Block im
+    # Layout - sie wird in den Reitern Profil UND Kaskade gezeigt.
     return html.Div([
-        _profilleiste(),
         html.Div([
             html.Div(_karte([dcc.Graph(id="fig-kontur", **_GRAPH)]),
                      style={"flex": "2 1 0", "minWidth": 0,
@@ -260,8 +264,14 @@ def _tabellendaten(spannweite) -> list[dict]:
              "x": round(st.x, 1)} for st in spannweite.stuetzstellen]
 
 
-def _ansicht_fluegel() -> html.Div:
-    return html.Div([
+def _fluegelgeometrie() -> list:
+    """Spannweite, Lage, Endplatten und Sektionen.
+
+    Gemeinsamer Block der Reiter Flügel UND Kaskade: Dash erlaubt jedes
+    Bedienelement nur einmal, und zwei synchron gehaltene Kopien laufen
+    auseinander. Also steht es einmal da und wird in beiden Reitern gezeigt.
+    """
+    return [
         _leiste("Flügel über die Spannweite", [
             _feld("Vorgabe", html.Div([
                 dcc.Dropdown(
@@ -291,7 +301,13 @@ def _ansicht_fluegel() -> html.Div:
                   "Positiv = vor der Achse."),
             _feld("Höhe über Boden [mm]",
                   _zahlenfeld("pos-z", 90.0, 5.0, 0.0, 1500.0),
-                  "Höhe der Wurzelsehne."),
+                  "Tiefster Punkt des ganzen Flügels samt Flaps, über alle "
+                  "Schnitte — so misst das Reglement die Bodenfreiheit."),
+            _feld("Endplattenhöhe [mm]",
+                  _zahlenfeld("endplatte", 0.0, 10.0, 0.0, 600.0),
+                  "0 = keine. Geht in die Abtriebsrechnung ein: Nach Hoerner "
+                  "wirkt die Endplatte wie mehr Streckung, "
+                  "AR·(1 + 1,9·h/b)."),
         ], spalten="240px"),
 
         _karte([
@@ -332,7 +348,11 @@ def _ansicht_fluegel() -> html.Div:
                       "alignItems": "center", "gap": "8px"}),
             html.Div(id="sektionen-meldung", style={"marginTop": "9px"}),
         ]),
+    ]
 
+
+def _ansicht_fluegel() -> html.Div:
+    return html.Div([
         html.Div([
             html.Div(_karte([_ueberschrift("Verlauf über die Spannweite"),
                              dcc.Graph(id="fig-verteilung", **_GRAPH)]),
@@ -421,11 +441,32 @@ KASKADENSPALTEN = [
     {"id": "winkel", "name": "Winkel gegen Vorgänger [°]", "type": "numeric"},
     {"id": "spalt", "name": "Spalt × Hauptsehne", "type": "numeric"},
     {"id": "ueberlappung", "name": "Überlappung × Hauptsehne", "type": "numeric"},
+    {"id": "y_von", "name": "von y [mm]", "type": "numeric"},
+    {"id": "y_bis", "name": "bis y [mm]", "type": "numeric"},
+    {"id": "winkel_aussen", "name": "Winkel außen [°]", "type": "numeric"},
 ]
+
+# Analytische Flapprofile zusaetzlich zum Katalog - dieselbe Quelle, die der
+# Reiter Profil fuer das Hauptelement anbietet.
+NACA_FLAPS = ("NACA 2412", "NACA 4412", "NACA 6409", "NACA 6412", "NACA 8410")
+
+
+def flapoptionen() -> list[dict]:
+    return ([{"label": o["label"], "value": o["value"]}
+             for o in katalogoptionen()]
+            + [{"label": f"{n} (analytisch)", "value": n} for n in NACA_FLAPS])
 
 
 def _ansicht_kaskade() -> html.Div:
     return html.Div([
+        html.Div([
+            html.B("Hauptelement: "),
+            "Die Felder darüber sind dieselben wie in den Reitern Profil und "
+            "Flügel — Profil, Wirkrichtung, Sehne, Anstellwinkel, Sektionen mit "
+            "Verwindung, Lage und Endplatten gelten für das Hauptelement und "
+            "damit für die ganze Kaskade. Eine Änderung hier ist eine Änderung "
+            "dort.",
+        ], className="as-hinweis", style={"margin": "0 0 12px 2px"}),
         _karte([
             _ueberschrift("Elemente hinter dem Hauptelement"),
             html.Div(_feld(
@@ -445,12 +486,22 @@ def _ansicht_kaskade() -> html.Div:
                 "der Hinterkante des Vorgängers steht. Übliche Werte: Spalt "
                 "0,01 bis 0,02, Überlappung 0,01 bis 0,04.",
             ], className="as-hinweis", style={"marginBottom": "10px"}),
+            html.Div([
+                html.B("Teilflügel: "),
+                "„von y“ und „bis y“ begrenzen ein Element auf einen Teil der "
+                "Spannweite, in mm ab Fahrzeugmitte; leer heißt so weit wie das "
+                "Hauptelement. ", html.B("Winkel außen"), " verdreht den Flap "
+                "nach außen hin, linear dazwischen. So entsteht, was viele "
+                "Teams bauen: innen vor dem Unterboden nur das Hauptelement "
+                "oder flache Flaps, damit Luft in den Unterbodenkanal läuft — "
+                "außen vor dem Reifen die steilsten Flaps. Fehlt an einer "
+                "Stelle der Vorgänger, sitzt der Flap dort am nächsten "
+                "vorhandenen Element.",
+            ], className="as-hinweis", style={"marginBottom": "10px"}),
             dash_table.DataTable(
                 id="kaskadentabelle", columns=KASKADENSPALTEN, data=[],
                 editable=True, row_deletable=True,
-                dropdown={"profil": {"options": [
-                    {"label": o["label"], "value": o["value"]}
-                    for o in katalogoptionen()]}},
+                dropdown={"profil": {"options": flapoptionen()}},
                 style_cell={"fontFamily": "Consolas, monospace",
                             "fontSize": "13px", "padding": "6px 10px",
                             "textAlign": "right"},
@@ -478,6 +529,13 @@ def _ansicht_kaskade() -> html.Div:
 
         html.Div([
             html.Div(_karte([_ueberschrift("Die Kaskade im Schnitt"),
+                             html.Div(_feld(
+                                 "Schnitt bei y [mm] ab Mitte",
+                                 _zahlenfeld("kaskaden-y", 0.0, 25.0, 0.0, 900.0),
+                                 "Mit Teilflügeln sieht jede Stelle anders aus. "
+                                 "Sehne, Verwindung und Höhe folgen der "
+                                 "Sektionstabelle."),
+                                 style={"maxWidth": "340px"}),
                              dcc.Graph(id="fig-kaskade", **_GRAPH)]),
                      style={"flex": "3 1 0", "minWidth": 0,
                             "marginRight": "14px"}),
@@ -488,24 +546,92 @@ def _ansicht_kaskade() -> html.Div:
         ], className="as-zeile"),
 
         _karte([
+            _ueberschrift("Kaskade räumlich — Teilflügel und Durchdringung"),
+            html.Div("Jedes Element als eigene Fläche, so wie es nach Creo "
+                     "geht. Geprüft wird an jedem Schnitt UND dazwischen, ob "
+                     "sich zwei Flächen schneiden — genau dort verbindet Creo "
+                     "die Schnitte. Daneben die Fertigungsprüfung je Element "
+                     "(wie im Reiter Profil) und die Regelprüfung der ganzen "
+                     "Kaskade (wie im Reiter Creo).", className="as-hinweis",
+                     style={"marginBottom": "8px"}),
+            html.Div([
+                html.Div(dcc.Loading(dcc.Graph(id="fig-kaskade3d", **_GRAPH),
+                                     type="dot"),
+                         style={"flex": "3 1 0", "minWidth": 0,
+                                "marginRight": "14px"}),
+                html.Div(html.Div(id="kaskade3d-pruefung"),
+                         style={"flex": "2 1 0", "minWidth": "320px"}),
+            ], className="as-zeile"),
+        ]),
+
+        _karte([
+            _ueberschrift("Abtrieb der ganzen Kaskade — über die Spannweite"),
+            html.Div("Rechnet die Kaskade an mehreren Stellen im Schnitt und "
+                     "verteilt das mit der Traglinie über die Spannweite — "
+                     "Teilflügel, verdrehte Flaps, Endplatten (Feld oben) und "
+                     "der Kanal zwischen Flügel und Boden gehen ein.",
+                     className="as-hinweis", style={"marginBottom": "12px"}),
+            html.Div([
+                _feld("Bodeneffekt", dcc.Checklist(
+                    id="kanalwirkung", value=["an"],
+                    options=[{"label": " Kanal unter dem Flügel einrechnen",
+                              "value": "an"}],
+                    style={"fontSize": "13px"}),
+                    "Gilt auch für den Generator."),
+                _feld("Abgleichfaktor",
+                      _zahlenfeld("abgleich", 1.0, 0.05, 0.2, 3.0),
+                      "1,0 = ungeändert. Liegt ein CFD- oder Messwert vor: "
+                      "Messwert ÷ Rechenwert eintragen."),
+                html.Div([
+                    html.Button("Abtrieb räumlich rechnen", id="btn-kaskade3d",
+                                n_clicks=0, className="as-knopf as-knopf-voll"),
+                    html.Div("Dauert einige Sekunden.", className="as-hinweis",
+                             style={"marginTop": "6px"}),
+                ]),
+            ], className="as-leiste",
+                style={"gridTemplateColumns":
+                       "repeat(auto-fit, minmax(220px, 1fr))",
+                       "marginBottom": "14px"}),
+            dcc.Loading(html.Div(id="kaskade3d-ergebnis"), type="dot"),
+        ]),
+
+        _karte([
             _ueberschrift("Generator — Kombination mit dem größten Abtrieb"),
             html.Div("Probiert Profilpaarungen und Elementzahlen durch. "
                      "Spalt und Überlappung bleiben bei den Werten aus der "
-                     "Tabelle oben.", className="as-hinweis",
-                     style={"marginBottom": "12px"}),
+                     "Tabelle oben. Mit Feinsuche werden die besten drei "
+                     "Kombinationen danach räumlich gerechnet, jeweils mit "
+                     "Teilflügeln und verdrehten Flaps, mit Endplatten und "
+                     "Boden, und auf Durchdringung und Reglement geprüft.",
+                     className="as-hinweis", style={"marginBottom": "12px"}),
             html.Div([
                 _feld("Höchste Elementzahl",
                       _zahlenfeld("maxelemente", 3.0, 1.0, 1.0, 4.0)),
+                _feld("Einlauf Unterboden: innen ohne Flaps [mm]",
+                      _zahlenfeld("innenbereich", 0.0, 25.0, 0.0, 600.0),
+                      "Ab der Wurzel des Hauptelements. 0 = keiner. Den Gewinn "
+                      "am Unterboden rechnet das Werkzeug nicht — deshalb ist "
+                      "das eine Vorgabe und kein Suchergebnis."),
+                _feld("Feinsuche", dcc.Checklist(
+                    id="feinsuche", value=["an"],
+                    options=[{"label": " räumlich mit Teilflügeln",
+                              "value": "an"}],
+                    style={"fontSize": "13px"})),
                 html.Div([
                     html.Button("Kombinationen durchrechnen", id="btn-generator",
                                 n_clicks=0, className="as-knopf as-knopf-voll"),
-                    html.Div("Dauert etwa eine halbe Minute.",
+                    html.Div("Ohne Feinsuche etwa eine halbe Minute, mit "
+                             "Feinsuche ein bis zwei Minuten.",
                              className="as-hinweis", style={"marginTop": "6px"}),
                 ]),
             ], className="as-leiste",
-                style={"gridTemplateColumns": "240px 260px",
+                style={"gridTemplateColumns":
+                       "repeat(auto-fit, minmax(220px, 1fr))",
                        "marginBottom": "14px"}),
             dcc.Loading(html.Div(id="generator-ergebnis"), type="dot"),
+            # Fest im Layout und nicht in der Ergebniskarte: Sonst meldet Dash
+            # beim Start, das Ziel des Uebernehmen-Callbacks fehle.
+            html.Div(id="kombination-uebernommen", style={"marginTop": "8px"}),
         ]),
     ])
 
@@ -637,7 +763,9 @@ def layout() -> html.Div:
 
         # Alle Ansichten stehen dauerhaft hier, der Reiter blendet nur um.
         html.Div([
+            html.Div(_profilleiste(), id="block-profil"),
             html.Div(_ansicht_profil(), id="view-profil"),
+            html.Div(_fluegelgeometrie(), id="block-geometrie"),
             html.Div(_ansicht_fluegel(), id="view-fluegel"),
             html.Div(_ansicht_kaskade(), id="view-kaskade"),
             html.Div(_ansicht_creo(), id="view-creo"),
@@ -655,11 +783,20 @@ app.layout = layout
 ANSICHTEN = ("profil", "fluegel", "kaskade", "creo", "projekt")
 
 
+# Gemeinsame Bloecke und die Reiter, in denen sie erscheinen. Die Kaskade
+# braucht beides: Das Hauptelement ist Profil und Fluegel zugleich.
+BLOECKE = {"block-profil": ("profil", "kaskade"),
+           "block-geometrie": ("fluegel", "kaskade")}
+
+
 @app.callback(*[Output(f"view-{r}", "style") for r in ANSICHTEN],
+              *[Output(b, "style") for b in BLOECKE],
               Input("reiter", "value"))
 def _reiter_umblenden(reiter):
     an, aus = {"display": "block"}, {"display": "none"}
-    return tuple(an if reiter == r else aus for r in ANSICHTEN)
+    return (tuple(an if reiter == r else aus for r in ANSICHTEN)
+            + tuple(an if reiter in reiter_liste else aus
+                    for reiter_liste in BLOECKE.values()))
 
 
 @app.callback(Output("quelle-katalog", "style"), Output("quelle-naca", "style"),
@@ -722,19 +859,40 @@ def kaskade_aus_tabelle(zeilen) -> list[Kaskadenstufe]:
             except (TypeError, ValueError):
                 return vorgabe
 
+        def wahlweise(schluessel, unten, oben):
+            # Leer heisst: nicht begrenzt. Eine leere Zelle kommt als None
+            # oder als leerer Text an.
+            roh = zeile.get(schluessel)
+            if roh is None or (isinstance(roh, str) and not roh.strip()):
+                return None
+            try:
+                return min(max(float(roh), unten), oben)
+            except (TypeError, ValueError):
+                return None
+
+        y_von = wahlweise("y_von", 0.0, 5000.0)
+        y_bis = wahlweise("y_bis", 0.0, 5000.0)
+        if y_von is not None and y_bis is not None and y_bis <= y_von:
+            # Tippfehler: lieber bis ganz aussen als eine Fehlermeldung.
+            y_bis = None
+
         stufen.append(Kaskadenstufe(
             profil=profil,
             sehne=zahl("sehne", 0.35, 0.05, 1.0),
             winkel=zahl("winkel", -20.0, -60.0, 60.0),
             spalt=zahl("spalt", 0.015, 0.002, 0.2),
-            ueberlappung=zahl("ueberlappung", 0.02, -0.2, 0.2)))
+            ueberlappung=zahl("ueberlappung", 0.02, -0.2, 0.2),
+            y_von=y_von, y_bis=y_bis,
+            winkel_aussen=wahlweise("winkel_aussen", -60.0, 60.0)))
     return stufen
 
 
 def _kaskadendaten(stufen) -> list[dict]:
     return [{"profil": k.profil, "sehne": round(k.sehne, 3),
              "winkel": round(k.winkel, 1), "spalt": round(k.spalt, 4),
-             "ueberlappung": round(k.ueberlappung, 4)} for k in stufen]
+             "ueberlappung": round(k.ueberlappung, 4),
+             "y_von": k.y_von, "y_bis": k.y_bis,
+             "winkel_aussen": k.winkel_aussen} for k in stufen]
 
 
 def _vorgaben(stufen) -> list:
@@ -742,17 +900,79 @@ def _vorgaben(stufen) -> list:
     return [geo_kaskade.Kaskadenvorgabe(
         profil=profil_aus_datei(k.profil), sehne_faktor=k.sehne,
         winkel_relativ=k.winkel, spalt=k.spalt, ueberlappung=k.ueberlappung,
-        name=f"Flap {i}") for i, k in enumerate(stufen, start=1)]
+        name=f"Flap {i}", y_von=k.y_von, y_bis=k.y_bis,
+        winkel_aussen=k.winkel_aussen)
+        for i, k in enumerate(stufen, start=1)]
 
 
 def profil_aus_datei(datei: str):
-    """Laedt ein Katalogprofil und spiegelt es fuer Abtrieb.
+    """Laedt ein Flapprofil und spiegelt es fuer Abtrieb.
 
-    Gespiegelt, weil Katalogprofile aus dem Flugzeugbau stammen und fuer
-    Auftrieb gezeichnet sind - am Rennwagen ist Abtrieb der Normalfall.
+    Katalogdatei oder "NACA xxxx" - dieselben beiden Quellen wie im Reiter
+    Profil. Gespiegelt, weil Katalogprofile aus dem Flugzeugbau stammen und
+    fuer Auftrieb gezeichnet sind - am Rennwagen ist Abtrieb der Normalfall.
     """
     from ..geometrie.profil import Profil
-    return Profil.aus_dat(KATALOG / datei).gespiegelt()
+
+    text = (datei or "").strip()
+    if text.upper().startswith("NACA"):
+        ziffern = "".join(z for z in text if z.isdigit())
+        if len(ziffern) != 4:
+            raise ValueError(f"„{datei}“ ist kein vierstelliges NACA-Profil.")
+        woelbung, lage, dicke = int(ziffern[0]), int(ziffern[1]), int(ziffern[2:])
+        return Profil.aus_naca(woelbung / 100.0, (lage or 4) / 10.0,
+                               dicke / 100.0).gespiegelt()
+    return Profil.aus_dat(KATALOG / text).gespiegelt()
+
+
+# Versatz je Entwurf, damit nicht jeder Callback die ganze Kaskade neu baut.
+_LAGE_ZWISCHENSPEICHER: dict[str, float] = {}
+
+
+def tiefster_punkt(element) -> float:
+    """Der tiefste Punkt des ganzen Fluegels bei Hoehenversatz null, in mm.
+
+    Ueber alle Schnitte und alle Elemente samt Flaps. Bei einem angestellten,
+    verwundenen Abtriebsfluegel liegt er selten an der Wurzelsehne - meist an
+    einer Hinterkante irgendwo ueber die Spannweite, bei steilen Flaps an
+    deren Hinterkante.
+    """
+    haupt = profil_fuer(element)
+    vorgaben = _vorgaben(element.kaskade)
+    if element.spannweite is None:
+        elemente = geo_kaskade.platziere(haupt, element.sehne,
+                                         element.anstellwinkel, vorgaben,
+                                         punkte=80)
+        return float(min(e.punkte[:, 1].min() for e in elemente))
+    if vorgaben:
+        stapel = spannweite.kaskadenschnitte(
+            haupt, element.spannweite, element.sehne, element.anstellwinkel,
+            vorgaben, 40)
+        return float(min(s.hoehe_min for st in stapel for s in st))
+    stapel = spannweite.schnitte(haupt, element.spannweite, element.sehne,
+                                 element.anstellwinkel, 80)
+    return float(min(s.hoehe_min for s in stapel))
+
+
+def _lage(element) -> tuple[float, float, float]:
+    """Die Lage fuer die Geometrie - `pos_z` meint den TIEFSTEN Punkt.
+
+    Jannis: "die Hoehe ueber dem Boden waehlt nicht den tiefsten Punkt". Die
+    Geometriefunktionen verschieben den Wurzelschnitt um `lage`. Hier wird der
+    Versatz so bestimmt, dass der tiefste Punkt des ganzen Fluegels genau auf
+    der eingegebenen Hoehe liegt - so misst auch das Reglement die
+    Bodenfreiheit (T 2.2.1).
+    """
+    schluessel = json.dumps(element.model_dump(
+        mode="json", include={"profil", "wirkrichtung", "sehne",
+                              "anstellwinkel", "spannweite", "kaskade"}),
+        sort_keys=True)
+    if schluessel not in _LAGE_ZWISCHENSPEICHER:
+        if len(_LAGE_ZWISCHENSPEICHER) > 64:
+            _LAGE_ZWISCHENSPEICHER.clear()
+        _LAGE_ZWISCHENSPEICHER[schluessel] = tiefster_punkt(element)
+    return (element.pos_x, element.pos_y,
+            element.pos_z - _LAGE_ZWISCHENSPEICHER[schluessel])
 
 
 def spannweite_aus_tabelle(zeilen, schnitte: int = 13) -> Spannweite:
@@ -1013,12 +1233,12 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
             plan = export.plane_kaskadenfluegel(
                 profil, element.spannweite, element.sehne,
                 element.anstellwinkel, _vorgaben(element.kaskade),
-                lage=(element.pos_x, element.pos_y, element.pos_z),
+                lage=_lage(element),
                 toleranz_mm=float(toleranz or 0.005))
         elif ausgabe == "fluegel" and element.spannweite is not None:
             plan = export.plane_fluegel(
                 profil, element.spannweite, element.sehne, element.anstellwinkel,
-                lage=(element.pos_x, element.pos_y, element.pos_z),
+                lage=_lage(element),
                 toleranz_mm=float(toleranz or 0.005))
         else:
             plan = export.plane_element(profil, element.sehne,
@@ -1103,7 +1323,7 @@ def _fluegel_zeichnen(daten, ansicht):
         profil = profil_fuer(element)
         stapel = spannweite.schnitte(
             profil, element.spannweite, element.sehne, element.anstellwinkel, 40,
-            lage=(element.pos_x, element.pos_y, element.pos_z))
+            lage=_lage(element))
 
         anzahl = len(element.spannweite.stuetzstellen)
         werte = spannweite.huellwerte(stapel)
@@ -1145,8 +1365,9 @@ def _fluegel_zeichnen(daten, ansicht):
 @app.callback(Output("aero-ergebnis", "children"),
               Input("btn-aero", "n_clicks"),
               State("spec", "data"), State(wert("tempo"), "value"),
+              State(wert("endplatte"), "value"),
               prevent_initial_call=True)
-def _abtrieb_rechnen(n, daten, tempo):
+def _abtrieb_rechnen(n, daten, tempo, endplatte=0.0):
     """Abtrieb abschaetzen. Auf Knopfdruck, nicht bei jeder Aenderung.
 
     Die Traglinienrechnung braucht ein paar Sekunden. Liefe sie bei jedem
@@ -1161,12 +1382,15 @@ def _abtrieb_rechnen(n, daten, tempo):
         profil = profil_fuer(element)
         stapel = spannweite.schnitte(
             profil, element.spannweite, element.sehne, element.anstellwinkel, 60,
-            lage=(element.pos_x, element.pos_y, element.pos_z))
+            lage=_lage(element))
         v = float(tempo or 15.0)
-        ergebnis = traglinie.rechne(stapel, profil, geschwindigkeit=v)
-        kennlinie = traglinie.bodenkennlinie(
-            stapel, profil, [40, 60, 80, 120, 200], geschwindigkeit=v)
-        return _aerokarte(ergebnis, kennlinie)
+        platte = float(endplatte or 0.0)
+        ergebnis, wirkung = aero_boden.fluegel(stapel, profil, v,
+                                               endplatte_mm=platte)
+        kennlinie = aero_boden.kennlinie(
+            stapel, profil, [40, 60, 80, 120, 200], geschwindigkeit=v,
+            endplatte_mm=platte)
+        return _aerokarte(ergebnis, kennlinie, wirkung)
     except Exception as fehler:
         return _fehlerkarte(fehler)
 
@@ -1197,8 +1421,17 @@ def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
         v = aero_entwurf.suche(
             float(ziel or 60.0), profil, element.spannweite,
             geschwindigkeit=float(tempo or 15.0),
-            lage=(element.pos_x, element.pos_y, element.pos_z),
+            lage=_lage(element),
             grenzen=grenzen)
+        # Die Suche setzt den Wurzelschnitt. Angezeigt und uebernommen wird -
+        # wie im Feld - die Hoehe des tiefsten Punkts.
+        for k in [v.treffer] + v.alternativen:
+            if k is None:
+                continue
+            stapel = spannweite.schnitte(
+                profil, element.spannweite.skaliert(k.halbspannweite),
+                k.sehne, k.anstellwinkel, 40, lage=(0.0, 0.0, k.hoehe))
+            k.hoehe = float(min(st.hoehe_min for st in stapel))
         # ALLE Vorschlaege merken, nicht nur den besten - der Anwender soll
         # auswaehlen koennen, welchen er uebernimmt.
         gemerkt = [{"sehne": k.sehne, "halbspannweite": k.halbspannweite,
@@ -1232,7 +1465,8 @@ def _vorschlagskarte(v) -> html.Div:
         html.Div([html.Div(f"{t.anstellwinkel:+.1f}°", className="as-grosszahl"),
                   html.Div("Anstellwinkel", className="as-hinweis")]),
         html.Div([html.Div(f"{t.hoehe:.0f} mm", className="as-grosszahl"),
-                  html.Div("Höhe über Boden", className="as-hinweis")]),
+                  html.Div("tiefster Punkt über Boden",
+                           className="as-hinweis")]),
         html.Div([html.Div(f"{t.abtrieb:.0f} N", className="as-grosszahl"),
                   html.Div("Abtrieb", className="as-hinweis")]),
         html.Div([html.Div(f"{t.wirkungsgrad:.1f}", className="as-grosszahl"),
@@ -1337,11 +1571,12 @@ def _vorschlag_uebernehmen(klicks, vorschlaege, tabelle):
             html.Div(f"{bezeichnung} ist übernommen: {gewaehlt['sehne']:.0f} mm "
                      f"Sehne, {gewaehlt['anstellwinkel']:+.1f} Grad, "
                      f"{gewaehlt['halbspannweite']:.0f} mm Halbspannweite, "
-                     f"{gewaehlt['hoehe']:.0f} mm Höhe. Jetzt im Reiter Creo "
+                     f"tiefster Punkt {gewaehlt['hoehe']:.0f} mm über Boden. "
+                     f"Jetzt im Reiter Creo "
                      f"exportieren.", className="as-status-ok"))
 
 
-def _aerokarte(e, kennlinie) -> html.Div:
+def _aerokarte(e, kennlinie, wirkung=None) -> html.Div:
     """Das Ergebnis der Abschaetzung, mit den Grenzen daneben.
 
     Die Grenzen stehen bewusst NEBEN der Zahl und nicht im Kleingedruckten
@@ -1359,6 +1594,9 @@ def _aerokarte(e, kennlinie) -> html.Div:
                   html.Div("CL auf die Grundrissfläche", className="as-hinweis")]),
         html.Div([html.Div(f"{e.streckung:.1f}", className="as-grosszahl"),
                   html.Div("Streckung", className="as-hinweis")]),
+        html.Div([html.Div(f"×{e.endplattenfaktor:.2f}", className="as-grosszahl"),
+                  html.Div("wirksame Streckung durch Endplatten",
+                           className="as-hinweis")]),
     ], className="as-leiste",
         style={"gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))",
                "marginBottom": "14px"})
@@ -1374,15 +1612,20 @@ def _aerokarte(e, kennlinie) -> html.Div:
     if e.vertrauen < 0.85:
         warnungen.append(f"NeuralFoil ist sich bei diesem Arbeitspunkt selbst "
                          f"nur zu {e.vertrauen * 100:.0f} % sicher.")
+    if wirkung is not None and wirkung.im_abfall:
+        warnungen.append(wirkung.text)
 
     zeilen = [html.Div(w, className="as-status-hinweis",
                        style={"marginBottom": "5px"}) for w in warnungen]
 
     boden = html.Table([
-        html.Tr([html.Th("Höhe über Boden"), html.Th("Abtrieb"), html.Th("CL")])
+        html.Tr([html.Th("Höhe über Boden"), html.Th("Abtrieb"), html.Th("CL"),
+                 html.Th("Kanal")])
     ] + [
         html.Tr([html.Td(f"{h:.0f} mm"), html.Td(f"{k.abtrieb:.0f} N"),
-                 html.Td(f"{k.cl:+.2f}")]) for h, k in kennlinie
+                 html.Td(f"{k.cl:+.2f}"),
+                 html.Td(f"×{rest[0].faktor:.2f}" if rest and rest[0] else "—")])
+        for h, k, *rest in kennlinie
     ], className="as-tabelle")
 
     return html.Div([
@@ -1401,17 +1644,23 @@ def _aerokarte(e, kennlinie) -> html.Div:
                            "Traglinienrechnung mit Bodenspiegelung für die "
                            "Spannweite. Das ist eine Abschätzung zum Vergleich "
                            "von Entwürfen, kein CFD-Ersatz."),
-                    html.P([html.B("Nicht enthalten: "),
-                            "die Beschleunigung im Kanal zwischen Flügel und "
-                            "Boden — deshalb ist der Abtrieb bei kleinem "
-                            "Bodenabstand eher zu niedrig. Ebenso fehlen "
-                            "Endplatten, Räder, die Wirkung mehrerer Elemente "
-                            "aufeinander und der Aufstau vor dem Fahrzeug."]),
                     html.P([html.B("Enthalten: "),
                             "Reynoldszahl aus Geschwindigkeit und Sehne, "
                             "Verwindung je Sektion, der induzierte Winkel über "
-                            "die Spannweite, Abriss, und der Bodeneinfluss auf "
-                            "die induzierte Strömung."]),
+                            "die Spannweite, Abriss, der Bodeneinfluss auf die "
+                            "induzierte Strömung, ",
+                            html.B("Endplatten"), " nach Hoerner "
+                            "(AR·(1 + 1,9·h/b), bis h/b = 0,4; Soso & Selig, "
+                            "SAE 2002-01-3313) und die ",
+                            html.B("Kanalwirkung"), " zwischen Flügel und "
+                            "Boden aus dem Panelverfahren — bis 0,4 Sehnen "
+                            "gerechnet, darunter vorsichtig festgehalten, unter "
+                            "dem Abtriebsmaximum (h/c ≈ 0,1 laut Zerihan & "
+                            "Zhang) zurückgenommen."]),
+                    html.P([html.B("Nicht enthalten: "),
+                            "Räder, der Aufstau vor dem Fahrzeug, der "
+                            "Unterboden. Mehrere Elemente rechnet der Reiter "
+                            "Kaskade."]),
                 ], className="as-hinweis"),
             ], style={"flex": "1 1 0", "minWidth": 0}),
         ], className="as-zeile"),
@@ -1437,7 +1686,8 @@ def _skelett_schreiben(n, daten, ordner, dateiname, skelettname):
         spec = AeroSpec.model_validate(daten)
         element = spec.elemente[0]
         profil = profil_fuer(element)
-        achse = skelett.aus_element(element, profil)
+        achse = skelett.aus_element(
+            element.model_copy(update={"pos_z": _lage(element)[2]}), profil)
         plan = skelett.plane_skelett([achse], regeln.Bezugsgeometrie.aus_datei())
         name = (skelettname or "").strip() or (
             _exportname(dateiname, element) + " Skelett")
@@ -1478,9 +1728,10 @@ def _stufe_hinzufuegen(n, daten):
 
 @app.callback(Output("fig-kaskade", "figure"),
               Output("kaskaden-beiwerte", "children"),
-              Input("spec", "data"), Input(wert("kaskadentempo"), "value"))
-def _kaskade_zeichnen(daten, tempo):
-    """Schnittbild und Beiwerte der Kaskade."""
+              Input("spec", "data"), Input(wert("kaskadentempo"), "value"),
+              Input(wert("kaskaden-y"), "value"))
+def _kaskade_zeichnen(daten, tempo, y_schnitt=0.0):
+    """Schnittbild und Beiwerte der Kaskade an der gewählten Stelle."""
     leer = {"data": [], "layout": {"height": 300}}
     if not daten:
         return leer, ""
@@ -1488,10 +1739,16 @@ def _kaskade_zeichnen(daten, tempo):
         spec = AeroSpec.model_validate(daten)
         element = spec.elemente[0]
         haupt = profil_fuer(element)
-        elemente = geo_kaskade.platziere(haupt, element.sehne,
-                                         element.anstellwinkel,
-                                         _vorgaben(element.kaskade),
-                                         lage=(0.0, element.pos_z))
+        vorgaben = _vorgaben(element.kaskade)
+        if element.spannweite is not None:
+            elemente = spannweite.kaskade_bei(
+                haupt, element.spannweite, element.sehne,
+                element.anstellwinkel, vorgaben, float(y_schnitt or 0.0),
+                lage=(0.0, 0.0, _lage(element)[2]))
+        else:
+            elemente = geo_kaskade.platziere(haupt, element.sehne,
+                                             element.anstellwinkel, vorgaben,
+                                             lage=(0.0, _lage(element)[2]))
         bild = darstellung.kaskadenschnitt(elemente, element.pos_z)
 
         if not aero_verfuegbar():
@@ -1547,8 +1804,9 @@ def _kaskadenkarte(elemente, b, tempo: float = 15.0,
                  style={"marginTop": "6px"}),
         html.Div("Die Kraft ist ein Streifenwert über die ganze Spannweite, "
                  "ohne Verluste an den Flügelenden. Am endlichen Flügel liegt "
-                 "sie rund ein Drittel darunter — die Traglinie im Reiter "
-                 "Flügel rechnet das genauer.", className="as-hinweis",
+                 "sie rund ein Drittel darunter — „Abtrieb räumlich rechnen“ "
+                 "weiter unten rechnet das mit Teilflügeln, Endplatten und "
+                 "Boden.", className="as-hinweis",
                  style={"marginTop": "4px"}),
     ], style={"marginBottom": "10px"})
 
@@ -1596,8 +1854,12 @@ def _kaskadenkarte(elemente, b, tempo: float = 15.0,
               Input("btn-generator", "n_clicks"),
               State("spec", "data"), State(wert("kaskadentempo"), "value"),
               State(wert("maxelemente"), "value"),
+              State(wert("endplatte"), "value"),
+              State(wert("innenbereich"), "value"),
+              State("feinsuche", "value"), State("kanalwirkung", "value"),
               prevent_initial_call=True)
-def _generator_rechnen(n, daten, tempo, maxelemente):
+def _generator_rechnen(n, daten, tempo, maxelemente, endplatte=0.0,
+                       innenbereich=0.0, feinsuche=None, kanal=None):
     if not daten:
         return "", None
     try:
@@ -1608,26 +1870,23 @@ def _generator_rechnen(n, daten, tempo, maxelemente):
         ergebnis = aero_generator.suche(
             element.spannweite, element.sehne, element.anstellwinkel,
             float(tempo or 15.0),
+            # Der Generator bekommt die Hoehe des TIEFSTEN Punkts und setzt
+            # jede Variante selbst darauf - jedes Profil hat einen anderen.
             lage=(element.pos_x, element.pos_y, element.pos_z),
             elementzahlen=tuple(range(1, int(maxelemente or 3) + 1)),
-            spalt=stufe.spalt, ueberlappung=stufe.ueberlappung)
+            spalt=stufe.spalt, ueberlappung=stufe.ueberlappung,
+            endplatte_mm=float(endplatte or 0.0),
+            feinsuche=3 if feinsuche else 0,
+            innenbereich_mm=float(innenbereich or 0.0),
+            mit_boden=True if kanal is None else bool(kanal))
 
         # Jede Kombination so merken, wie die Tabellen sie brauchen: das
-        # Hauptprofil fuer den Reiter Profil, die Flaps fuer die
-        # Kaskadentabelle.
-        gemerkt = []
-        for b in ([ergebnis.bester] + ergebnis.alternativen):
-            if b is None:
-                continue
-            gemerkt.append({
-                "hauptprofil": b.hauptprofil,
-                "zeilen": [
-                    {"profil": b.flapprofil,
-                     # Dieselbe Verjuengung, mit der der Generator rechnet.
-                     "sehne": round(0.35 - 0.07 * i, 3),
-                     "winkel": float(w),
-                     "spalt": stufe.spalt, "ueberlappung": stufe.ueberlappung}
-                    for i, w in enumerate(b.flapwinkel)]})
+        # Hauptprofil fuer den Reiter Profil, die Flaps samt Teilfluegel-
+        # Angaben fuer die Kaskadentabelle.
+        gemerkt = [{"hauptprofil": b.hauptprofil,
+                    "zeilen": [dict(z) for z in b.stufen]}
+                   for b in [ergebnis.bester] + ergebnis.alternativen
+                   if b is not None]
         return _generatorkarte(ergebnis), gemerkt
     except Exception as fehler:
         return _fehlerkarte(fehler), None
@@ -1644,15 +1903,16 @@ def _generatorkarte(e) -> html.Div:
 
     zeilen = [html.Tr([html.Th("Elemente"), html.Th("Hauptprofil"),
                        html.Th("Flapprofil"), html.Th("Flapwinkel"),
-                       html.Th("Abtrieb"), html.Th("L/D"), html.Th("Sehne"),
-                       html.Th("")])]
+                       html.Th("Variante"), html.Th("Abtrieb"), html.Th("L/D"),
+                       html.Th("Sehne"), html.Th("Prüfung"), html.Th("")])]
     for i, b in enumerate([e.bester] + e.alternativen):
-        winkel = ", ".join(f"{w:+.0f}°" for w in b.flapwinkel) or "—"
         zeilen.append(html.Tr([
             html.Td(str(b.elemente)), html.Td(b.hauptprofil.replace(".dat", "")),
-            html.Td(b.flapprofil.replace(".dat", "")), html.Td(winkel),
+            html.Td(b.flapprofil.replace(".dat", "")),
+            html.Td(_flapbeschreibung(b)),
+            html.Td(b.variante if b.raeumlich else "nur im Schnitt"),
             html.Td(f"{b.abtrieb:.0f} N"), html.Td(f"{b.wirkungsgrad:.1f}"),
-            html.Td(f"{b.gesamtsehne:.0f} mm"),
+            html.Td(f"{b.gesamtsehne:.0f} mm"), html.Td(_pruefzeichen(b)),
             html.Td(html.Button("übernehmen",
                                 id={"typ": "kombination", "nr": i}, n_clicks=0,
                                 className="as-knopf as-knopf-leer",
@@ -1663,18 +1923,56 @@ def _generatorkarte(e) -> html.Div:
         html.Div(f"{e.bester.abtrieb:.0f} N", className="as-grosszahl"),
         html.Div(f"mit {e.bester.elemente} Element(en): "
                  f"{e.bester.hauptprofil.replace('.dat', '')} + "
-                 f"{e.bester.flapprofil.replace('.dat', '')}",
+                 f"{e.bester.flapprofil.replace('.dat', '')}"
+                 + (f" — {e.bester.variante}" if e.bester.raeumlich else ""),
                  className="as-hinweis", style={"marginBottom": "12px"}),
+        html.Div([html.Div(h, className="as-status-hinweis",
+                           style={"marginBottom": "4px"})
+                  for h in e.bester.hinweise],
+                 style={"marginBottom": "8px"}) if e.bester.hinweise
+        else html.Div(),
         html.Table(zeilen, className="as-tabelle"),
         html.Div([html.Div(b, style={"marginTop": "5px"})
                   for b in e.begruendung],
                  className="as-hinweis", style={"marginTop": "12px"}),
-        html.Div("Übernehmen setzt Hauptprofil und die Elemententabelle oben. "
-                 "Sehne, Anstellwinkel und Spannweite bleiben, wie sie sind — "
-                 "der Generator hat sie nicht verändert.",
+        html.Div("Übernehmen setzt Hauptprofil und die Elemententabelle oben, "
+                 "samt Teilflügel-Bereichen und Winkeln außen. Sehne, "
+                 "Anstellwinkel und Spannweite bleiben, wie sie sind — der "
+                 "Generator hat sie nicht verändert.",
                  className="as-hinweis", style={"marginTop": "10px"}),
-        html.Div(id="kombination-uebernommen", style={"marginTop": "8px"}),
     ])
+
+
+def _flapbeschreibung(b) -> str:
+    """Flapwinkel samt Teilfluegel-Angaben, knapp fuer eine Tabellenzelle."""
+    if not b.stufen:
+        return ", ".join(f"{w:+.0f}°" for w in b.flapwinkel) or "—"
+    teile = []
+    for z in b.stufen:
+        text = f"{z['winkel']:+.0f}°"
+        if z.get("winkel_aussen") is not None:
+            text += f"→{z['winkel_aussen']:+.0f}°"
+        if z.get("y_von") is not None:
+            text += f" ab {z['y_von']:.0f}"
+        if z.get("y_bis") is not None:
+            text += f" bis {z['y_bis']:.0f}"
+        teile.append(text)
+    return ", ".join(teile)
+
+
+def _pruefzeichen(b):
+    if not b.raeumlich:
+        return html.Span("—", className="as-hinweis")
+    maengel = []
+    if not b.brauchbar:
+        maengel.append("Abriss")
+    if b.durchdringungsfrei is False:
+        maengel.append("Durchdringung")
+    if b.regelkonform is False:
+        maengel.append("Reglement")
+    if not maengel:
+        return html.Span("✓", className="as-status-ok")
+    return html.Span("✗ " + ", ".join(maengel), className="as-status-hinweis")
 
 
 @app.callback(Output("kaskadentabelle", "data", allow_duplicate=True),
@@ -1716,6 +2014,189 @@ def _kombination_uebernehmen(klicks, kombinationen):
         "die Beiwerte rechnen sich neu.", className="as-status-ok")
 
 
+@app.callback(Output("fig-kaskade3d", "figure"),
+              Output("kaskade3d-pruefung", "children"),
+              Input("spec", "data"), Input("reiter", "value"))
+def _kaskade_raeumlich(daten, reiter):
+    """3D-Bild, Durchdringung, Fertigung und Reglement der ganzen Kaskade.
+
+    Nur im Reiter Kaskade: Das kostet eine bis zwei Sekunden, und es soll
+    nicht bei jedem Tippen im Reiter Profil mitlaufen.
+    """
+    leer = {"data": [], "layout": {"height": 300}}
+    if not daten or reiter != "kaskade":
+        return no_update, no_update
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        if element.spannweite is None:
+            return leer, html.Div("Ohne Sektionstabelle gibt es keine "
+                                  "Spannweite.", className="as-hinweis")
+        haupt = profil_fuer(element)
+        vorgaben = _vorgaben(element.kaskade)
+        stapel = spannweite.kaskadenschnitte(
+            haupt, element.spannweite, element.sehne, element.anstellwinkel,
+            vorgaben, 30, lage=_lage(element))
+        pruefung = spannweite.pruefe_kaskade_raeumlich(stapel, vorgaben,
+                                                       element.spannweite)
+        namen = ["Hauptelement"] + [
+            f"Flap {i} ({k.profil.replace('.dat', '')})"
+            for i, k in enumerate(element.kaskade, start=1)]
+        profile = [haupt] + [v.profil for v in vorgaben]
+        return (darstellung.kaskade3d(stapel, namen, pruefung.befunde),
+                _raumkarte(pruefung, stapel, namen, profile,
+                           element.fertigung_wirksam(spec.fertigung)))
+    except Exception as fehler:
+        return leer, _fehlerkarte(fehler)
+
+
+def _raumkarte(pruefung, stapel, namen, profile, fertigung) -> html.Div:
+    """Durchdringung, Fertigung je Element und Reglement, untereinander."""
+    kopf = html.Div("Die Flächen schneiden sich nicht"
+                    if pruefung.durchdringungsfrei
+                    else "Flächen durchdringen sich",
+                    className="as-ampel-kopf "
+                    + ("ok" if pruefung.durchdringungsfrei else "fehl"))
+    befunde = []
+    for b in pruefung.befunde:
+        zeichen = {"ok": "✓", "fehler": "✗"}.get(b.stufe, "!")
+        klasse = {"ok": "ok", "fehler": "fehler"}.get(b.stufe, "hinweis")
+        befunde.append(html.Div([html.Span(zeichen,
+                                           className=f"as-zeichen {klasse}"),
+                                 html.Span(b.text)], className="as-befund"))
+
+    tabelle = [html.Tr([html.Th("Element"), html.Th("Schnitte"),
+                        html.Th("kleinste Sehne"), html.Th("Fertigung")])]
+    for name, profil, st in zip(namen, profile, stapel):
+        if not st:
+            tabelle.append(html.Tr([html.Td(name), html.Td("0"), html.Td("—"),
+                                    html.Td("liegt außerhalb der Spannweite",
+                                            className="as-status-hinweis")]))
+            continue
+        kleinste = min(s.sehne for s in st)
+        geprueft = profil.pruefe_fertigung(fertigung, kleinste)
+        harte = [b for b in geprueft if not b.ok and b.blockiert]
+        weiche = [b for b in geprueft if not b.ok and not b.blockiert]
+        if harte:
+            zelle = html.Td("✗ " + "; ".join(
+                f"{b.pruefung} {b.ist:.2f} statt ≥ {b.soll:.2f} {b.einheit}"
+                for b in harte), className="as-status-hinweis")
+        elif weiche:
+            zelle = html.Td("! " + "; ".join(b.pruefung for b in weiche))
+        else:
+            zelle = html.Td("✓ baubar", className="as-status-ok")
+        tabelle.append(html.Tr([html.Td(name), html.Td(str(len(st))),
+                                html.Td(f"{kleinste:.0f} mm"), zelle]))
+
+    alle = [s for st in stapel for s in st]
+    return html.Div([
+        kopf, html.Div(befunde),
+        html.Div("Fertigung je Element, bei seiner kleinsten Sehne",
+                 className="as-untertitel-dunkel", style={"marginTop": "12px"}),
+        html.Table(tabelle, className="as-tabelle"),
+        html.Div(_regelpruefung_karte(alle), style={"marginTop": "12px"})
+        if alle else html.Div(),
+    ])
+
+
+@app.callback(Output("kaskade3d-ergebnis", "children"),
+              Input("btn-kaskade3d", "n_clicks"),
+              State("spec", "data"), State(wert("kaskadentempo"), "value"),
+              State(wert("endplatte"), "value"), State("kanalwirkung", "value"),
+              State(wert("abgleich"), "value"), prevent_initial_call=True)
+def _kaskade_abtrieb(n, daten, tempo, endplatte, kanal, abgleich):
+    """Abtrieb der ganzen Kaskade, auf Knopfdruck - dauert einige Sekunden."""
+    if not daten:
+        return ""
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        if element.spannweite is None:
+            return html.Div("Ohne Sektionstabelle gibt es keine Spannweite.",
+                            className="as-hinweis")
+        if not aero_verfuegbar():
+            return html.Div("Ohne NeuralFoil lässt sich kein Abtrieb rechnen.",
+                            className="as-hinweis")
+        ergebnis = aero_kaskade3d.rechne(
+            profil_fuer(element), element.spannweite, element.sehne,
+            element.anstellwinkel, _vorgaben(element.kaskade),
+            float(tempo or 15.0),
+            lage=_lage(element),
+            endplatte_mm=float(endplatte or 0.0), mit_boden=bool(kanal),
+            abgleich=float(abgleich or 1.0))
+        return _kaskadenabtriebskarte(ergebnis, float(tempo or 15.0))
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
+
+
+def _kaskadenabtriebskarte(r, tempo: float = 15.0) -> html.Div:
+    k = r.kraefte
+
+    def zahl(wert, text):
+        return html.Div([html.Div(wert, className="as-grosszahl"),
+                         html.Div(text, className="as-hinweis")])
+
+    zahlen = html.Div([
+        zahl(f"{r.abtrieb:.0f} N", f"Abtrieb bei {tempo:.1f} m/s, "
+                                   f"beide Seiten"),
+        zahl(f"{r.widerstand:.1f} N", "Widerstand"),
+        zahl(f"{r.wirkungsgrad:.1f}", "Abtrieb je Widerstand"),
+        zahl(f"{k.cl:+.2f}", "CL auf die Grundrissfläche"),
+        zahl(f"×{k.endplattenfaktor:.2f}", "wirksame Streckung durch Endplatten"),
+    ], className="as-leiste",
+        style={"gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))",
+               "marginBottom": "12px"})
+
+    warnungen = []
+    if not k.konvergiert:
+        warnungen.append("Die Rechnung ist nicht auskonvergiert — die Zahl ist "
+                         "unsicher.")
+    if k.abgerissen > 0.02:
+        warnungen.append(f"Auf {k.abgerissen * 100:.0f} % der Fläche ist die "
+                         f"Strömung abgerissen.")
+    warnungen += r.hinweise
+
+    stellen = [html.Tr([html.Th("y"), html.Th("Elemente"), html.Th("Gesamtsehne"),
+                        html.Th("Winkel Haupt"), html.Th("CL im Schnitt"),
+                        html.Th("Kanal"), html.Th("im Schnitt")])]
+    for st in r.stuetzwerte:
+        stellen.append(html.Tr([
+            html.Td(f"{st.y:.0f} mm"), html.Td(", ".join(st.namen)),
+            html.Td(f"{st.gesamtsehne:.0f} mm"), html.Td(f"{st.winkel:+.1f}°"),
+            html.Td(f"{float(st.polare.cl_bei(st.winkel)):+.2f}"),
+            html.Td(f"×{st.bodenwirkung.faktor:.2f}" if st.bodenwirkung else "—"),
+            html.Td("abgerissen" if st.abgerissen else "anliegend",
+                    className="as-status-hinweis" if st.abgerissen
+                    else "as-status-ok")]))
+
+    return html.Div([
+        zahlen,
+        html.Div([html.Div(w, className="as-status-hinweis",
+                           style={"marginBottom": "5px"}) for w in warnungen]),
+        html.Div("Die gerechneten Stellen", className="as-untertitel-dunkel",
+                 style={"marginTop": "10px"}),
+        html.Table(stellen, className="as-tabelle"),
+        html.Div([
+            html.P("An jeder Stelle wird die Kaskade im Schnitt gebaut und bei "
+                   "fünf Anströmwinkeln gerechnet (Panelverfahren und "
+                   "NeuralFoil). Die Traglinie verteilt das über die "
+                   "Spannweite — innen und außen dürfen dabei verschiedene "
+                   "Elemente arbeiten."),
+            html.P([html.B("Endplatten: "), "nach Hoerner, AR·(1 + 1,9·h/b), "
+                    "belegt bis h/b = 0,4 (Soso & Selig, SAE 2002-01-3313). ",
+                    html.B("Boden: "), "Kanalwirkung aus dem Panelverfahren bis "
+                    "0,4 Sehnen, darunter festgehalten; unter dem "
+                    "Abtriebsmaximum — h/c ≈ 0,15 für Kaskaden, 0,1 für "
+                    "Einzelflügel (Zerihan & Zhang) — zurückgenommen."]),
+            html.P([html.B("Nicht enthalten: "), "Räder, Aufstau vor dem "
+                    "Fahrzeug, Unterboden, und die Grenzschicht über den Spalt "
+                    "— gut abgestimmte Kaskaden werden eher unterschätzt. Zum "
+                    "Vergleich von Entwürfen, nicht als Messwert. Mit einem "
+                    "CFD-Wert lässt sich über den Abgleichfaktor kalibrieren."]),
+        ], className="as-hinweis", style={"marginTop": "12px"}),
+    ])
+
+
 def _regelkarte(plan) -> html.Div:
     """Prueft den Fluegel gegen beide Regelstaende und zeigt es nebeneinander.
 
@@ -1725,14 +2206,18 @@ def _regelkarte(plan) -> html.Div:
     """
     if not plan.ist_fluegel or not plan.stapel:
         return html.Div()
+    return _regelpruefung_karte(plan.stapel)
 
+
+def _regelpruefung_karte(stapel) -> html.Div:
+    """Die Regelpruefung fuer einen Schnittstapel - Fluegel oder Kaskade."""
     bezug = regeln.Bezugsgeometrie.aus_datei()
-    vorne = max(0.0, -min(s.punkte[:, 0].min() for s in plan.stapel))
+    vorne = max(0.0, -min(s.punkte[:, 0].min() for s in stapel))
     zustand = regeln.Fahrzustand.bremsend(vorne)
 
     spalten = []
     for satz in regeln.alle_staende():
-        befunde = regeln.pruefe_fluegel(plan.stapel, satz, bezug, zustand)
+        befunde = regeln.pruefe_fluegel(stapel, satz, bezug, zustand)
         schlecht = [b for b in befunde if not b.ok]
         harte = [b for b in schlecht if b.blockiert]
 

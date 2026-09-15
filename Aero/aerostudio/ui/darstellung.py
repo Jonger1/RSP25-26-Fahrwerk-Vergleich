@@ -426,3 +426,62 @@ def _durchsichtig(farbe: str, anteil: float) -> str:
     farbe = farbe.lstrip("#")
     r, g, b = (int(farbe[i:i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r},{g},{b},{anteil})"
+
+
+ELEMENTFARBEN = ["#3b3f46", "#cf2027", "#ea7317", "#f4c20d", "#3d6fa5"]
+
+
+def kaskade3d(stapel_je_element, namen=None, befunde=None) -> go.Figure:
+    """Die räumliche Kaskade: jedes Element als eigene, einfarbige Fläche.
+
+    Einfarbig je Element und nicht nach der Höhe eingefärbt wie beim
+    einfachen Flügel: Hier ist die Frage, WELCHES Element wo liegt und ob
+    zwei sich berühren - das sieht man nur, wenn sie sich farblich trennen.
+    Stellen, an denen die Prüfung eine Durchdringung gefunden hat, sind rot
+    markiert. Jedes Element lässt sich über die Legende ausblenden, um in die
+    Schlitze zu sehen.
+    """
+    fig = go.Figure()
+    for i, stapel in enumerate(stapel_je_element):
+        if not stapel:
+            continue
+        laenge = min(len(s.punkte) for s in stapel)
+        netz = np.stack([s.punkte[:laenge] for s in stapel])
+        farbe = ELEMENTFARBEN[i % len(ELEMENTFARBEN)]
+        name = (namen[i] if namen and i < len(namen)
+                else ("Hauptelement" if i == 0 else f"Flap {i}"))
+        fig.add_trace(go.Surface(
+            x=netz[:, :, 0], y=netz[:, :, 1], z=netz[:, :, 2],
+            surfacecolor=np.zeros(netz.shape[:2]),
+            colorscale=[[0.0, farbe], [1.0, farbe]], cmin=0.0, cmax=1.0,
+            showscale=False, opacity=1.0, name=name, showlegend=True,
+            lighting=dict(ambient=0.6, diffuse=0.8, specular=0.1,
+                          roughness=0.9),
+            hovertemplate=f"{name}<br>x %{{x:.0f}}<br>y %{{y:.0f}}"
+                          f"<br>z %{{z:.0f}} mm<extra></extra>"))
+
+    fehler = [b for b in (befunde or [])
+              if getattr(b, "stufe", "") == "fehler" and b.y is not None]
+    if fehler:
+        orte = []
+        for b in fehler:
+            naechste = [min(st, key=lambda s: abs(s.y - b.y))
+                        for st in stapel_je_element if st]
+            punkte = np.vstack([s.punkte for s in naechste])
+            orte.append(punkte.mean(axis=0))
+        orte = np.array(orte)
+        fig.add_trace(go.Scatter3d(
+            x=orte[:, 0], y=orte[:, 1], z=orte[:, 2], mode="markers",
+            marker=dict(size=9, color="#c62828", symbol="x"),
+            name="Durchdringung", hovertemplate="Durchdringung<extra></extra>"))
+
+    anzahl = sum(1 for st in stapel_je_element if st)
+    fig.update_layout(
+        title=dict(text=f"{anzahl} Element(e) räumlich", font=dict(size=12)),
+        margin=dict(l=0, r=0, t=32, b=0), height=460, paper_bgcolor="white",
+        showlegend=True, legend=dict(font=dict(size=11), itemsizing="constant"),
+        scene=dict(aspectmode="data",
+                   xaxis=dict(title="x [mm] nach hinten"),
+                   yaxis=dict(title="y [mm] ab Mitte"),
+                   zaxis=dict(title="z [mm] über Boden")))
+    return fig

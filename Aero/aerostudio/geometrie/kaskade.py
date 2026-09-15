@@ -32,7 +32,7 @@ gesucht. Das ist der Kern dieses Moduls: Die Längslage folgt aus der
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -72,6 +72,42 @@ class Kaskadenvorgabe:
     spalt: float = 0.015            # Anteil der Hauptsehne
     ueberlappung: float = 0.02      # Anteil der Hauptsehne
     name: str = ""
+    # Teilfluegel: None heisst "so weit wie das Hauptelement".
+    y_von: float | None = None
+    y_bis: float | None = None
+    winkel_aussen: float | None = None   # relativ zum Vorgaenger, am Ende
+
+    def bereich(self, innen: float, aussen: float) -> tuple[float, float]:
+        """Der Spannweitenbereich, auf das Hauptelement beschnitten."""
+        von = innen if self.y_von is None else max(innen, float(self.y_von))
+        bis = aussen if self.y_bis is None else min(aussen, float(self.y_bis))
+        return von, bis
+
+    def aktiv_bei(self, y: float, innen: float, aussen: float,
+                  toleranz: float = 1e-6) -> bool:
+        von, bis = self.bereich(innen, aussen)
+        return bis - von > toleranz and von - toleranz <= y <= bis + toleranz
+
+    def winkel_bei(self, y: float, innen: float, aussen: float) -> float:
+        """Winkel gegen den Vorgaenger an der Stelle y - linear bis aussen."""
+        if self.winkel_aussen is None:
+            return self.winkel_relativ
+        von, bis = self.bereich(innen, aussen)
+        t = 0.0 if bis - von < 1e-9 else min(max((y - von) / (bis - von), 0.0), 1.0)
+        return self.winkel_relativ + t * (float(self.winkel_aussen)
+                                          - self.winkel_relativ)
+
+
+def vorgaben_bei(vorgaben: list[Kaskadenvorgabe], y: float, innen: float,
+                 aussen: float) -> list[tuple[int, Kaskadenvorgabe]]:
+    """Welche Flaps an der Stelle y existieren, mit dem dort gueltigen Winkel.
+
+    Die Rueckgabe traegt den Index in der VOLLEN Liste mit. Der Vorgaenger
+    eines Flaps ist das naechste Element davor, das an dieser Stelle
+    existiert - fehlt Flap 1 dort, sitzt Flap 2 direkt am Hauptelement.
+    """
+    return [(i, replace(v, winkel_relativ=v.winkel_bei(y, innen, aussen)))
+            for i, v in enumerate(vorgaben) if v.aktiv_bei(y, innen, aussen)]
 
 
 def _punkt_zu_strecke(punkte: np.ndarray, a: np.ndarray,

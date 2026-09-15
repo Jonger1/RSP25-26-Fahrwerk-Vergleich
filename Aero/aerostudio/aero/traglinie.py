@@ -36,9 +36,21 @@ hier nicht drin. Das Modell UNTERSCHÄTZT den Abtrieb bei kleinem Bodenabstand
 deshalb, und es kennt den Einbruch bei sehr kleinem Abstand nicht, wenn die
 Strömung im Kanal abreisst.
 
-Ebenfalls nicht enthalten: Endplatten, Räder, die Wirkung mehrerer Elemente
-aufeinander, der Aufstau vor dem Fahrzeug. Endplatten wirken wie eine
-Verlängerung der Spannweite und heben den Abtrieb zusätzlich.
+Ebenfalls nicht enthalten: Räder, der Aufstau vor dem Fahrzeug. Die Wirkung
+mehrerer Elemente steckt in aero/kaskade3d.py, die Kanalbeschleunigung als
+Faktor in aero/boden.py.
+
+**Endplatten** (`endplatte_mm`) nach Hoerner: Eine Endplatte der Höhe h an
+einem Flügel der Spannweite b wirkt wie eine größere Streckung,
+
+    AR_wirksam = AR · (1 + 1,9 · h/b),     gültig bis h/b = 0,4.
+
+Umgesetzt, indem der Beitrag der Wirbelschleppe zum Abwind um genau diesen
+Faktor verkleinert wird - beim elliptischen Flügel ist das dieselbe Aussage.
+Quelle der Formel: Hoerner, Fluid-Dynamic Lift (1985), zitiert und
+nachgemessen bei Soso & Selig, SAE 2002-01-3313. Eine Endplatte, die länger
+ist als die Flügelsehne, bringt dort nichts zusätzlich - gerechnet wird mit
+der Höhe.
 
 Kurz: Die Zahl ist eine ABSCHÄTZUNG für den Vergleich von Entwürfen
 untereinander, kein Ersatz für CFD und erst recht nicht für den Prüfstand.
@@ -59,6 +71,18 @@ STROMRICHTUNG = np.array([1.0, 0.0, 0.0])
 # Auftriebsanstieg der ebenen Platte, je GRAD. Wird gebraucht, um eine
 # Beiwertdifferenz in einen Korrekturwinkel umzurechnen.
 CL_ALPHA_GRAD = 2.0 * np.pi * np.pi / 180.0
+
+# Bis zu diesem Verhältnis aus Endplattenhöhe und Spannweite ist die
+# Hoerner-Formel belegt. Darüber wird nicht weiter gerechnet.
+ENDPLATTE_H_B_MAX = 0.4
+
+
+def endplattenfaktor(hoehe_mm: float, spannweite_mm: float) -> float:
+    """Um wie viel eine Endplatte die wirksame Streckung hebt (Hoerner)."""
+    if hoehe_mm is None or hoehe_mm <= 0.0 or spannweite_mm <= 0.0:
+        return 1.0
+    return 1.0 + 1.9 * min(float(hoehe_mm) / float(spannweite_mm),
+                           ENDPLATTE_H_B_MAX)
 
 
 @dataclass
@@ -94,6 +118,8 @@ class Fluegelkraefte:
     abgerissen: float = 0.0        # Flächenanteil jenseits des Abrisses
     schritte: int = 0
     konvergiert: bool = True
+    endplattenfaktor: float = 1.0  # wirksame Streckung / geometrische
+    beiwertfaktor: float = 1.0     # z. B. Kanalwirkung am Boden
 
     @property
     def wirkungsgrad(self) -> float:
@@ -282,7 +308,8 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
            panels_je_seite: int = 20, mit_boden: bool = True,
            polaren: list[Polare] | Polare | None = None,
            schritte_max: int = 100, daempfung: float = 0.5,
-           genauigkeit: float = 1e-4) -> Fluegelkraefte:
+           genauigkeit: float = 1e-4, endplatte_mm: float = 0.0,
+           beiwertfaktor: float = 1.0) -> Fluegelkraefte:
     """Rechnet Abtrieb und Widerstand eines Flügels.
 
     `stapel`  Schnittliste aus geometrie.spannweite.schnitte()
@@ -291,6 +318,10 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
               Streifen oder eine je Streifen. Dient den Tests, die gegen die
               analytische Lösung der ebenen Platte prüfen und dafür einen
               linearen Beiwertverlauf brauchen.
+    `endplatte_mm` Höhe der Endplatten an den Flügelenden, 0 = keine.
+    `beiwertfaktor` wirkt auf den Profilbeiwert jedes Streifens - so kommt
+              die Kanalwirkung am Boden (aero/boden.py) in die Rechnung,
+              ohne dass der Abrisswinkel sich verschiebt.
     """
     streifen = streifen_aus_stapel(stapel, panels_je_seite)
     n = len(streifen)
@@ -320,6 +351,19 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
     A_nachlauf = einflussmatrix(traglinie, kanten, mit_boden=mit_boden,
                                 nur_nachlauf=True)
 
+    # Endplatten: Der Anteil der Wirbelschleppe am Abwind wird um den
+    # Hoerner-Faktor kleiner - im Gleichungssystem wie beim induzierten
+    # Winkel. Das gebundene Wirbelstück bleibt unverändert, sonst stimmte
+    # der ebene Grenzfall nicht mehr.
+    spannweite_mm = float(kanten_y.max() - kanten_y.min()) * 1000.0
+    endfaktor = endplattenfaktor(endplatte_mm, spannweite_mm)
+    if endfaktor > 1.0:
+        A_schleppe = einflussmatrix(kontroll, kanten, mit_boden=mit_boden,
+                                    nur_nachlauf=True)
+        A = A - (1.0 - 1.0 / endfaktor) * A_schleppe
+        A_nachlauf = A_nachlauf / endfaktor
+    faktor = float(beiwertfaktor)
+
     pol = _polaren_zuordnen(polaren, profil, V, sehne, n)
 
     korrektur = np.zeros(n)
@@ -338,7 +382,8 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
         alpha_eff = winkel + alpha_ind
 
         cl_reibungsfrei = 2.0 * zirkulation / (V * sehne)
-        cl_wirklich = np.array([pol[i].cl_bei(alpha_eff[i]) for i in range(n)])
+        cl_wirklich = faktor * np.array([pol[i].cl_bei(alpha_eff[i])
+                                         for i in range(n)])
 
         fehler = cl_wirklich - cl_reibungsfrei
 
@@ -358,7 +403,7 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
         korrektur = korrektur + daempfung * fehler / CL_ALPHA_GRAD
 
     alpha_eff = winkel + alpha_ind
-    cl = np.array([pol[i].cl_bei(alpha_eff[i]) for i in range(n)])
+    cl = faktor * np.array([pol[i].cl_bei(alpha_eff[i]) for i in range(n)])
     cd = np.array([pol[i].cd_bei(alpha_eff[i]) for i in range(n)])
     vertrauen = np.array([pol[i].vertrauen_bei(alpha_eff[i]) for i in range(n)])
 
@@ -395,7 +440,8 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
         alpha_wirksam=alpha_eff, auftrieb_lokal=auftrieb_i,
         vertrauen=float(np.sum(vertrauen * flaeche_i) / flaeche),
         abgerissen=float(abgerissen / flaeche) if flaeche > 0 else 0.0,
-        schritte=schritt, konvergiert=konvergiert)
+        schritte=schritt, konvergiert=konvergiert,
+        endplattenfaktor=endfaktor, beiwertfaktor=faktor)
 
 
 def _polaren_zuordnen(polaren, profil, geschwindigkeit, sehnen_m, n):

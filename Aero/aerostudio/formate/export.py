@@ -40,6 +40,8 @@ class Exportplan:
     ausgabe: str = "kurve"       # "kurve", "profil" oder "fluegel"
     stapel: list = field(default_factory=list)   # Schnitte, nur beim Fluegel
     elementanzahl: int = 1
+    # Bei Teilfluegeln hat nicht jedes Element gleich viele Schnitte.
+    schnitte_je_element: list[int] = field(default_factory=list)
 
     @property
     def ist_fluegel(self) -> bool:
@@ -286,6 +288,7 @@ def plane_kaskadenfluegel(haupt: Profil, spannweite, sehne_mm: float,
 
     stapel_je_element = kaskadenschnitte(
         haupt, spannweite, sehne_mm, anstellwinkel, vorgaben, n, lage=lage)
+    stapel_je_element = [st for st in stapel_je_element if st]
     sektionen, entfernt = [], 0
     for stapel in stapel_je_element:
         umlaeufe = []
@@ -304,7 +307,8 @@ def plane_kaskadenfluegel(haupt: Profil, spannweite, sehne_mm: float,
                       toleranz_gefordert=gefordert, geschlossen=True,
                       ausgeduennt=entfernt, ausgabe="kaskadenfluegel",
                       stapel=[s for element in stapel_je_element for s in element],
-                      elementanzahl=len(stapel_je_element))
+                      elementanzahl=len(stapel_je_element),
+                      schnitte_je_element=[len(st) for st in stapel_je_element])
 
 
 def schreibe(plan: Exportplan, ziel: str | Path,

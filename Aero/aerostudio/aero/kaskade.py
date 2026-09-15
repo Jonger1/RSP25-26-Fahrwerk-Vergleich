@@ -186,11 +186,18 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
         else:
             wirkungsgrad = 0.86
         cl_zaeh = cl_verbund * wirkungsgrad
+        # Widerstand beim WIRKSAMEN Winkel, nicht beim geometrischen: Ein Flap
+        # bei -26 Grad waere allein laengst abgerissen und haette einen
+        # riesigen Widerstand. Im Verbund traegt er viel weniger, weil das
+        # Element davor die Stroemung schon umlenkt. Abgelesen wird deshalb
+        # dort, wo das Element allein den Beiwert haette, den es im Verbund
+        # tatsaechlich traegt.
+        cd_zaeh = _cd_beim_beiwert(pol, cl_zaeh, cd_zaeh_allein)
 
         beitraege.append(Elementbeiwert(
             name=element.name, winkel=winkel,
             cl_allein=cl_allein, cl_verbund=cl_verbund, cl_zaeh=cl_zaeh,
-            cd_zaeh=cd_zaeh_allein, wirkungsgrad=wirkungsgrad,
+            cd_zaeh=cd_zaeh, wirkungsgrad=wirkungsgrad,
             saugspitze=float(verbund.cp[i].min()),
             saugspitze_grenze=_saugspitze_beim_abriss(element.profil,
                                                       pol.abriss_winkel),
@@ -199,7 +206,7 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
         # Auf die Gesamtsehne umrechnen, damit sich die Beitraege addieren.
         anteil = element.sehne / sehne_gesamt
         cl_zaeh_gesamt += cl_zaeh * anteil
-        cd_zaeh_gesamt += cd_zaeh_allein * anteil
+        cd_zaeh_gesamt += cd_zaeh * anteil
 
     return Kaskadenbeiwert(
         cl=cl_zaeh_gesamt, cd=cd_zaeh_gesamt,
@@ -207,6 +214,24 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
         elemente=beitraege,
         reynolds=reynolds(geschwindigkeit, sehne_gesamt),
         bodennah=verbund.bodennah)
+
+
+def _cd_beim_beiwert(pol, cl_ziel: float, rueckfall: float) -> float:
+    """Profilwiderstand bei dem Winkel, bei dem das Profil `cl_ziel` traegt.
+
+    Gesucht wird nur auf dem anliegenden Ast der Polare - zwischen Abriss und
+    der anderen Seite. Traegt das Element mehr, als es allein je koennte,
+    bleibt es beim Widerstand am Abriss.
+    """
+    grenze = pol.abriss_winkel
+    maske = pol.alpha >= grenze if grenze < 0 else pol.alpha <= grenze
+    if int(maske.sum()) < 2:
+        return rueckfall
+    cl = pol.cl[maske]
+    alpha = pol.alpha[maske]
+    ordnung = np.argsort(cl)
+    alpha_wirksam = float(np.interp(cl_ziel, cl[ordnung], alpha[ordnung]))
+    return float(pol.cd_bei(alpha_wirksam))
 
 
 @lru_cache(maxsize=64)

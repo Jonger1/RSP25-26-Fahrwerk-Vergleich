@@ -583,9 +583,11 @@ def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):
 
 
 def test_zu_tiefer_fluegel_wird_in_der_oberflaeche_rot(tmp_path):
-    """Derselbe Flügel 40 mm tiefer muss die Bodenfreiheit reissen."""
+    """Derselbe Flügel mit dem tiefsten Punkt 20 mm über Boden muss die
+    Bodenfreiheit reissen. Die Höhe meint den TIEFSTEN Punkt - 50 mm dort
+    sind legal, anders als früher, als die Wurzelsehne gemeint war."""
     hoch, *_ = UI._profil_aktualisieren(*_werte(16, 90.0))
-    tief, *_ = UI._profil_aktualisieren(*_werte(16, 50.0))
+    tief, *_ = UI._profil_aktualisieren(*_werte(16, 20.0))
     text_hoch = _text(UI._export(hoch, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4])
     text_tief = _text(UI._export(tief, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4])
     assert "Bodenfreiheit" in text_tief

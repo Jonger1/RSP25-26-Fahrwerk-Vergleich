@@ -368,7 +368,8 @@ class Kaskadenstufe(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     profil: str = Field(default="e58.dat",
-                        description="Katalogdatei des Flapprofils.")
+                        description="Katalogdatei des Flapprofils oder "
+                                    "'NACA xxxx' fuer ein NACA-4-Profil.")
     sehne: float = Field(default=0.35, gt=0.0, le=1.0,
                          description="Anteil der Sehne des Hauptelements.")
     winkel: float = Field(default=-20.0,
@@ -382,6 +383,32 @@ class Kaskadenstufe(BaseModel):
                                 description="Wie weit die Nase VOR der "
                                             "Hinterkante des Vorgaengers "
                                             "steht, als Anteil der Hauptsehne.")
+
+    # --- Teilfluegel ----------------------------------------------------
+    # Ein Flap muss nicht ueber die ganze Spannweite laufen. So bauen es die
+    # meisten Formula-Student-Teams: innen, vor dem Unterboden, bleibt das
+    # Hauptelement flach oder allein, damit Luft in den Unterbodenkanal
+    # gelangt; aussen, vor dem Reifen, sitzt der aggressivste Teil.
+    y_von: Optional[float] = Field(
+        default=None, ge=0.0,
+        description="Innerer Beginn in mm ab Fahrzeugmitte. None = dort, wo "
+                    "das Hauptelement beginnt.")
+    y_bis: Optional[float] = Field(
+        default=None, ge=0.0,
+        description="Aeusseres Ende in mm ab Fahrzeugmitte. None = dort, wo "
+                    "das Hauptelement endet.")
+    winkel_aussen: Optional[float] = Field(
+        default=None,
+        description="Winkel gegen den Vorgaenger am aeusseren Ende, in Grad. "
+                    "Dazwischen linear. None = ueberall wie `winkel`.")
+
+    @model_validator(mode="after")
+    def _pruefe_bereich(self) -> "Kaskadenstufe":
+        if (self.y_von is not None and self.y_bis is not None
+                and self.y_bis <= self.y_von):
+            raise ValueError("Das aeussere Ende eines Teilflaps muss weiter "
+                             "aussen liegen als sein Beginn.")
+        return self
 
 
 class Element(BaseModel):
@@ -419,7 +446,8 @@ class Element(BaseModel):
     pos_y: float = Field(default=0.0,
                          description="Beginn der Spannweite in mm ab Mitte.")
     pos_z: float = Field(default=60.0,
-                         description="Hoehe der Wurzelsehne ueber Grund in mm.")
+                         description="Hoehe des TIEFSTEN Punkts des ganzen Fluegels samt Flaps "
+                                     "ueber Grund in mm, ueber alle Schnitte - wie T 2.2.1 misst.")
 
     kaskade: list[Kaskadenstufe] = Field(
         default_factory=list,
