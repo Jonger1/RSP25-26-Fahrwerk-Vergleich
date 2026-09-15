@@ -200,6 +200,58 @@ def _auf_laenge(umlauf: np.ndarray, ziel: int) -> np.ndarray:
     return np.vstack([gekuerzt, gekuerzt[:1]])
 
 
+def plane_kaskade(haupt: Profil, sehne_mm: float, anstellwinkel: float,
+                  vorgaben: list, toleranz_mm: float = 0.005) -> Exportplan:
+    """Bereitet eine Kaskade fuer Creo vor: je Element eine geschlossene Kurve.
+
+    Jedes Element wird eine eigene Sektion in derselben Datei. In Creo
+    entsteht daraus EIN Kurvenfeature mit mehreren geschlossenen Kurven -
+    jede laesst sich einzeln in eine Skizze projizieren und extrudieren.
+
+    Die Punktzahl richtet sich nach dem anspruchsvollsten Element: Flaps sind
+    kurz und stark gekruemmt, und was fuer sie reicht, reicht fuer das
+    Hauptelement auch. Die Anordnung - Spalt und Ueberlappung - wird mit
+    genau dieser Punktzahl neu gesucht, damit das exportierte Paket
+    dieselbe Lage hat wie das angezeigte.
+    """
+    from ..geometrie import kaskade as geo
+
+    gefordert = float(toleranz_mm)
+    leiter = sorted({round(t, 6) for t in
+                     [gefordert, gefordert * 2, gefordert * 5,
+                      0.005, 0.010, 0.020, 0.050] if t >= gefordert})
+
+    # Profile samt eigener Sehne, um fuer jedes die noetige Punktzahl zu
+    # bestimmen.
+    teile = [(haupt, sehne_mm)] + [(v.profil, sehne_mm * v.sehne_faktor)
+                                   for v in vorgaben]
+
+    n, versuch = None, gefordert
+    for versuch in leiter:
+        zahlen = [p.punktzahl_umlauf(s, versuch) for p, s in teile]
+        if all(z is not None for z in zahlen):
+            n = max(zahlen)
+            break
+    if n is None:
+        raise ValueError(
+            f"Selbst mit {versuch:.4f} mm Toleranz laesst sich eines der "
+            f"Elemente nicht treffen - vermutlich ein Knick in einem Profil.")
+
+    elemente = geo.platziere(haupt, sehne_mm, anstellwinkel, vorgaben, punkte=n)
+
+    sektionen, entfernt = [], 0
+    for element in elemente:
+        umlauf = element.punkte
+        offen = umlauf[:-1] if np.allclose(umlauf[0], umlauf[-1]) else umlauf
+        duenn = entdoppeln(offen, CREO_GENAUIGKEIT_MM, geschlossen=True)
+        entfernt += len(offen) - len(duenn)
+        sektionen.append(_in_spannweitenebene(np.vstack([duenn, duenn[:1]])))
+
+    return Exportplan(sektionen=sektionen, punktzahl=n, toleranz_mm=versuch,
+                      toleranz_gefordert=gefordert, geschlossen=True,
+                      ausgeduennt=entfernt, ausgabe="kaskade")
+
+
 def schreibe(plan: Exportplan, ziel: str | Path,
              kommentare: list[str] | None = None) -> Path:
     """Schreibt den Plan als IBL-Datei."""
@@ -217,10 +269,15 @@ def dateiname(name: str, endung: str = ".ibl") -> str:
     umschrift = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe",
                  "Ü": "Ue", "ß": "ss"}
     sauber = "".join(umschrift.get(z, z) for z in (name or "").strip())
-    sauber = "".join(z if (z.isalnum() or z in "-_") else "_" for z in sauber)
+    # Der PUNKT bleibt erhalten: "Spalt 1.2" ist ein brauchbarer Name, und
+    # Windows wie Creo kommen damit zurecht. Fuehrende Punkte und Folgen von
+    # Punkten fallen weg - die waeren als Pfadangabe missverstaendlich.
+    sauber = "".join(z if (z.isalnum() or z in "-_.") else "_" for z in sauber)
     while "__" in sauber:
         sauber = sauber.replace("__", "_")
-    sauber = sauber.strip("_")
+    while ".." in sauber:
+        sauber = sauber.replace("..", ".")
+    sauber = sauber.strip("_.")
     return (sauber or "profil") + endung
 
 

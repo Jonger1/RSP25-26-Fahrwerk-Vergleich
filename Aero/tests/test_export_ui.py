@@ -222,9 +222,11 @@ SEKTIONEN = [
     {"y": 600.0, "sehne": 1.0, "verwindung": 2.0, "z": 22.0, "x": 0.0},
 ]
 
+KASKADE = []      # leer = einzelnes Element
+
 WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
          "prepreg", 0.6, 3.0, 0.2, "Frontfluegel Hauptelement",
-         SEKTIONEN, 13.0, 600.0, 90.0)
+         SEKTIONEN, 13.0, 600.0, 90.0, KASKADE)
 
 
 def test_hauptcallback_liefert_spec_und_vier_figuren():
@@ -237,7 +239,7 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 def test_naca_zweig_erzeugt_ein_anderes_profil():
     naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
             "nasslaminat", 1.2, 0.0, 0.2, "NACA-Versuch",
-            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0)
+            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0, [])
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
     assert AeroSpec.model_validate(a).hash() != AeroSpec.model_validate(b).hash()
@@ -257,7 +259,7 @@ def test_export_callback_schreibt_ohne_klick_nichts(tmp_path):
     auf Klick - sonst laege bei jedem Reglerzucken eine neue IBL auf der Platte."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
     info, vorschau, figur, status, regeln = UI._export(
-        spec, 0.005, str(tmp_path), "kurve", 0, 0)
+        spec, 0.005, str(tmp_path), "kurve", "", 0, 0)
     assert "begin section" in vorschau
     assert hasattr(figur, "data")
     assert status == ""
@@ -487,9 +489,9 @@ def test_die_drei_ausgabeformen_liefern_verschiedenes(tmp_path):
     """Eine Kurve, ein Profil aus zwei Kurven, ein Schnittstapel."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
 
-    kurve = UI._export(spec, 0.005, str(tmp_path), "kurve", 0, 0)
-    profil = UI._export(spec, 0.005, str(tmp_path), "profil", 0, 0)
-    fluegel = UI._export(spec, 0.005, str(tmp_path), "fluegel", 0, 0)
+    kurve = UI._export(spec, 0.005, str(tmp_path), "kurve", "", 0, 0)
+    profil = UI._export(spec, 0.005, str(tmp_path), "profil", "", 0, 0)
+    fluegel = UI._export(spec, 0.005, str(tmp_path), "fluegel", "", 0, 0)
 
     assert kurve[1].startswith("closed")
     assert profil[1].startswith("open")
@@ -545,8 +547,8 @@ def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):
     """Ein ebener Schnitt hat keine Lage am Fahrzeug - eine gruene Ampel waere
     dort eine Falschaussage."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
-    ohne = UI._export(spec, 0.005, str(tmp_path), "kurve", 0, 0)[4]
-    mit = UI._export(spec, 0.005, str(tmp_path), "fluegel", 0, 0)[4]
+    ohne = UI._export(spec, 0.005, str(tmp_path), "kurve", "", 0, 0)[4]
+    mit = UI._export(spec, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4]
     assert _text(ohne) == ""
     assert "Regelprüfung" in _text(mit)
     # Beide Regelstaende stehen nebeneinander.
@@ -557,8 +559,8 @@ def test_zu_tiefer_fluegel_wird_in_der_oberflaeche_rot(tmp_path):
     """Derselbe Flügel 40 mm tiefer muss die Bodenfreiheit reissen."""
     hoch, *_ = UI._profil_aktualisieren(*_werte(16, 90.0))
     tief, *_ = UI._profil_aktualisieren(*_werte(16, 50.0))
-    text_hoch = _text(UI._export(hoch, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
-    text_tief = _text(UI._export(tief, 0.005, str(tmp_path), "fluegel", 0, 0)[4])
+    text_hoch = _text(UI._export(hoch, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4])
+    text_tief = _text(UI._export(tief, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4])
     assert "Bodenfreiheit" in text_tief
     assert "höher gesetzt" in text_tief
     assert "höher gesetzt" not in text_hoch
@@ -885,3 +887,67 @@ def test_ungleiche_schnitte_brechen_die_anzeige_nicht():
               for y, n in ((0, 40), (200, 35), (400, 50))]
     fig = darstellung.fluegel3d(stapel, darstellung="flaeche")
     assert len(fig.data) == 1
+
+
+# ------------------------------------------------------- Eigener Dateiname
+
+def test_dateiname_faellt_auf_den_entwurfsnamen_zurueck():
+    """Meistens sind beide gleich - dann soll man nichts tippen muessen."""
+    element = AeroSpec.beispiel().elemente[0]
+    element.name = "Frontflügel Hauptelement"
+    assert UI._exportname("", element) == "Frontflügel Hauptelement"
+    assert UI._exportname(None, element) == "Frontflügel Hauptelement"
+    assert UI._exportname("   ", element) == "Frontflügel Hauptelement"
+
+
+def test_eigener_dateiname_gewinnt():
+    """Beim Erproben liegen mehrere Staende desselben Entwurfs nebeneinander."""
+    element = AeroSpec.beispiel().elemente[0]
+    element.name = "Frontflügel Hauptelement"
+    assert UI._exportname("FW v3 Spalt 1.2", element) == "FW v3 Spalt 1.2"
+
+
+def test_eigener_dateiname_landet_auf_der_datei():
+    """Der Schreibzweig des Exportcallbacks haengt am Klickkontext von Dash,
+    den es ausserhalb einer echten Anfrage nicht gibt - geprueft wird deshalb
+    die Namensbildung selbst."""
+    element = AeroSpec.beispiel().elemente[0]
+    element.name = "Frontflügel Hauptelement"
+    assert export.dateiname(UI._exportname("FW v3 Spalt 1.2", element)) ==         "FW_v3_Spalt_1.2.ibl"
+    assert export.dateiname(UI._exportname("", element)) ==         "Frontfluegel_Hauptelement.ibl"
+
+
+def test_entwurfsname_bleibt_im_kopf_der_datei(tmp_path):
+    """Der Dateiname bestimmt, wie die Datei heisst - der Entwurfsname, was
+    drin steht. Beide haben verschiedene Aufgaben, und beide muessen
+    ankommen."""
+    profil = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                            / "profile" / "katalog" / "e423.dat").gespiegelt()
+    plan = export.plane_element(profil, 250.0, -4.0)
+    ziel = export.schreibe(plan, tmp_path / export.dateiname("Versuch 7"),
+                           kommentare=["Aero Studio - Frontfluegel Hauptelement"])
+    assert ziel.name == "Versuch_7.ibl"
+    assert "Frontfluegel Hauptelement" in ziel.read_text(encoding="ascii")
+
+
+def test_skelett_bekommt_eigenen_namen(tmp_path):
+    spec, *_ = UI._profil_aktualisieren(*WERTE)
+    UI._skelett_schreiben(1, spec, str(tmp_path), "FW v3", "")
+    assert (Path(tmp_path) / "FW_v3_Skelett.ibl").is_file()
+
+    UI._skelett_schreiben(1, spec, str(tmp_path), "FW v3", "Traeger Vorderachse")
+    assert (Path(tmp_path) / "Traeger_Vorderachse.ibl").is_file()
+
+
+def test_punkt_im_dateinamen_bleibt():
+    """'Spalt 1.2' ist ein brauchbarer Name. Windows und Creo kommen damit
+    zurecht - vorher wurde der Punkt zum Unterstrich."""
+    assert export.dateiname("FW v3 Spalt 1.2") == "FW_v3_Spalt_1.2.ibl"
+
+
+def test_gefaehrliche_punkte_fallen_weg():
+    """Fuehrende Punkte und Punktfolgen waeren als Pfadangabe
+    missverstaendlich."""
+    assert export.dateiname("../geheim") == "geheim.ibl"
+    assert export.dateiname(".versteckt") == "versteckt.ibl"
+    assert export.dateiname("..") == "profil.ibl"

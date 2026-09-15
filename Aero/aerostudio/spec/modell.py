@@ -356,6 +356,34 @@ class Spannweite(BaseModel):
             Stuetzstelle(y=0.0), Stuetzstelle(y=halbspannweite)], schnitte=5)
 
 
+class Kaskadenstufe(BaseModel):
+    """Ein Flap hinter dem Hauptelement.
+
+    Alles RELATIV zum Vorgaenger, weil das die Groessen sind, die ein
+    Aerodynamiker einstellt und die in jeder Veroeffentlichung stehen.
+    Absolute Koordinaten muesste man bei jeder Sehnenaenderung neu ausrechnen,
+    und ein Zahlendreher faellt dort nicht auf.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    profil: str = Field(default="e58.dat",
+                        description="Katalogdatei des Flapprofils.")
+    sehne: float = Field(default=0.35, gt=0.0, le=1.0,
+                         description="Anteil der Sehne des Hauptelements.")
+    winkel: float = Field(default=-20.0,
+                          description="Zusaetzlicher Anstellwinkel gegenueber "
+                                      "dem Vorgaenger, in Grad.")
+    spalt: float = Field(default=0.015, gt=0.0, le=0.2,
+                         description="Kuerzester Abstand zum Vorgaenger, "
+                                     "als Anteil der Hauptsehne. Ueblich sind "
+                                     "0.01 bis 0.02.")
+    ueberlappung: float = Field(default=0.02, ge=-0.2, le=0.2,
+                                description="Wie weit die Nase VOR der "
+                                            "Hinterkante des Vorgaengers "
+                                            "steht, als Anteil der Hauptsehne.")
+
+
 class Element(BaseModel):
     """Ein Fluegelelement: Profil, Sehne, Anstellwinkel.
 
@@ -392,6 +420,10 @@ class Element(BaseModel):
                          description="Beginn der Spannweite in mm ab Mitte.")
     pos_z: float = Field(default=60.0,
                          description="Hoehe der Wurzelsehne ueber Grund in mm.")
+
+    kaskade: list[Kaskadenstufe] = Field(
+        default_factory=list,
+        description="Flaps hinter diesem Element. Leer = einzelnes Element.")
 
     spannweite: Optional[Spannweite] = Field(
         default=None,

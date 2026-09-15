@@ -104,6 +104,7 @@ class Kaskadenbeiwert:
     gesamtsehne: float
     elemente: list[Elementbeiwert] = field(default_factory=list)
     reynolds: float = 0.0
+    bodennah: bool = False
 
     @property
     def vertrauen(self) -> float:
@@ -143,6 +144,12 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
     `anstellwinkel` dreht die ANSTRÖMUNG, also das ganze Paket auf einmal -
     die Elemente stehen zueinander fest. Ihre eigenen Winkel stecken schon in
     der Geometrie.
+
+    Die 2D-Bodenspiegelung ist bewusst nur ein Diagnosewerkzeug. Dicht über
+    dem Boden kennt eine reibungsfreie Panelrechnung keine Grenzschicht und
+    keinen Abriss im Kanal; ihr Abtrieb wächst dann unphysikalisch ins
+    Unbegrenzte. Für die Anzeige und die Entwurfssuche wird sie deshalb nicht
+    aktiviert. Der Bodeneffekt bleibt ein CFD-/Mess-Abgleichpunkt.
     """
     sehne_gesamt = geo.gesamtsehne(elemente)
     koerper = [panel.Koerper(punkte=e.punkte, name=e.name) for e in elemente]
@@ -198,7 +205,8 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
         cl=cl_zaeh_gesamt, cd=cd_zaeh_gesamt,
         cl_reibungsfrei=verbund.cl_gesamt, gesamtsehne=sehne_gesamt,
         elemente=beitraege,
-        reynolds=reynolds(geschwindigkeit, sehne_gesamt))
+        reynolds=reynolds(geschwindigkeit, sehne_gesamt),
+        bodennah=verbund.bodennah)
 
 
 @lru_cache(maxsize=64)
@@ -233,12 +241,12 @@ def baue_und_rechne(haupt, sehne: float, winkel: float,
                                                 Kaskadenbeiwert]:
     """Anordnen und rechnen in einem Schritt.
 
-    `hoehe_ueber_boden` setzt die Nase des Hauptelements auf diese Höhe und
-    schaltet die Bodenspiegelung ein. None rechnet ohne Boden.
+    `hoehe_ueber_boden` setzt die Nase des Hauptelements auf diese Höhe. Die
+    bodennahe Panel-Spiegelung wird absichtlich nicht eingeschaltet: Sie ist
+    ohne Grenzschichtmodell kein belastbarer Abtriebswert.
     """
     lage = (0.0, hoehe_ueber_boden if hoehe_ueber_boden is not None else 0.0)
     elemente = geo.platziere(haupt, sehne, winkel, flaps, lage=lage,
                              punkte=punkte)
-    beiwert = rechne(elemente, geschwindigkeit,
-                     mit_boden=hoehe_ueber_boden is not None, bodenhoehe=0.0)
+    beiwert = rechne(elemente, geschwindigkeit, mit_boden=False)
     return elemente, beiwert

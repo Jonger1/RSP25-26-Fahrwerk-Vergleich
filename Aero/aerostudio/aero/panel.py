@@ -26,6 +26,11 @@ Beiwert aus NeuralFoil angewendet. Siehe kaskade.py.
 **Boden** über Spiegelung: Zu jedem Panel gehört ein gespiegeltes mit
 gleicher Quellstärke und umgekehrter Wirbelstärke. Damit ist die Bodenebene
 undurchlässig.
+
+Bei kleinen Bodenabständen kann eine reibungsfreie 2D-Rechnung aber keinen
+Abriss im Kanal darstellen. Sie konvergiert dann formal weiter, obwohl ihre
+Zirkulation unphysikalisch groß wird. Der Zustand wird deshalb im Ergebnis
+markiert; für die Kaskaden-Anzeige bleibt die Bodenspiegelung ausgeschaltet.
 """
 
 from __future__ import annotations
@@ -33,6 +38,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+
+
+# Unterhalb dieses Abstands – in Sehnenlängen – ist die reibungsfreie
+# Rechnung mit Bodenspiegelung nicht mehr als Entwurfswert brauchbar.
+BODENABSTAND_MIN = 0.4
 
 
 @dataclass
@@ -62,6 +72,7 @@ class Panelloesung:
     # Steht hier etwas Nennenswertes, ist die Vernetzung zu grob oder die
     # Loesung krumm - deshalb wird der Wert mitgeliefert statt weggeworfen.
     cd_scheinbar: float = 0.0
+    bodennah: bool = False
 
 
 def umlaufsinn(punkte: np.ndarray) -> float:
@@ -286,10 +297,16 @@ def loese(koerper: list[Koerper], alpha_grad: float = 0.0,
         v_liste.append(v_t[start:start + k])
         start += k
 
+    bodennah = False
+    if mit_boden:
+        tiefster = min(float(pk[:, 1].min()) for pk in punkte_je)
+        bodennah = (tiefster - bodenhoehe) < BODENABSTAND_MIN * sehne
+
     return Panelloesung(cl_gesamt=float(cl_je.sum()), cl_je_koerper=cl_je,
                         cd_scheinbar=float(cd_je.sum()),
                         cp=cp_liste, zirkulation=gamma,
-                        geschwindigkeit=v_liste, bezugssehne=float(sehne))
+                        geschwindigkeit=v_liste, bezugssehne=float(sehne),
+                        bodennah=bodennah)
 
 
 def aus_profil(profil, sehne: float = 1.0, anstellwinkel: float = 0.0,

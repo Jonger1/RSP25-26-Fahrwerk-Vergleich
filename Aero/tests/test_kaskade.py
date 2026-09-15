@@ -60,6 +60,19 @@ def test_ueberlappung_verschiebt_laengs(haupt, flap):
     assert weit[1].ueberlappung > knapp[1].ueberlappung
 
 
+def test_abtriebsflap_liegt_ueber_der_hinterkante_des_vorgaengers(haupt, flap):
+    """Nicht wie eine Flugzeug-Landeklappe nach unten hängen.
+
+    Beim spiegelverkehrten Abtriebsprofil ist die Unterseite die Saugseite.
+    Die Flapnase muss darum über der Hinterkante des Vorgängers liegen, damit
+    der Schlitz die Druckseite mit der Saugseite des Flaps verbindet.
+    """
+    elemente = geo_k.platziere(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+    assert elemente[1].nase[1] > elemente[0].hinterkante[1]
+
+
 def test_flapwinkel_ist_relativ_zum_vorgaenger(haupt, flap):
     elemente = geo_k.platziere(haupt, 250.0, -6.0, [
         geo_k.Kaskadenvorgabe(flap, 0.35, -18.0, 0.015, 0.02),
@@ -149,6 +162,15 @@ def test_massvolle_kaskade_bleibt_unter_der_grenze(haupt, flap):
         [geo_k.Kaskadenvorgabe(flap, 0.35, -18.0, 0.02, 0.02)], 15.0)
     assert not b.abgerissen
     assert b.knappste_reserve > 0.0
+
+
+def test_baue_und_rechne_nutzt_bodenhoehe_nur_fuer_die_geometrie(haupt, flap):
+    """Die 2D-Boden-Spiegelung darf einen Flügel nicht hochrechnen."""
+    _, frei = aero_k.baue_und_rechne(haupt, 250.0, -4.0, [], 15.0)
+    _, bodennah = aero_k.baue_und_rechne(haupt, 250.0, -4.0, [], 15.0,
+                                          hoehe_ueber_boden=30.0)
+    assert bodennah.cl == pytest.approx(frei.cl)
+    assert not bodennah.bodennah
 
 
 # --------------------------------------------------------------- Skelett
@@ -262,3 +284,206 @@ def test_katalog_trennt_haupt_und_flapprofile():
     assert "e423.dat" in haupt
     assert "e58.dat" in flaps
     assert "goe460.dat" not in haupt          # Vergleichsprofil, kein Hauptelement
+
+
+# --------------------------------------------------- Kaskade im Werkzeug
+
+from aerostudio.ui import app as UI
+
+
+def test_tabelle_wird_zur_kaskade():
+    zeilen = [{"profil": "e58.dat", "sehne": 0.35, "winkel": -20.0,
+               "spalt": 0.015, "ueberlappung": 0.02},
+              {"profil": "e58.dat", "sehne": 0.25, "winkel": -16.0,
+               "spalt": 0.015, "ueberlappung": 0.02}]
+    stufen = UI.kaskade_aus_tabelle(zeilen)
+    assert len(stufen) == 2
+    assert stufen[0].winkel == pytest.approx(-20.0)
+    assert stufen[1].sehne == pytest.approx(0.25)
+
+
+def test_leere_tabelle_heisst_einzelnes_element():
+    assert UI.kaskade_aus_tabelle([]) == []
+    assert UI.kaskade_aus_tabelle(None) == []
+
+
+def test_unvollstaendige_zeile_wird_uebersprungen():
+    """Wer eine Zeile hinzufuegt und noch tippt, darf keine Fehlermeldung
+    bekommen."""
+    stufen = UI.kaskade_aus_tabelle([{"profil": ""}, {"profil": None},
+                                     {"profil": "e58.dat"}])
+    assert len(stufen) == 1
+    assert stufen[0].sehne == pytest.approx(0.35)      # Vorgabe
+
+
+def test_werte_ausserhalb_des_gueltigen_werden_geklemmt():
+    """Ein Tippfehler darf nicht die ganze Oberflaeche in eine Fehlermeldung
+    schicken - das Datenmodell wuerde sonst ablehnen."""
+    stufen = UI.kaskade_aus_tabelle([{"profil": "e58.dat", "sehne": 99.0,
+                                      "spalt": -5.0, "winkel": 900.0}])
+    assert 0.0 < stufen[0].sehne <= 1.0
+    assert stufen[0].spalt > 0.0
+    assert abs(stufen[0].winkel) <= 60.0
+
+
+def test_kaskade_landet_im_spec():
+    werte = list(UI._EINGABEN)          # nur zur Laengenpruefung
+    from tests.test_export_ui import WERTE
+    eigene = list(WERTE)
+    eigene[-1] = [{"profil": "e58.dat", "sehne": 0.3, "winkel": -22.0,
+                   "spalt": 0.012, "ueberlappung": 0.03}]
+    spec, *_ = UI._profil_aktualisieren(*eigene)
+    from aerostudio.spec.projekt import AeroSpec
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert len(element.kaskade) == 1
+    assert element.kaskade[0].winkel == pytest.approx(-22.0)
+    assert len(werte) > 0
+
+
+def test_element_hinzufuegen_macht_es_kuerzer_und_flacher():
+    """Jedes weitere Element ist kuerzer und flacher als sein Vorgaenger -
+    so bauen es alle, und der Entwurf bleibt beim Hinzufuegen brauchbar."""
+    erste = UI._stufe_hinzufuegen(1, [])
+    assert len(erste) == 1
+    zweite = UI._stufe_hinzufuegen(1, erste)
+    assert len(zweite) == 2
+    assert zweite[1]["sehne"] < zweite[0]["sehne"]
+    assert abs(zweite[1]["winkel"]) < abs(zweite[0]["winkel"])
+
+
+# ------------------------------------------- Lage des Flaps (Abtrieb!)
+
+def test_flap_sitzt_UEBER_der_hinterkante(haupt, flap):
+    """Der Kern der umgedrehten Anordnung.
+
+    Bei einem ABTRIEBSfluegel ist die UNTERSEITE die Saugseite. Der Spalt muss
+    energiereiche Luft von der Druckseite - also von oben - auf die Saugseite
+    des Flaps leiten. Die Flapnase gehoert deshalb UEBER die Hinterkante des
+    Vorgaengers.
+
+    Gebaut war zuerst die Flugzeuganordnung mit Landeklappe: Die Nase lag
+    7,9 mm UNTER der Hinterkante, und die engste Stelle sass auf der
+    Unterseite des Hauptelements - ausgerechnet auf dessen Saugseite.
+    """
+    for winkel in (-14.0, -20.0, -26.0):
+        h, f = geo_k.platziere(
+            haupt, 250.0, -4.0,
+            [geo_k.Kaskadenvorgabe(flap, 0.35, winkel, 0.015, 0.02)])
+        assert f.nase[1] > h.hinterkante[1], f"bei {winkel} Grad"
+
+
+def test_engste_stelle_liegt_auf_der_druckseite(haupt, flap):
+    """Der Spalt muss gegen die OBERSEITE des Hauptelements messen. Liegt die
+    engste Stelle unten, saugt der Flap an der falschen Seite."""
+    h, f = geo_k.platziere(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+
+    abstaende = np.linalg.norm(h.punkte[:, None, :] - f.punkte[None, :, :], axis=2)
+    i, _ = np.unravel_index(abstaende.argmin(), abstaende.shape)
+    # In Selig-Reihenfolge laeuft der Umlauf von der Hinterkante ueber die
+    # Oberseite zur Nase und zurueck - vor dem Nasenindex liegt die Oberseite.
+    nase = int(np.argmax(np.linalg.norm(h.punkte - h.punkte[0], axis=1)))
+    assert i < nase, "engste Stelle auf der Unterseite - falsche Seite"
+
+
+def test_flapnase_steht_ueber_dem_ganzen_hauptelement(haupt, flap):
+    """Die Hinterkante ist beim Abtriebsprofil der hoechste Punkt. Steht die
+    Nase darueber, steht sie ueber dem ganzen Element."""
+    h, f = geo_k.platziere(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)])
+    assert f.nase[1] >= h.punkte[:, 1].max() - 1e-6
+
+
+def test_spalt_wird_ueber_den_ganzen_bereich_getroffen(haupt, flap):
+    """Die Suche muss stetig bleiben. Zwei Anlaeufe sind gescheitert: einer an
+    der Sprungstelle zur Durchdringung, einer am ZWEITEN freien Bereich
+    unterhalb der Hinterkante - dort haengt der Flap schlicht darunter."""
+    for spalt in (0.008, 0.012, 0.015, 0.02, 0.03, 0.04):
+        h, f = geo_k.platziere(
+            haupt, 250.0, -4.0,
+            [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, spalt, 0.02)])
+        assert f.spalt / 250.0 == pytest.approx(spalt, abs=0.0015), \
+            f"Vorgabe {spalt}"
+
+
+def test_zwei_elemente_bringen_deutlich_mehr(haupt, flap):
+    """Nach der Korrektur der Anordnung: rund 40 Prozent mehr Beiwert."""
+    _, eins = aero_k.baue_und_rechne(haupt, 250.0, -4.0, [], 15.0)
+    _, zwei = aero_k.baue_und_rechne(
+        haupt, 250.0, -4.0,
+        [geo_k.Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)], 15.0)
+    assert abs(zwei.cl) / abs(eins.cl) > 1.25
+
+
+# ------------------------------------- Kombination aus dem Generator holen
+
+KOMBINATIONEN = [
+    {"hauptprofil": "fx63137.dat",
+     "zeilen": [{"profil": "e58.dat", "sehne": 0.35, "winkel": -18.0,
+                 "spalt": 0.015, "ueberlappung": 0.02}]},
+    {"hauptprofil": "s1223.dat", "zeilen": []},
+    {"hauptprofil": "e423.dat",
+     "zeilen": [{"profil": "e58.dat", "sehne": 0.35, "winkel": -18.0,
+                 "spalt": 0.015, "ueberlappung": 0.02},
+                {"profil": "e58.dat", "sehne": 0.28, "winkel": -14.0,
+                 "spalt": 0.015, "ueberlappung": 0.02}]},
+]
+
+
+def _klick_kombination(nr):
+    """Simuliert den Klick auf den Uebernehmen-Knopf der Zeile `nr`."""
+    from dash import callback_context
+
+    klicks = [0] * len(KOMBINATIONEN)
+    klicks[nr] = 1
+    original = type(callback_context).triggered_id
+    try:
+        type(callback_context).triggered_id = property(
+            lambda self, _nr=nr: {"typ": "kombination", "nr": _nr})
+        return UI._kombination_uebernehmen(klicks, KOMBINATIONEN)
+    finally:
+        type(callback_context).triggered_id = original
+
+
+def test_kombination_setzt_tabelle_und_hauptprofil():
+    """Jannis: 'wie kann ich Kaskaden kombinationen uebernehmen'. Vorher gab
+    es die Liste nur zum Ansehen."""
+    zeilen, hauptprofil, meldung = _klick_kombination(0)
+    assert hauptprofil == "fx63137.dat"
+    assert len(zeilen) == 1
+    assert zeilen[0]["winkel"] == pytest.approx(-18.0)
+
+
+def test_einzelnes_element_leert_die_tabelle():
+    """Eine Kombination ohne Flaps muss die Tabelle auch wirklich leeren -
+    sonst bleiben Elemente stehen, die nicht mehr zum Vorschlag gehoeren."""
+    zeilen, hauptprofil, _ = _klick_kombination(1)
+    assert zeilen == []
+    assert hauptprofil == "s1223.dat"
+
+
+def test_dreielementige_kombination_kommt_vollstaendig_an():
+    zeilen, hauptprofil, _ = _klick_kombination(2)
+    assert hauptprofil == "e423.dat"
+    assert [z["winkel"] for z in zeilen] == [-18.0, -14.0]
+    # Jedes weitere Element ist kuerzer.
+    assert zeilen[1]["sehne"] < zeilen[0]["sehne"]
+
+
+def test_ohne_kombinationen_aendert_sich_nichts():
+    assert all(e is UI.no_update
+               for e in UI._kombination_uebernehmen([0], None))
+
+
+def test_uebernommene_kombination_laesst_sich_rechnen(haupt):
+    """Die Probe aufs Exempel: Was uebernommen wurde, muss durch die
+    Kaskadenrechnung laufen."""
+    zeilen, hauptprofil, _ = _klick_kombination(2)
+    stufen = UI.kaskade_aus_tabelle(zeilen)
+    profil = UI.profil_aus_datei(hauptprofil)
+    elemente = geo_k.platziere(profil, 250.0, -4.0, UI._vorgaben(stufen))
+    assert len(elemente) == 3
+    beiwert = aero_k.rechne(elemente, 15.0)
+    assert beiwert.cl < 0.0            # Abtrieb

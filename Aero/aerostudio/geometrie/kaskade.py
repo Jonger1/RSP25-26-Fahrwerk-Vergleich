@@ -152,50 +152,71 @@ def _setze_flap(vorgaenger: Elementlage, vorgabe: Kaskadenvorgabe,
     def bei_hoehe(z: float) -> np.ndarray:
         return roh + np.array([ziel_x - nase_roh[0], z - nase_roh[1]])
 
-    # Startbereich: von knapp unter der Hinterkante des Vorgaengers bis
-    # deutlich darunter. Ein Abtriebsfluegel staffelt nach unten.
-    oben = vorgaenger.hinterkante[1]
-    unten = oben - 0.6 * hauptsehne
+    # Suchbereich: von der Hinterkante des Vorgaengers nach OBEN.
+    #
+    # Das war zuerst falsch herum, und der Fehler ist grundsaetzlich: Bei
+    # einem ABTRIEBSfluegel ist die UNTERSEITE die Saugseite. Der Spalt muss
+    # energiereiche Luft von der Druckseite - also von OBEN - auf die
+    # Saugseite des Flaps leiten. Dafuer muss die Flapnase UEBER der
+    # Hinterkante des Vorgaengers stehen, damit ein konvergenter Kanal von
+    # dessen Oberseite auf die Flapunterseite entsteht.
+    #
+    # Nach unten gesucht ergab die Anordnung eines FLUGZEUGfluegels mit
+    # Landeklappe - dort stimmt es, weil dort die Oberseite die Saugseite
+    # ist. Gemessen am E423: Die Flapnase lag 7,9 mm UNTER der Hinterkante,
+    # und die engste Stelle sass an der Unterseite des Hauptelements, also
+    # ausgerechnet auf dessen Saugseite.
+    # Die Untergrenze ist die HINTERKANTE selbst, nicht tiefer. Beim
+    # Abtriebsprofil ist sie der hoechste Punkt des Vorgaengers; die Flapnase
+    # steht damit ueber dem ganzen Element.
+    #
+    # Ein Versuch mit etwas Spielraum nach unten ging schief: Unterhalb der
+    # Durchdringung gibt es einen ZWEITEN freien Bereich - dort haengt der
+    # Flap schlicht unter der Hinterkante. Die Halbierung auf "schneidet es
+    # sich" setzt aber voraus, dass weiter oben immer frei ist, und landete
+    # prompt im unteren Bereich: Die Nase sass 12,5 mm UNTER der
+    # Hinterkante, also wieder in der Flugzeuganordnung.
+    unten = vorgaenger.hinterkante[1]
+    oben = vorgaenger.hinterkante[1] + 0.6 * hauptsehne
 
-    # Erst grob abtasten, um ein Intervall zu finden, in dem der Abstand die
-    # Vorgabe kreuzt. Direkt halbieren geht nicht: Ganz oben ueberschneiden
-    # sich die Elemente, dort ist der Abstand null und nicht monoton.
-    letzte = None
-    intervall = None
-    for z in np.linspace(oben, unten, 25):
-        kontur = bei_hoehe(z)
-        if schneiden_sich(vorgaenger.punkte, kontur):
-            letzte = (z, -1.0)
-            continue
-        abstand = mindestabstand(vorgaenger.punkte, kontur)
-        if letzte is not None and (letzte[1] - spalt_mm) * (abstand - spalt_mm) <= 0:
-            intervall = (letzte[0], z)
-            break
-        letzte = (z, abstand)
+    # ZWEI Schritte, und die Reihenfolge ist wesentlich.
+    #
+    # Der Abstand ist NICHT stetig ueber die ganze Hoehe: Ab einer gewissen
+    # Tiefe schneiden sich die Elemente, und dort gibt es keinen Abstand mehr.
+    # Gemessen beim E423 mit E58-Flap: einen Schritt vor der Ueberschneidung
+    # noch 5,2 mm, im naechsten Schritt Durchdringung. Eine Halbierung ueber
+    # diesen Sprung hinweg konvergiert gegen die Sprungstelle und nicht gegen
+    # den gesuchten Spalt - sie lieferte fuer 1,2 % und 1,5 % Vorgabe beide
+    # Male 2,67 %.
+    #
+    # Deshalb wird zuerst die TIEFSTE ueberschneidungsfreie Lage gesucht.
+    # Darueber ist der Abstand stetig und waechst mit der Hoehe; erst dort
+    # wird auf den Spalt halbiert.
+    tiefste_freie = _tiefste_freie_lage(vorgaenger.punkte, bei_hoehe, unten, oben)
 
-    if intervall is None:
-        # Der gewuenschte Spalt ist in diesem Bereich nicht erreichbar. Statt
-        # zu scheitern wird die tiefste ueberschneidungsfreie Lage genommen
-        # und der TATSAECHLICHE Spalt gemeldet - der Anwender sieht dann, dass
-        # die Vorgabe nicht eingehalten werden konnte.
-        z = oben - 0.1 * hauptsehne
-        kontur = bei_hoehe(z)
+    if tiefste_freie is None:
+        # Ueberall Durchdringung - die Vorgabe ist geometrisch unmoeglich.
+        # Statt zu scheitern wird die oberste Lage genommen und der
+        # tatsaechliche Spalt gemeldet.
+        kontur = bei_hoehe(oben)
     else:
-        a, b = intervall
-        for _ in range(30):
-            m = 0.5 * (a + b)
-            kontur = bei_hoehe(m)
-            if schneiden_sich(vorgaenger.punkte, kontur):
-                abstand = -1.0
-            else:
-                abstand = mindestabstand(vorgaenger.punkte, kontur)
-            if abs(abstand - spalt_mm) < 1e-4 * hauptsehne:
-                break
-            if abstand < spalt_mm:
-                a = m
-            else:
-                b = m
-        kontur = bei_hoehe(0.5 * (a + b))
+        kleinster = mindestabstand(vorgaenger.punkte, bei_hoehe(tiefste_freie))
+        if kleinster >= spalt_mm:
+            # Enger geht es mit dieser Ueberlappung nicht. Der gemeldete Spalt
+            # sagt dem Anwender, was herausgekommen ist.
+            kontur = bei_hoehe(tiefste_freie)
+        else:
+            a_z, b_z = tiefste_freie, oben
+            for _ in range(40):
+                m = 0.5 * (a_z + b_z)
+                d = mindestabstand(vorgaenger.punkte, bei_hoehe(m))
+                if abs(d - spalt_mm) < 1e-4 * hauptsehne:
+                    break
+                if d < spalt_mm:
+                    a_z = m
+                else:
+                    b_z = m
+            kontur = bei_hoehe(0.5 * (a_z + b_z))
 
     gemessen = (mindestabstand(vorgaenger.punkte, kontur)
                 if not schneiden_sich(vorgaenger.punkte, kontur) else 0.0)
@@ -206,6 +227,29 @@ def _setze_flap(vorgaenger: Elementlage, vorgabe: Kaskadenvorgabe,
         spalt=gemessen,
         ueberlappung=float(vorgaenger.hinterkante[0] - nase[0]),
         name=vorgabe.name or f"Flap {nummer}")
+
+
+def _tiefste_freie_lage(vorgaenger: np.ndarray, bei_hoehe, unten: float,
+                        oben: float, schritte: int = 40) -> float | None:
+    """Die tiefste Hoehe, bei der sich die Elemente noch nicht durchdringen.
+
+    Ueber eine Halbierung auf der Ja/Nein-Frage "schneiden sie sich", nicht
+    auf dem Abstand: Die Frage ist monoton in der Hoehe - weiter oben ist
+    immer frei -, der Abstand dagegen springt an der Grenze.
+    """
+    if schneiden_sich(vorgaenger, bei_hoehe(oben)):
+        return None
+    if not schneiden_sich(vorgaenger, bei_hoehe(unten)):
+        return unten
+
+    frei, belegt = oben, unten
+    for _ in range(schritte):
+        mitte = 0.5 * (frei + belegt)
+        if schneiden_sich(vorgaenger, bei_hoehe(mitte)):
+            belegt = mitte
+        else:
+            frei = mitte
+    return frei
 
 
 def gesamtsehne(elemente: list[Elementlage]) -> float:

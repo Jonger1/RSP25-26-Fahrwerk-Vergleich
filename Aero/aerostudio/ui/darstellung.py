@@ -371,3 +371,58 @@ def _schnittfarbe(anteil: float) -> str:
             rgb = [round(v1 + t * (v2 - v1)) for v1, v2 in zip(c1, c2)]
             return f"rgb({rgb[0]},{rgb[1]},{rgb[2]})"
     return "rgb(60,14,17)"
+
+
+def kaskadenschnitt(elemente, bodenhoehe: float = 0.0) -> go.Figure:
+    """Die Kaskade im Schnitt, mit Boden und eingezeichneten Spalten.
+
+    Der Boden gehoert ins Bild: Bei einem Frontfluegel ist der Abstand zum
+    Boden genauso wichtig wie der Spalt zwischen den Elementen, und beide
+    zusammen sieht man nur, wenn beide da sind.
+    """
+    fig = go.Figure()
+    farben = [FARBE_KONTUR, FARBE_AKZENT, "#ea7317", "#f4c20d"]
+
+    alle_x = np.concatenate([e.punkte[:, 0] for e in elemente])
+    rand = 0.08 * (alle_x.max() - alle_x.min() + 1e-9)
+
+    # Boden zuerst, damit er hinter den Profilen liegt.
+    fig.add_trace(go.Scatter(
+        x=[alle_x.min() - rand, alle_x.max() + rand], y=[0.0, 0.0],
+        mode="lines", line=dict(color="#9aa1ab", width=2, dash="dash"),
+        name="Boden", hovertemplate="Boden<extra></extra>"))
+
+    for i, e in enumerate(elemente):
+        farbe = farben[i % len(farben)]
+        fig.add_trace(go.Scatter(
+            x=e.punkte[:, 0], y=e.punkte[:, 1], mode="lines",
+            fill="toself", fillcolor=_durchsichtig(farbe, 0.12),
+            line=dict(color=farbe, width=2),
+            name=f"{e.name} ({e.winkel:+.1f}°)",
+            hovertemplate="x %{x:.1f}<br>z %{y:.1f} mm<extra></extra>"))
+
+        if i > 0 and e.spalt > 0:
+            # Den Spalt als Mass eintragen, zwischen Nase und Vorgaenger.
+            nase = e.nase
+            fig.add_annotation(
+                x=nase[0], y=nase[1], ax=25, ay=-30, xref="x", yref="y",
+                axref="pixel", ayref="pixel", showarrow=True, arrowhead=2,
+                arrowsize=0.8, arrowcolor=farbe,
+                text=f"Spalt {e.spalt:.1f} mm", font=dict(size=10, color=farbe),
+                bgcolor="rgba(255,255,255,0.85)", borderpad=2)
+
+    fig.update_layout(**_grundlayout(
+        f"{len(elemente)} Element(e), Gesamtsehne "
+        f"{alle_x.max() - alle_x.min():.0f} mm"))
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", y=-0.22, font=dict(size=11)))
+    fig.update_yaxes(scaleanchor="x", scaleratio=1, title="z [mm] über Boden")
+    fig.update_xaxes(title="x [mm]")
+    return _achsen(fig)
+
+
+def _durchsichtig(farbe: str, anteil: float) -> str:
+    """Macht aus einer Hexfarbe eine halbdurchsichtige Fuellung."""
+    farbe = farbe.lstrip("#")
+    r, g, b = (int(farbe[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{anteil})"
