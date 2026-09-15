@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np
 
 from ..geometrie.profil import Profil
-from ..geometrie.spannweite import als_umlaeufe, huellwerte, schnitte
+from ..geometrie.spannweite import (als_umlaeufe, huellwerte,
+                                    kaskadenschnitte, schnitte)
 from ..geometrie.spline import CREO_GENAUIGKEIT_MM, entdoppeln
 from .ibl import write_ibl
 
@@ -38,10 +39,11 @@ class Exportplan:
     ausgeduennt: int = 0         # Punkte, die Creo nicht haette trennen koennen
     ausgabe: str = "kurve"       # "kurve", "profil" oder "fluegel"
     stapel: list = field(default_factory=list)   # Schnitte, nur beim Fluegel
+    elementanzahl: int = 1
 
     @property
     def ist_fluegel(self) -> bool:
-        return self.ausgabe == "fluegel"
+        return self.ausgabe in {"fluegel", "kaskadenfluegel"}
 
     @property
     def punkte_gesamt(self) -> int:
@@ -250,6 +252,59 @@ def plane_kaskade(haupt: Profil, sehne_mm: float, anstellwinkel: float,
     return Exportplan(sektionen=sektionen, punktzahl=n, toleranz_mm=versuch,
                       toleranz_gefordert=gefordert, geschlossen=True,
                       ausgeduennt=entfernt, ausgabe="kaskade")
+
+
+def plane_kaskadenfluegel(haupt: Profil, spannweite, sehne_mm: float,
+                           anstellwinkel: float, vorgaben: list,
+                           lage=(0.0, 0.0, 0.0),
+                           toleranz_mm: float = 0.005) -> Exportplan:
+    """Bereitet alle Elemente einer Kaskade als echte 3D-Flügel vor.
+
+    In der IBL-Datei kommen erst sämtliche Schnitte des Hauptelements, dann
+    die von Flap 1 usw. Dadurch kann man in Creo pro Element genau einen
+    Boundary Blend erzeugen. Die Elemente bleiben getrennt; ein Verbund über
+    den Schlitz würde die aerodynamisch notwendige Öffnung verschließen.
+    """
+    gefordert = float(toleranz_mm)
+    leiter = sorted({round(t, 6) for t in
+                     [gefordert, gefordert * 2, gefordert * 5,
+                      0.005, 0.010, 0.020, 0.050] if t >= gefordert})
+    laengste = sehne_mm * max(s.sehne for s in spannweite.stuetzstellen)
+    teile = [(haupt, laengste)] + [
+        (v.profil, laengste * v.sehne_faktor) for v in vorgaben]
+
+    n, versuch = None, gefordert
+    for versuch in leiter:
+        zahlen = [profil.punktzahl_umlauf(sehne, versuch)
+                  for profil, sehne in teile]
+        if all(zahl is not None for zahl in zahlen):
+            n = max(zahlen)
+            break
+    if n is None:
+        raise ValueError("Die Kontur eines Kaskadenelements ist selbst bei "
+                         f"{versuch:.4f} mm Toleranz nicht exportierbar.")
+
+    stapel_je_element = kaskadenschnitte(
+        haupt, spannweite, sehne_mm, anstellwinkel, vorgaben, n, lage=lage)
+    sektionen, entfernt = [], 0
+    for stapel in stapel_je_element:
+        umlaeufe = []
+        for umlauf in als_umlaeufe(stapel):
+            offen = (umlauf[:-1] if np.allclose(umlauf[0], umlauf[-1])
+                     else umlauf)
+            duenn = entdoppeln(offen, CREO_GENAUIGKEIT_MM, geschlossen=True)
+            entfernt += len(offen) - len(duenn)
+            umlaeufe.append(np.vstack([duenn, duenn[:1]]))
+        # Pro Element müssen alle Schnitte gleich aufgebaut bleiben.
+        kuerzeste = min(len(s) for s in umlaeufe)
+        sektionen.extend(_auf_laenge(s, kuerzeste) if len(s) != kuerzeste else s
+                         for s in umlaeufe)
+
+    return Exportplan(sektionen=sektionen, punktzahl=n, toleranz_mm=versuch,
+                      toleranz_gefordert=gefordert, geschlossen=True,
+                      ausgeduennt=entfernt, ausgabe="kaskadenfluegel",
+                      stapel=[s for element in stapel_je_element for s in element],
+                      elementanzahl=len(stapel_je_element))
 
 
 def schreibe(plan: Exportplan, ziel: str | Path,

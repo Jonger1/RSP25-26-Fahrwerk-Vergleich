@@ -121,6 +121,51 @@ def schnitte(profil: Profil, spannweite, grundsehne: float,
     return ergebnis
 
 
+def kaskadenschnitte(haupt: Profil, spannweite, grundsehne: float,
+                     grundwinkel: float, vorgaben: list,
+                     punkte_je_seite: int,
+                     lage: tuple[float, float, float] = (0.0, 0.0, 0.0)
+                     ) -> list[list[Schnitt]]:
+    """Baut eine vollständige 3D-Kaskade, getrennt nach Elementen.
+
+    Die 2D-Anordnung wird an *jeder* Spannweitenstation neu bestimmt. Das ist
+    wichtig: Ein Flap, der nur am Wurzelschnitt korrekt sitzt und dann als
+    starrer Körper nach außen kopiert wird, verliert bei Verjüngung und
+    Verwindung seinen Spalt. Hier bleiben Spalt und Überlappung an jeder
+    Station relativ zum jeweiligen Vorgänger erhalten.
+
+    Die Rückgabe ist ``[Hauptelement, Flap 1, ...]``. Jeder innere Stapel hat
+    dieselben y-Stationen und kann deshalb in Creo als eigener Boundary Blend
+    verwendet werden. Zwischen den Elementen wird bewusst *kein* Blend
+    erzeugt: Der Schlitz muss offen bleiben.
+    """
+    # Lokaler Import: kaskade importiert Profil; ein Modulimport oben würde
+    # unnötig einen Kreis erzeugen.
+    from . import kaskade as kaskade_geo
+
+    stellen = [s.y for s in spannweite.stuetzstellen]
+    f_sehne = _verlauf(stellen, [s.sehne for s in spannweite.stuetzstellen])
+    f_twist = _verlauf(stellen, [s.verwindung for s in spannweite.stuetzstellen])
+    f_z = _verlauf(stellen, [s.z for s in spannweite.stuetzstellen])
+    f_x = _verlauf(stellen, [s.x for s in spannweite.stuetzstellen])
+
+    stapel: list[list[Schnitt]] = [[] for _ in range(len(vorgaben) + 1)]
+    for y in np.linspace(min(stellen), max(stellen), spannweite.schnitte):
+        sehne = grundsehne * float(f_sehne(y))
+        winkel = grundwinkel + float(f_twist(y))
+        elemente = kaskade_geo.platziere(haupt, sehne, winkel, vorgaben,
+                                         punkte=punkte_je_seite)
+        for index, element in enumerate(elemente):
+            punkte = np.column_stack([
+                element.punkte[:, 0] + float(f_x(y)) + lage[0],
+                np.full(len(element.punkte), float(y) + lage[1]),
+                element.punkte[:, 1] + float(f_z(y)) + lage[2],
+            ])
+            stapel[index].append(Schnitt(float(y), element.sehne,
+                                         element.winkel, punkte))
+    return stapel
+
+
 def als_sektionen(stapel: list[Schnitt]) -> list[np.ndarray]:
     """Zerlegt den Stapel in IBL-Sektionen: je Schnitt Ober- und Unterseite.
 

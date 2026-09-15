@@ -512,8 +512,10 @@ def _ansicht_creo() -> html.Div:
                          {"label": " Profil aus zwei Kurven", "value": "profil"},
                          {"label": " 3D-Flügel über die Spannweite",
                           "value": "fluegel"},
-                         {"label": " Kaskade (alle Elemente aus dem Reiter "
-                                   "Kaskade)", "value": "kaskade"}],
+                         {"label": " Kaskade im Schnitt (zum Extrudieren)",
+                          "value": "kaskade"},
+                         {"label": " 3D-Kaskade über die Spannweite",
+                          "value": "kaskadenfluegel"}],
                 style={"fontSize": "13px"}),
                 "Eine geschlossene Kurve ist der Normalfall: EIN umlaufender "
                 "Spline, aus dem sich sofort eine Skizze und daraus ein "
@@ -521,7 +523,9 @@ def _ansicht_creo() -> html.Div:
                 "getrennt — die berühren sich nur, für Creo ist das keine "
                 "geschlossene Kontur, dafür braucht diese Form etwa ein "
                 "Drittel der Punkte. 3D-Flügel schreibt einen Schnittstapel "
-                "über die Spannweite, aus dem in Creo ein Verbund wird."),
+                "über die Spannweite, aus dem in Creo ein Verbund wird. "
+                "3D-Kaskade schreibt für jedes Element einen eigenen Stapel; "
+                "die Schlitze bleiben dabei ausdrücklich offen."),
             _feld("Toleranz [mm]",
                   _zahlenfeld("toleranz", 0.005, 0.001, 0.0005, 0.5),
                   "Creos Modellgenauigkeit liegt bei 0,010 mm."),
@@ -998,6 +1002,12 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
             plan = export.plane_kaskade(
                 profil, element.sehne, element.anstellwinkel,
                 _vorgaben(element.kaskade), float(toleranz or 0.005))
+        elif ausgabe == "kaskadenfluegel" and element.spannweite is not None:
+            plan = export.plane_kaskadenfluegel(
+                profil, element.spannweite, element.sehne,
+                element.anstellwinkel, _vorgaben(element.kaskade),
+                lage=(element.pos_x, element.pos_y, element.pos_z),
+                toleranz_mm=float(toleranz or 0.005))
         elif ausgabe == "fluegel" and element.spannweite is not None:
             plan = export.plane_fluegel(
                 profil, element.spannweite, element.sehne, element.anstellwinkel,
@@ -1023,6 +1033,9 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
                     f"Kaskade, {len(plan.sektionen)} geschlossene Kurven - "
                     f"eine je Element, Hauptelement zuerst"
                     if plan.ausgabe == "kaskade" else
+                    f"3D-Kaskade, {len(element.kaskade) + 1} getrennte "
+                    "Elemente über die Spannweite, Schlitze offen"
+                    if plan.ausgabe == "kaskadenfluegel" else
                     "eine geschlossene Kurve" if plan.geschlossen
                     else "Ober- und Unterseite getrennt"),
                 f"AERO_SPEC_HASH: {spec.hash()}",
@@ -1785,8 +1798,12 @@ def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
                       "geschlossene Kurve — in Creo jede einzeln projizieren "
                       "und extrudieren"
                       if plan.ausgabe == "kaskade" else
-                      f"{len(plan.sektionen)} geschlossene Schnitte über die "
-                      "Spannweite — in Creo als Verbund zu einem Volumen"
+                      (f"3D-Kaskade aus {plan.elementanzahl} "
+                       "getrennten Elementen — in Creo je Element ein eigener "
+                       "Boundary Blend; die Schlitze nicht schließen"
+                       if plan.ausgabe == "kaskadenfluegel" else
+                       f"{len(plan.sektionen)} geschlossene Schnitte über die "
+                       "Spannweite — in Creo als Verbund zu einem Volumen")
                       if plan.ist_fluegel else
                       "eine geschlossene Kurve — in Creo unmittelbar als "
                       "Skizze verwendbar und damit extrudierbar"

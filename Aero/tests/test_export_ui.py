@@ -14,7 +14,8 @@ from aerostudio.formate import export
 from aerostudio.formate.ibl import frame_matrix, to_creo, write_ibl
 from aerostudio.geometrie.profil import (Profil, aus_quelle, katalogprofile,
                                           profil_fuer)
-from aerostudio.spec.modell import ProfilAusDatei, ProfilNaca, Wirkrichtung
+from aerostudio.spec.modell import (ProfilAusDatei, ProfilNaca, Spannweite,
+                                    Wirkrichtung)
 from aerostudio.spec.projekt import AeroSpec, SperreBelegt, sperre
 from dash import html
 
@@ -514,6 +515,32 @@ def test_fluegelplan_hat_gleich_aufgebaute_schnitte():
     assert len(plan.sektionen) == 13
     for s in plan.sektionen:
         assert np.allclose(s[0], s[-1])          # jeder Schnitt schliesst sich
+
+
+def test_3d_kaskade_exportiert_getrennte_stapel_mit_offenem_schlitz():
+    """Der Flap darf nicht nur im Wurzelschnitt existieren.
+
+    Pro Element entsteht ein eigener, gleich aufgebauter Schnittstapel. So
+    lassen sich in Creo getrennte Volumina bilden und der Schlitz bleibt offen.
+    """
+    from aerostudio.geometrie.kaskade import Kaskadenvorgabe
+
+    haupt = _profil().gespiegelt()
+    flap = Profil.aus_dat(Path(__file__).resolve().parents[1]
+                          / "profile" / "katalog" / "e58.dat").gespiegelt()
+    spw = Spannweite.gerade(300.0)
+    plan = export.plane_kaskadenfluegel(
+        haupt, spw, 250.0, -4.0,
+        [Kaskadenvorgabe(flap, 0.35, -20.0, 0.015, 0.02)],
+        lage=(-600.0, 0.0, 90.0))
+    assert plan.ausgabe == "kaskadenfluegel"
+    assert plan.elementanzahl == 2
+    assert len(plan.sektionen) == 2 * spw.schnitte
+    assert len({len(s) for s in plan.sektionen[:spw.schnitte]}) == 1
+    assert len({len(s) for s in plan.sektionen[spw.schnitte:]}) == 1
+    # Die Flapnase der Wurzel liegt über der Hauptelement-Hinterkante.
+    haupt_wurzel, flap_wurzel = plan.sektionen[0], plan.sektionen[spw.schnitte]
+    assert flap_wurzel[:, 2].max() > haupt_wurzel[:, 2].max()
 
 
 def test_fluegelschnitte_halten_den_creo_punktabstand_ein():
