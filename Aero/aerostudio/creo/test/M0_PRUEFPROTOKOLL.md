@@ -2,11 +2,27 @@
 
 **Ziel:** Beweisen, dass eine Kurve aus dem Tool maßhaltig und wiederholbar in Creo 8 landet. Solange das nicht bewiesen ist, ist alles ab M1 Spekulation.
 
-Stand 09.09.2026: Umgebung geprüft, **nichts zu installieren**. Maßhaltigkeit bewiesen, Splineverhalten identifiziert. Offen sind nur noch die Sichtprüfung mit der vorgedrehten Datei, der Kommentartest und der Mapkey — zusammen etwa 15 Minuten.
+Stand 21.09.2026: Umgebung geprüft, **nichts zu installieren**. Maßhaltigkeit bewiesen, Splineverhalten identifiziert. Offen sind nur noch die Sichtprüfung mit der vorgedrehten Datei, der Kommentartest und der Mapkey — **zusammen ein Durchlauf von etwa 15 Minuten**, danach ist M0 zu.
+
+**Was noch offen ist, sagt das Skript — nicht diese Liste:**
+
+```
+python M0_abnahme.py
+```
+
+Es liest `creo8.yaml` und die Prüfkurven, rechnet nach, was ohne Creo nachrechenbar ist, und nennt jeden Eintrag, der noch auf eine Antwort wartet, mit seinem Pfad in der YAML. Eine handgepflegte Häkchenliste weiß immer nur so viel, wie zuletzt jemand hineingeschrieben hat — diese hier stand am 21.09. noch auf „Mapkey entfällt", was auf einer Verwechslung beruhte (siehe Schritt 7).
 
 **Dateien** in diesem Ordner:
-- `M0_pruefkurve.ibl` — die Prüfkurve
-- `M0_pruefkurve_kommentiert.ibl` — gleiche Geometrie mit Kommentarzeilen
+
+| Datei | Wofür |
+|---|---|
+| `M0_pruefkurve.ibl` | die Prüfkurve, ohne Kommentare |
+| `M0_kommentar_vor_kopf.ibl` | dieselbe Geometrie, `!`-Zeilen **über** `open` |
+| `M0_kommentar_nach_kopf.ibl` | dieselbe Geometrie, `!`-Zeilen **unter** `arclength` |
+| `M0_kommentar_zwischen.ibl` | dieselbe Geometrie, `!`-Zeilen **vor jeder Sektion** |
+| `M0_pruefkurve_kommentiert.ibl` | Altbestand, identisch mit `vor_kopf` |
+
+Neu erzeugen mit `python erzeuge_pruefkurve.py`. Dass alle Varianten **punktgleiche** Geometrie haben, prüft `M0_abnahme.py` nach — sonst wäre ein Formunterschied in Creo nicht als Kommentarbefund lesbar.
 
 ---
 
@@ -154,16 +170,39 @@ Die Annahme im Konzept lautete 60–120 Punkte — das war zu konservativ. Es si
 
 ---
 
-## Schritt 6 — Kommentarzeilen testen
+## Schritt 6 — Kommentarzeilen testen *(der wichtigste offene Punkt)*
 
-Ein zweites Mal importieren, diesmal `M0_pruefkurve_kommentiert.ibl`. Gleiche Geometrie, aber mit `!`-Kommentarzeilen im Kopf und zwischen den Sektionen.
+**Warum das kein Nebenschauplatz ist:** Das Werkzeug verlässt sich im Betrieb längst darauf. `ui/app.py` schreibt in **jede** exportierte IBL fünf Kommentarzeilen samt `AERO_SPEC_HASH`, das Skelett ebenso. Fällt der Befund negativ aus, ist nicht ein Nebenweg betroffen, sondern jeder Export.
 
-- **Funktioniert** → wir können den Spec-Hash direkt in jede IBL schreiben. Jede Kurve in Creo wäre bis auf den Git-Stand rückverfolgbar, ohne Umweg über Modellparameter.
-- **Scheitert** → auch ein Ergebnis. Dann bleiben IBL-Dateien kommentarfrei und die Herkunft steht nur im Creo-Parameter `AERO_SPEC_HASH`.
+**Was schon bewiesen ist:** Das Zeichen `!` als Kommentar am Zeilenende funktioniert. Jede geschriebene Sektion trägt `begin section ! 1`, und der Import vom 09.09. lief damit durch. Offen ist allein die **Position ganzer Kommentarzeilen**.
+
+Deshalb drei Dateien statt einer — ein einzelner Fehlschlag mit einer gemischten Datei sagt sonst nicht, welche Stelle Creo stört:
+
+| # | Datei | `!`-Zeilen stehen | Import klappt? |
+|---|---|---|---|
+| 1 | `M0_kommentar_vor_kopf.ibl` | über `open` | ☐ ja ☐ nein |
+| 2 | `M0_kommentar_nach_kopf.ibl` | unter `arclength` | ☐ ja ☐ nein |
+| 3 | `M0_kommentar_zwischen.ibl` | vor jeder Sektion | ☐ ja ☐ nein |
+
+Jede Datei in ein frisches Teil importieren, wie in Schritt 3. Fehlermeldungen **wörtlich** notieren.
+
+**Was daraus folgt:**
+
+- **Mindestens eine Variante klappt** → der Spec-Hash darf in die Datei. Jede Kurve in Creo ist bis auf den Git-Stand rückverfolgbar, ohne Umweg über Modellparameter. Die klappende Variante wird zur Vorgabe.
+- **Keine klappt** → IBL-Dateien bleiben kommentarfrei. In `creo8.yaml` genügt dann `befunde.ibl_kommentarzeilen_erlaubt: false`; der Exporter lässt sie ab dem nächsten Start von selbst weg. **Am Code ist nichts zu ändern** — genau dafür gibt es die Adapterschicht. Die Herkunft steht dann nur im Creo-Parameter `AERO_SPEC_HASH`, den M5 setzt.
+
+Einzutragen in `creo8.yaml` unter `befunde`: `ibl_kommentar_vor_kopf`, `ibl_kommentar_nach_kopf`, `ibl_kommentar_zwischen_sektionen` und die Zusammenfassung `ibl_kommentarzeilen_erlaubt`.
 
 ---
 
 ## Schritt 7 — Mapkey aufzeichnen
+
+> **Korrektur vom 21.09.2026.** In `creo8.yaml` stand hierzu `ENTFAELLT`, begründet damit, dass die Student Edition keine Toolkit-Anwendungen lädt. Das war ein Kurzschluss — es sind zwei verschiedene Mechanismen:
+>
+> - Ein **Mapkey** ist ein Bordmittel von Creo Parametric: eine aufgezeichnete Klickfolge in der `config.pro`. Kein TOOLKIT, kein J-Link, keine Zusatzlizenz. **Er lässt sich hier aufzeichnen und abspielen.**
+> - **CREOSON** ist eine Toolkit-Anwendung, die einen Mapkey von *außen* abfeuert. Das ist es, was die Lizenz blockiert.
+>
+> Nicht erreichbar ist also nur das Abfeuern aus Python, nicht der Mapkey selbst. Er lohnt trotzdem: Er ersetzt die vier Importklicks durch ein Tastenkürzel und ist die fertige Vorarbeit für M5, sobald eine Volllizenz da ist.
 
 Der Baustein, aus dem in M5 die Automatisierung wird.
 
@@ -179,24 +218,39 @@ Der Baustein, aus dem in M5 die Automatisierung wird.
 
 ## Was am Ende zurückkommt
 
-1. Die sechs Sichtprüfungen mit der vorgedrehten Datei (Schritt 4)
-2. Kommentierte Datei importierbar? (Schritt 6)
-3. Mapkey-Text und ob das Abspielen funktioniert (Schritt 7)
-4. Alles, was unerwartet war — Fehlermeldungen bitte wörtlich
+Alles wandert nach `creo8.yaml`, nicht in eine Notiz — nur dort wirkt es.
+
+| # | Frage | Eintrag in `creo8.yaml` |
+|---|---|---|
+| 1 | Die sechs Sichtprüfungen (Schritt 4) | `befunde.sichtpruefung_ok` |
+| 2 | Kommentare über `open`? | `befunde.ibl_kommentar_vor_kopf` |
+| 3 | Kommentare unter `arclength`? | `befunde.ibl_kommentar_nach_kopf` |
+| 4 | Kommentare vor jeder Sektion? | `befunde.ibl_kommentar_zwischen_sektionen` |
+| 5 | Zusammenfassung daraus | `befunde.ibl_kommentarzeilen_erlaubt` |
+| 6 | Mapkey-Text | `mapkeys.import_curve` |
+| 7 | Mapkey zum Löschen des Import-Features | `mapkeys.delete_import_feature` |
+| 8 | Steckt der Dateiname fest im Mapkey? | `mapkeys.dateiname_im_mapkey` |
+
+Alles, was unerwartet war, gehört dazu — Fehlermeldungen bitte **wörtlich**. Was nicht klappt, wird nicht weggelassen, sondern notiert: Davon hängt der Zuschnitt von M5 ab.
 
 ---
 
 ## Abnahme M0
 
-- [x] Umgebung geprüft, nichts zu installieren
-- [x] IBL-Import funktioniert
-- [x] Alle Messungen exakt getroffen
-- [x] Spline glatt und durch seine Stützpunkte, Kurventyp identifiziert
-- [x] Achskonvention festgeschrieben und in den Exporter verlegt
-- [x] Einheiten der Teamvorlage bestätigt
-- [ ] Sichtprüfung mit vorgedrehter Datei
-- [ ] Verhalten bei Kommentarzeilen geklärt
-- [ ] Mapkey wiederholt den Import ohne Handeingriff
-- [ ] `creo8.yaml` ohne offene Einträge außer `OFFEN_BIS_M4` und `OFFEN_BIS_M5`
+Der Stand wird **nicht mehr hier** gepflegt, sondern gerechnet:
 
-Was nicht klappt, wird nicht weggelassen, sondern notiert — davon hängt der Zuschnitt von M1 und M5 ab.
+```
+python M0_abnahme.py
+```
+
+Das Skript prüft ohne Creo nach, dass die Achsabbildung eine Drehung und keine Spiegelung ist, dass die Sollmaße in der erzeugten Datei stecken und dass alle Kommentarvarianten punktgleiche Geometrie haben. Danach listet es jeden Eintrag aus `creo8.yaml`, der noch auf eine Antwort wartet — getrennt nach „blockiert M0" und „bewusst auf M4/M5 vertagt". Es endet mit Rückgabewert 0, sobald M0 zu ist.
+
+**Bereits bewiesen** (Details in `creo8.yaml` unter `befunde` und `spline`):
+
+- [x] Umgebung geprüft, nichts zu installieren
+- [x] IBL-Import funktioniert, Direktimport ohne eigenes Koordinatensystem
+- [x] Alle Messungen exakt getroffen, ±0,01 mm eingehalten
+- [x] Spline glatt und durch seine Stützpunkte, Kurventyp identifiziert (not-a-knot, 8 ppm)
+- [x] Achskonvention festgeschrieben, in den Exporter verlegt und **vom Code aus der Profildatei gelesen** (M0 Aufgabe 6)
+- [x] Einheiten der Teamvorlage bestätigt
+- [x] `!` als Kommentar am Zeilenende belegt (`begin section ! 1`)

@@ -1,10 +1,11 @@
+open
+arclength
+
 ! RSP Aero Studio - M0 Kommentartest
-! Variante: Kommentarzeilen VOR dem Kopf (ueber 'open')
+! Variante: Kommentarzeilen NACH dem Kopf (unter 'arclength')
 ! Geometrie identisch zu M0_pruefkurve.ibl
 ! AERO_SPEC_HASH: 0000000000000000000000000000000000000000
 ! Einheiten: mm
-open
-arclength
 
 begin section ! 1
         begin curve

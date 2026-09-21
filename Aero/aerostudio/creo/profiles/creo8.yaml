@@ -118,20 +118,71 @@ export:
   kein_eigenes_ks_noetig: true
 
 mapkeys:
-  # In M0 aufgezeichnet. Einzige versionsfragile Stelle im ganzen System -
-  # deshalb hier isoliert und durch "aerostudio doctor" abgesichert.
-  # HINFAELLIG. Am 09.09.2026 hat sich gezeigt, dass die Creo Student Edition
-  # gar keine Zusatzprogramme laedt - siehe befunde.plugin_laedt.
-  # Der Import bleibt manuell: Modell -> Daten abrufen -> Importieren, vier
-  # Klicks. Das funktioniert und braucht keine Lizenz.
-  import_curve: ENTFAELLT
-  delete_import_feature: ENTFAELLT
+  # Einzige versionsfragile Stelle im ganzen System - deshalb hier isoliert
+  # und spaeter durch "aerostudio doctor" abgesichert.
+  #
+  # KORREKTUR 21.09.2026: Hier stand "ENTFAELLT", begruendet mit
+  # befunde.plugin_laedt. Das war ein Kurzschluss, denn es sind zwei
+  # verschiedene Mechanismen:
+  #
+  #   Mapkey  = Bordmittel von Creo Parametric. Eine aufgezeichnete
+  #             Klickfolge in der config.pro (ab Creo 11: Mapkeys.pro).
+  #             Kein TOOLKIT, kein J-Link, keine Zusatzlizenz.
+  #             -> In der Student Edition aufzeichenbar und abspielbar.
+  #
+  #   CREOSON = Toolkit-Anwendung, die einen Mapkey von AUSSEN abfeuert.
+  #             -> Braucht das Laden eines Zusatzprogramms, geht hier nicht.
+  #
+  # Nicht erreichbar ist also nur das Abfeuern aus Python, nicht der Mapkey.
+  # Er hat auch ohne Automatisierung Wert: Er ersetzt die vier Importklicks
+  # durch ein Tastenkuerzel und ist die fertige Vorarbeit fuer M5, sobald
+  # eine Volllizenz da ist.
+  import_curve: AUSFUELLEN
+  delete_import_feature: AUSFUELLEN
+
+  # Der Dateiname steckt in der aufgezeichneten Klickfolge mit drin. Fuer M5
+  # brauchen wir deshalb entweder einen festen Dateinamen, den das Werkzeug
+  # immer ueberschreibt, oder eine Mapkey-Variante, die den Dialog offen
+  # laesst (Creo zeichnet bei Bildschirmauswahl automatisch eine Pause auf).
+  # Was davon in Creo 8 traegt, faellt beim Aufzeichnen heraus.
+  dateiname_im_mapkey: AUSFUELLEN
 
 befunde:
   ibl_import_funktioniert: true
   masshaltigkeit_ok: true
-  ibl_kommentarzeilen_erlaubt: AUSFUELLEN
   direktimport_geprueft: true               # vorgedrehte .ibl ohne eigenes KS
+
+  # Die sechs Sichtpruefungen aus Schritt 4 des Pruefprotokolls, mit der
+  # VORGEDREHTEN Datei. Beim ersten Versuch am 05.09. lag das Rechteck flach
+  # und der Spline hing nach unten - das war die ungedrehte Datei, und genau
+  # das kehrt die Drehung im Exporter um. Nachgewiesen ist die Umkehr noch
+  # nicht: gemessen wurde am 09.09. zwar exakt, aber Masse allein wuerden
+  # eine um 180 Grad verdrehte Lage nicht auffallen lassen.
+  sichtpruefung_ok: AUSFUELLEN
+
+  # Kommentarzeilen: der letzte wirklich offene Befund aus M0 - und der mit
+  # Abstand folgenreichste, denn das Werkzeug verlaesst sich im Betrieb
+  # bereits darauf. ui/app.py schreibt in JEDE exportierte .ibl fuenf
+  # Kommentarzeilen samt AERO_SPEC_HASH, das Skelett ebenso. Faellt der
+  # Befund negativ aus, ist nicht ein Nebenweg betroffen, sondern jeder
+  # Export.
+  #
+  # TEILBEFUND, schon belegt: Das Zeichen "!" als Kommentar am Zeilenende
+  # funktioniert. Jede geschriebene Sektion traegt "begin section ! 1", und
+  # der Import vom 09.09.2026 lief damit durch. Offen ist nur die POSITION
+  # ganzer Kommentarzeilen. Deshalb drei getrennte Pruefdateien statt einer:
+  # ein einziger Fehlschlag sagt sonst nicht, welche Stelle das Problem ist.
+  ibl_kommentar_inline: true                # "begin section ! 1" - bewiesen
+  ibl_kommentar_vor_kopf: AUSFUELLEN        # "!"-Zeilen VOR "open"
+  ibl_kommentar_nach_kopf: AUSFUELLEN       # "!"-Zeilen NACH "arclength"
+  ibl_kommentar_zwischen_sektionen: AUSFUELLEN
+
+  # Zusammenfassung der drei. Steht hier `false`, laesst formate/ibl.py die
+  # Kommentare von selbst weg - ohne Codeaenderung, nur ueber diese Zeile.
+  # Solange AUSFUELLEN, bleibt es beim bisherigen Verhalten (geschrieben):
+  # Ein Fehlschlag faellt beim Import sofort auf und richtet keinen stillen
+  # Schaden an - anders als eine Spiegelung, die man der Form nicht ansieht.
+  ibl_kommentarzeilen_erlaubt: AUSFUELLEN
 
   # BEFUND 09.09.2026: Das Plugin laedt NICHT.
   # Weder ueber Werkzeuge -> Hilfsanwendungen (der Knopf ist in der Student
@@ -146,6 +197,25 @@ befunde:
   automatisierung_moeglich_ab: "Volllizenz mit TOOLKIT-Option"
   geprueft_am: "2026-09-09"
   geprueft_von: "Jannis"
+
+  # SPUR FUER M5, aufgetan am 21.09.2026 - noch NICHT geprueft.
+  # Creo nimmt eine Trail-Datei als Befehlszeilenargument entgegen und spielt
+  # die darin aufgezeichnete Sitzung ab. Eine Trail-Datei kann einen
+  # in-session-Mapkey ueber sein Kuerzel aufrufen. Das liefe vollstaendig an
+  # TOOLKIT vorbei und waere damit auch auf der Student Edition ein Weg zur
+  # Automatisierung - genau die Luecke, die CREOSON hier nicht fuellen kann.
+  #
+  # Vorsicht ist angebracht, und zwar aus drei Gruenden:
+  #   1. Die Quelle ist ein PTC-Community-Beitrag, keine Produktdokumentation.
+  #   2. Trail-Dateien sind noch versionsfragiler als Mapkeys - sie zeichnen
+  #      jede Interaktion auf und brechen bei jeder UI-Aenderung.
+  #   3. Startet die Trail-Datei eine eigene Creo-Sitzung, kostet das jedes
+  #      Mal Minuten und zwei Gigabyte. Fuer einen DoE-Lauf ueber 50
+  #      Varianten (M8) waere das unbrauchbar.
+  # Zu klaeren in M5, nicht in M0. Hier steht es nur, damit es nicht
+  # verlorengeht.
+  trailfile_weg_moeglich: UNGEPRUEFT
+  trailfile_quelle: "PTC Community, 'Run mapkey from a trail file'"
 
   # Gemessen am 09.09.2026, alle Sollwerte exakt getroffen:
   #   grosses Rechteck   200.000 x  50.000 mm

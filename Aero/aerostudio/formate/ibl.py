@@ -32,23 +32,36 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
-# Abbildung Werkzeug -> Creo-Vorlage, Standardfall.
-# Gelesen als: die X-Achse in Creo ist unsere +x, die Y-Achse unsere +z,
-# die Z-Achse unsere -y. Das ist eine echte Drehung (Determinante +1),
-# also keine Spiegelung - das wird in `frame_matrix` geprueft.
-STANDARD_FRAME = {"creo_x": "+x", "creo_y": "+z", "creo_z": "-y"}
+def standard_frame() -> dict[str, str]:
+    """Die Achsabbildung aus dem Versionsprofil.
+
+    Bis M0 stand sie zusaetzlich hier im Code. Das war genau die doppelte
+    Wahrheit, die die Versionsstrategie verhindern soll: Eine neue
+    Creo-Vorlage haette zwei Aenderungen an verschiedenen Orten gekostet.
+    Jetzt kommt sie aus creo8.yaml; fehlt die Datei, greift die dort
+    hinterlegte Vorgabe, und das Profil sagt es ueber `maengel`.
+    """
+    from ..creo.profil import profil
+    return profil().frame
+
+
+def kommentare_erlaubt() -> bool:
+    """Darf in den Kopf einer .ibl ein "!"-Kommentar? Befund aus dem Profil."""
+    from ..creo.profil import profil
+    return profil().kommentare_erlaubt
+
 
 _ACHSE = {"x": 0, "y": 1, "z": 2}
 
 
 def frame_matrix(frame: dict[str, str] | None = None) -> np.ndarray:
-    """Baut die 3x3-Matrix aus einer Achsabbildung wie STANDARD_FRAME.
+    """Baut die 3x3-Matrix aus einer Achsabbildung wie `standard_frame()`.
 
     Wirft einen Fehler, wenn die Abbildung keine Drehung ist. Eine Spiegelung
     wuerde ein Profil seitenverkehrt nach Creo bringen, und zwar ohne dass es
     an der Geometrie auffaellt - deshalb wird hier hart geprueft.
     """
-    frame = frame or STANDARD_FRAME
+    frame = frame or standard_frame()
     M = np.zeros((3, 3))
     for i, schluessel in enumerate(("creo_x", "creo_y", "creo_z")):
         token = frame[schluessel].strip().lower()
@@ -78,6 +91,7 @@ def write_ibl(
     *,
     frame: dict[str, str] | None = None,
     kommentare: Iterable[str] | None = None,
+    kommentarort: str = "vor_kopf",
     nachkommastellen: int = 6,
     punktnummern: bool = True,
     geschlossen: bool = False,
@@ -87,10 +101,19 @@ def write_ibl(
     sektionen        Liste von Nx3-Feldern im Werkzeug-Koordinatensystem, in mm.
                      Zwei Punkte ergeben in Creo eine Gerade, mehr als zwei
                      einen Spline.
-    frame            Achsabbildung; None nimmt STANDARD_FRAME.
+    frame            Achsabbildung; None nimmt die aus dem Versionsprofil.
     kommentare       Zeilen, die als "! ..." vor den Kopf geschrieben werden.
-                     Ob Creo das akzeptiert, ist ein offener M0-Befund - im
-                     Zweifel weglassen.
+                     Ob Creo das annimmt, steht als Befund im Versionsprofil
+                     (befunde.ibl_kommentarzeilen_erlaubt). Steht dort `false`,
+                     werden sie stillschweigend weggelassen - der Aufrufer
+                     muss das nicht wissen, und ein negativer Befund aus Creo
+                     kostet dann keine Codeaenderung, sondern eine Zeile YAML.
+    kommentarort     Wo die Kommentare landen. "vor_kopf" (Vorgabe) schreibt
+                     sie ueber "open", "nach_kopf" darunter, "zwischen" vor
+                     jede Sektion. Das ist keine Spielerei, sondern der
+                     M0-Kommentartest: Ein einzelner Fehlschlag mit einer
+                     einzigen Variante sagt nicht, WELCHE Stelle Creo stoert.
+                     Fuer den Betrieb bleibt es bei "vor_kopf".
     punktnummern     Die fuehrende Nummer je Punkt ist laut PTC optional.
     geschlossen      Schreibt "closed" statt "open" in den Kopf. Creo
                      verbindet dann den letzten Punkt jeder Sektion wieder
@@ -102,13 +125,22 @@ def write_ibl(
                      Der letzte Punkt darf dann NICHT der erste sein, sonst
                      entsteht ein Segment der Laenge null.
     """
+    if kommentarort not in {"vor_kopf", "nach_kopf", "zwischen"}:
+        raise ValueError(f"Unbekannter Kommentarort: {kommentarort!r}")
+
     pfad = Path(pfad)
     zeilen: list[str] = []
 
-    if kommentare:
-        zeilen += [f"! {k}" for k in kommentare]
+    texte = [f"! {k}" for k in kommentare] if (
+        kommentare and kommentare_erlaubt()) else []
+
+    if kommentarort == "vor_kopf":
+        zeilen += texte
 
     zeilen += ["closed" if geschlossen else "open", "arclength", ""]
+
+    if kommentarort == "nach_kopf" and texte:
+        zeilen += texte + [""]
 
     for nr, sektion in enumerate(sektionen, start=1):
         p = to_creo(sektion, frame)
@@ -121,6 +153,8 @@ def write_ibl(
         if geschlossen and len(p) < 3:
             raise ValueError(f"Sektion {nr} hat fuer eine geschlossene Kurve "
                              f"zu wenige Punkte.")
+        if kommentarort == "zwischen" and texte:
+            zeilen += texte
         zeilen.append(f"begin section ! {nr}")
         zeilen.append("        begin curve")
         for i, (x, y, z) in enumerate(p, start=1):

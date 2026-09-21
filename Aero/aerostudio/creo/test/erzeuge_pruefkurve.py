@@ -56,29 +56,57 @@ def pruefgeometrie() -> list[np.ndarray]:
     return rechteck_gross + spline + rechteck_klein + marke
 
 
+# Die drei Stellen, an denen eine Kommentarzeile stehen kann. Getrennte
+# Dateien, weil ein einzelner Fehlschlag mit einer gemischten Datei nicht
+# sagt, WELCHE Stelle Creo stoert - und weil davon abhaengt, ob der
+# AERO_SPEC_HASH in die Datei darf oder in einen Creo-Parameter muss.
+#
+# Inline hinter "begin section" ist bereits bewiesen: Jede geschriebene
+# Sektion traegt "begin section ! 1", und der Import vom 09.09.2026 lief.
+KOMMENTARORTE = {
+    "vor_kopf": "Kommentarzeilen VOR dem Kopf (ueber 'open')",
+    "nach_kopf": "Kommentarzeilen NACH dem Kopf (unter 'arclength')",
+    "zwischen": "Kommentarzeilen vor JEDER Sektion",
+}
+
+
+def kommentartext(ort: str) -> list[str]:
+    return [
+        "RSP Aero Studio - M0 Kommentartest",
+        f"Variante: {KOMMENTARORTE[ort]}",
+        "Geometrie identisch zu M0_pruefkurve.ibl",
+        "AERO_SPEC_HASH: 0000000000000000000000000000000000000000",
+        "Einheiten: mm",
+    ]
+
+
 def main() -> None:
     sektionen = pruefgeometrie()
+    geschrieben = [write_ibl(HIER / "M0_pruefkurve.ibl", sektionen)]
 
-    write_ibl(HIER / "M0_pruefkurve.ibl", sektionen)
+    for ort in KOMMENTARORTE:
+        geschrieben.append(write_ibl(
+            HIER / f"M0_kommentar_{ort}.ibl", sektionen,
+            kommentare=kommentartext(ort), kommentarort=ort,
+        ))
 
-    write_ibl(
-        HIER / "M0_pruefkurve_kommentiert.ibl",
-        sektionen,
-        kommentare=[
-            "RSP Aero Studio - M0 Pruefkurve, kommentierte Variante",
-            "Zweck: pruefen, ob Creo 8 Kommentarzeilen in einer IBL akzeptiert.",
-            "Geometrie identisch zu M0_pruefkurve.ibl",
-            "AERO_SPEC_HASH: 0000000000000000000000000000000000000000",
-            "Einheiten: mm",
-        ],
-    )
+    # Die alte Sammeldatei bleibt, damit aeltere Protokollstaende weiter
+    # aufgehen - sie ist identisch mit der Variante "vor_kopf".
+    geschrieben.append(write_ibl(
+        HIER / "M0_pruefkurve_kommentiert.ibl", sektionen,
+        kommentare=kommentartext("vor_kopf"), kommentarort="vor_kopf",
+    ))
 
-    print(f"Geschrieben: {len(sektionen)} Sektionen")
-    print(f"  {HIER / 'M0_pruefkurve.ibl'}")
-    print(f"  {HIER / 'M0_pruefkurve_kommentiert.ibl'}")
+    print(f"Geschrieben: {len(sektionen)} Sektionen je Datei")
+    for pfad in geschrieben:
+        print(f"  {pfad.name}")
     print()
     print("Die Koordinaten sind bereits in das System der Creo-Vorlage gedreht.")
     print("Import ohne eigenes Koordinatensystem, direkt auf das Standard-KS.")
+    print()
+    print("Alle vier Dateien haben IDENTISCHE Geometrie. Was sie unterscheidet,")
+    print("sind allein die Kommentarzeilen - wer in Creo einen Unterschied in")
+    print("der Form sieht, hat einen Befund, keinen Zufall.")
 
 
 if __name__ == "__main__":

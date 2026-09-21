@@ -13,10 +13,16 @@ Es gibt drei Ausbaustufen der Creo-Anbindung. Sie bauen aufeinander auf — wir 
 | Stufe | Was | PTC-Lizenz nötig? | Aufwand | Wann |
 |---|---|---|---|---|
 | **0 — Dateiübergabe** | Tool schreibt `.ibl`, du importierst von Hand (3 Klicks) | keine | — | ab M1 nutzbar |
-| **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | **keine** — CREOSON läuft ohne Zusatzlizenz auf dem kostenlosen J-Link; für **Creo 8 mindestens CREOSON 2.8.0** | mittel | **M5, das realistische Ziel** |
+| **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | keine *Zusatz*lizenz, aber eine Lizenz, die **Toolkit-Anwendungen lädt** — siehe Befund unten | mittel | M5, blockiert auf der Student Edition |
 | **2 — Echtes Ribbon-Plugin** | Eigener Reiter "Aero Studio" in Creo mit Buttons "Spec laden", "Update", "Regelcheck" | Ribbon-Buttons und Menüs: **kostenloses J-Link reicht.** Nur eingebettete PTC-Dialoge (uifc) brauchen die kostenpflichtige Object-TOOLKIT-Lizenz — ein normales Java-Swing-Fenster geht auch ohne | hoch | M7, optional |
 
 **Empfehlung: Stufe 1 als Zielbild, Stufe 2 nur wenn das Team es wirklich täglich benutzt.** Stufe 1 liefert 95 % des Nutzens bei einem Bruchteil des Aufwands.
+
+> **Befund aus M0, der diese Tabelle einschränkt (09.09.2026).** Die Creo Parametric Student Edition lädt **überhaupt keine** Toolkit-Anwendungen — der Knopf unter *Werkzeuge → Hilfsanwendungen* ist ausgegraut, und `toolkit_registry_file` in der `config.pro` bewirkt nichts. Damit sind Stufe 1 *und* Stufe 2 auf dieser Lizenz unerreichbar, denn beide setzen voraus, dass Creo ein Zusatzprogramm überhaupt lädt. Die Aussage „CREOSON braucht keine Zusatzlizenz" stimmt weiterhin — sie braucht aber eine Lizenz, die Toolkit-Anwendungen lädt, und das ist hier der Engpass.
+>
+> **Was davon nicht betroffen ist:** der **Mapkey** selbst. Er ist ein Bordmittel von Creo — eine aufgezeichnete Klickfolge in der `config.pro`, ohne TOOLKIT und ohne J-Link. Blockiert ist nur sein Abfeuern von außen. Er bleibt deshalb im Plan und wird in M0 aufgezeichnet: Er spart heute vier Klicks und ist die fertige Vorarbeit für M5.
+>
+> **Offene Spur, ungeprüft:** Creo nimmt eine Trail-Datei als Befehlszeilenargument entgegen, und eine Trail-Datei kann einen Mapkey über sein Kürzel aufrufen — das liefe an TOOLKIT vorbei. Zu klären in M5, notiert als `befunde.trailfile_weg_moeglich` in `creo8.yaml`.
 
 Und seit die eigene UI gesetzt ist (nächstes Kapitel), schrumpft der Nutzen von Stufe 2 weiter: Der Anwender arbeitet ohnehin in Aero Studio, nicht in Creo. Der Ribbon-Button spart dann nur noch einen Fensterwechsel. Er bleibt im Plan, aber weit hinten.
 
@@ -155,8 +161,10 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M2 | Kaskaden-Editor in der Oberfläche, Elementliste mit Spalt und Überlappung | Reiter *Kaskade* |
 | M2 | Räumliche Kaskadenprüfung über den Sektionsstapel, getrennte Schnittstapel je Element | `geometrie/spannweite.py`, `formate/export.py` |
 | — | Paketliste als `requirements.txt`, vom Starter benutzt, durch Tests abgesichert | `requirements.txt`, `tests/test_umgebung.py` |
+| M0 | Adapterschicht als Code: Versionsprofil wird gelesen, nicht nur abgelegt | `creo/profil.py` |
+| M0 | Abnahme rechnet sich selbst aus, statt als Häkchenliste zu veralten | `creo/test/M0_abnahme.py` |
 
-Die Testabdeckung liegt bei **289 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **308 Tests**, die in gut zweieinhalb Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -221,7 +229,25 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
 **Risiko:** Einheitenverwechslung (Template auf Zoll), falsches KS. Beides hier billig zu finden, in M4 teuer.
 
-**Was ich von dir brauche:** den Creo-8-Datecode, und ob du auf dem Rechner Software nachinstallieren darfst.
+### Stand 21.09.2026 — ein Creo-Durchlauf fehlt
+
+Der Stand wird nicht mehr von Hand geführt, sondern gerechnet:
+
+```
+python aerostudio/creo/test/M0_abnahme.py
+```
+
+Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0, sobald M0 zu ist. Heute meldet es **acht offene Einträge**, die alle denselben Ursprung haben: Sie sind nur an einem Creo-Bildschirm zu beantworten. Nachgerechnet und grün sind die Achsabbildung (Determinante +1, also Drehung statt Spiegelung), die Sollmaße in der erzeugten Datei und die Punktgleichheit aller Kommentarvarianten.
+
+**Erledigt:** Umgebung, IBL-Import, Maßhaltigkeit, Splinetyp (not-a-knot, 8 ppm), Achskonvention — und seit dem 21.09. die **Adapterschicht als Code**: `creo/profil.py` liest das Versionsprofil, `formate/ibl.py` bezieht die Achsabbildung daraus statt aus einer zweiten Kopie im Code. Das war Aufgabe 6 und bisher nur eine Absichtserklärung.
+
+**Offen, drei Dinge, zusammen etwa 15 Minuten** (Ablauf in `creo/test/M0_PRUEFPROTOKOLL.md`):
+
+1. **Sichtprüfung mit der vorgedrehten Datei.** Die Maße vom 09.09. sind exakt, aber Maße allein würden eine um 180° verdrehte Lage nicht auffallen lassen.
+2. **Kommentarzeilen.** Der folgenreichste Punkt: Das Werkzeug schreibt in *jede* exportierte IBL fünf Kommentarzeilen samt `AERO_SPEC_HASH`. Drei Prüfdateien isolieren die drei möglichen Positionen, damit ein Fehlschlag sagt, welche Stelle stört. Fällt es negativ aus, genügt `ibl_kommentarzeilen_erlaubt: false` in der YAML — am Code ist nichts zu ändern.
+3. **Mapkey aufzeichnen.** Bisher als `ENTFAELLT` geführt, mit falscher Begründung: Ein Mapkey ist ein Bordmittel von Creo und läuft ohne Zusatzlizenz. Was die Student Edition blockiert, ist nur das *Abfeuern von außen* über CREOSON.
+
+**Spur für M5, noch ungeprüft:** Creo nimmt eine Trail-Datei als Befehlszeilenargument, und eine Trail-Datei kann einen Mapkey über sein Kürzel aufrufen. Das liefe an TOOLKIT vorbei und wäre damit auch auf der Student Edition ein Weg zur Automatisierung. Quelle ist ein Community-Beitrag, keine Produktdokumentation — steht als `befunde.trailfile_weg_moeglich: UNGEPRUEFT` in der YAML, damit es nicht verlorengeht.
 
 ---
 
