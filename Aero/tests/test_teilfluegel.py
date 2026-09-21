@@ -391,3 +391,39 @@ def test_export_und_regelpruefung_sehen_dieselbe_hoehe(tmp_path):
                                 lage=UI._lage(element))
     assert min(sc.hoehe_min for sc in plan.stapel) == \
         pytest.approx(90.0, abs=0.3)
+
+
+# ------------------------------------------- Vorschlag mit Endplatten/Boden
+
+def _enge_grenzen(**zusatz):
+    from aerostudio.aero import entwurf as ent
+
+    return ent.Grenzen(sehne=(200.0, 260.0), halbspannweite=(500.0, 600.0),
+                       anstellwinkel=(-12.0, 0.0), stufen_sehne=2,
+                       stufen_spannweite=2, **zusatz)
+
+
+def test_vorschlag_rechnet_mit_endplatten(haupt, weite):
+    """Der Vorschlag muss dieselben Zahlen benutzen wie der Abtriebsknopf
+    daneben - sonst schlaegt er Fluegel vor, die er selbst anders bewertet."""
+    from aerostudio.aero import entwurf as ent
+
+    ohne = ent.suche_maximum(haupt, weite, 15.0, lage=LAGE,
+                             grenzen=_enge_grenzen())
+    mit = ent.suche_maximum(haupt, weite, 15.0, lage=LAGE,
+                            grenzen=_enge_grenzen(endplatte_mm=250.0))
+    assert ohne.treffer is not None and mit.treffer is not None
+    assert mit.treffer.kraefte.endplattenfaktor > 1.2
+    assert ohne.treffer.kraefte.endplattenfaktor == pytest.approx(1.0)
+    assert mit.treffer.abtrieb > ohne.treffer.abtrieb
+
+
+def test_vorschlag_nimmt_die_kanalwirkung_mit(haupt, weite):
+    from aerostudio.aero import entwurf as ent
+
+    mit = ent.suche_maximum(haupt, weite, 15.0, lage=LAGE,
+                            grenzen=_enge_grenzen())
+    ohne = ent.suche_maximum(haupt, weite, 15.0, lage=LAGE,
+                             grenzen=_enge_grenzen(kanal_am_boden=False))
+    assert mit.treffer.kraefte.beiwertfaktor > 1.0
+    assert ohne.treffer.kraefte.beiwertfaktor == pytest.approx(1.0)

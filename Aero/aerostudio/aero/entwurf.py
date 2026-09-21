@@ -32,9 +32,17 @@ Unter allem, was den Zielwert trifft, gewinnt der beste Wirkungsgrad - also
 der Flügel, der den Abtrieb mit dem geringsten Widerstand erreicht. Das ist
 am Rennwagen die richtige Frage, nicht der maximale Abtrieb.
 
-**Die Zahl bleibt eine Abschätzung.** Alles aus traglinie.py gilt hier
-unverändert: keine Endplatten, keine Kanalwirkung am Boden, keine Kaskade.
-Der Vorschlag ist ein begründeter Startpunkt für CFD, kein Ergebnis.
+**Endplatten und Boden** gehen mit ein, damit der Vorschlag dieselbe Zahl
+benutzt wie der Abtriebsknopf daneben: die Endplattenhöhe nach Hoerner
+(`traglinie.endplattenfaktor`) und die Kanalwirkung zwischen Flügel und Boden
+(`aero/boden.py`). Beides steht in `Grenzen`. Ein Vorschlag, der ohne
+Endplatten rechnet, während die Nachrechnung sie mitnimmt, wäre ein
+Widerspruch im selben Reiter.
+
+**Die Zahl bleibt eine Abschätzung.** Alles aus traglinie.py und boden.py gilt
+hier unverändert; eine Kaskade rechnet dieser Vorschlag nicht - dafür ist der
+Generator im Reiter Kaskade da. Der Vorschlag ist ein begründeter Startpunkt
+für CFD, kein Ergebnis.
 """
 
 from __future__ import annotations
@@ -75,6 +83,13 @@ class Grenzen:
     hoehe_anpassen: bool = True
     bodenfreiheit_min: float = 30.0      # T 2.2.1
     bodenfreiheit_reserve: float = 5.0   # Sicherheit auf die Nickrechnung
+
+    # Endplatten und Bodenkanal - dieselben Groessen wie beim Abtriebsknopf.
+    # Sie gehoeren in die Grenzen, weil jede Suchfunktion die ohnehin bekommt
+    # und der Vorschlag sonst mit anderen Zahlen rechnete als die
+    # Nachrechnung daneben.
+    endplatte_mm: float = 0.0
+    kanal_am_boden: bool = True
 
     # Wie fein das Raster über Sehne und Spannweite liegt.
     stufen_sehne: int = 7
@@ -187,9 +202,17 @@ def _hoehe_setzen(profil, spannweite, sehne, halbspannweite, winkel, lage,
 
 
 def _auswerten(profil, spannweite, sehne, halbspannweite, winkel, lage,
-               geschwindigkeit, streifen=SUCH_STREIFEN) -> Fluegelkraefte:
+               geschwindigkeit, grenzen=None,
+               streifen=SUCH_STREIFEN) -> Fluegelkraefte:
+    """Eine Auswertung - mit Endplatten und Boden, wenn die Grenzen es sagen."""
     stapel = _baue(profil, spannweite, sehne, halbspannweite, winkel, lage)
-    return rechne(stapel, profil, geschwindigkeit, panels_je_seite=streifen)
+    platte = grenzen.endplatte_mm if grenzen is not None else 0.0
+    if grenzen is not None and grenzen.kanal_am_boden:
+        from .boden import fluegel
+        return fluegel(stapel, profil, geschwindigkeit, endplatte_mm=platte,
+                       panels_je_seite=streifen)[0]
+    return rechne(stapel, profil, geschwindigkeit, panels_je_seite=streifen,
+                  endplatte_mm=platte)
 
 
 def _winkel_fuer_ziel(profil, spannweite, sehne, halbspannweite, lage,
@@ -213,7 +236,8 @@ def _winkel_fuer_ziel(profil, spannweite, sehne, halbspannweite, lage,
         eigene_lage = _hoehe_setzen(profil, spannweite, sehne, halbspannweite,
                                     float(w), lage, grenzen, zustand)
         return eigene_lage, _auswerten(profil, spannweite, sehne, halbspannweite,
-                                       float(w), eigene_lage, geschwindigkeit)
+                                       float(w), eigene_lage, geschwindigkeit,
+                                       grenzen)
 
     brauchbar = []
     for w in raster:
@@ -389,7 +413,8 @@ def _bester_winkel(profil, spannweite, sehne, weite, lage, geschwindigkeit,
         eigene_lage = _hoehe_setzen(profil, spannweite, sehne, weite, float(w),
                                     lage, grenzen, zustand)
         return eigene_lage, _auswerten(profil, spannweite, sehne, weite,
-                                       float(w), eigene_lage, geschwindigkeit)
+                                       float(w), eigene_lage, geschwindigkeit,
+                                       grenzen)
 
     brauchbar = []
     for w in np.linspace(oben, unten, 13):
@@ -462,7 +487,7 @@ def _grenzleistung(profil, spannweite, sehne, weite, lage, geschwindigkeit,
         eigene_lage = _hoehe_setzen(profil, spannweite, sehne, weite, float(w),
                                     lage, grenzen, zustand)
         k = _auswerten(profil, spannweite, sehne, weite, float(w), eigene_lage,
-                       geschwindigkeit)
+                       geschwindigkeit, grenzen)
         if k.abgerissen > grenzen.abriss_max:
             break
         if bester is None or k.abtrieb > bester.abtrieb:

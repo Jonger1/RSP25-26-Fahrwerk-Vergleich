@@ -401,7 +401,9 @@ def _ansicht_fluegel() -> html.Div:
                      "gesucht werden Wurzelsehne, Halbspannweite, "
                      "Anstellwinkel und Einbauhöhe. Unter allem, was das Ziel "
                      "trifft und das Reglement einhält, gewinnt der beste "
-                     "Wirkungsgrad.", className="as-hinweis",
+                     "Wirkungsgrad. Gerechnet wird mit Endplattenhöhe und "
+                     "Bodenkanal wie beim Abtrieb darüber; die Höhe meint den "
+                     "tiefsten Punkt.", className="as-hinweis",
                      style={"marginBottom": "12px"}),
             html.Div([
                 _feld("Zielabtrieb [N]",
@@ -1403,9 +1405,10 @@ def _abtrieb_rechnen(n, daten, tempo, endplatte=0.0):
               State(wert("sehne-min"), "value"), State(wert("sehne-max"), "value"),
               State(wert("weite-min"), "value"), State(wert("weite-max"), "value"),
               State(wert("winkel-min"), "value"),
+              State(wert("endplatte"), "value"),
               prevent_initial_call=True)
 def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
-                       weite_min, weite_max, winkel_min):
+                       weite_min, weite_max, winkel_min, endplatte=0.0):
     if not daten:
         return "", None
     try:
@@ -1416,7 +1419,11 @@ def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
         grenzen = aero_entwurf.Grenzen(
             sehne=(float(sehne_min or 120.0), float(sehne_max or 400.0)),
             halbspannweite=(float(weite_min or 300.0), float(weite_max or 695.0)),
-            anstellwinkel=(float(winkel_min or -16.0), 0.0))
+            anstellwinkel=(float(winkel_min or -16.0), 0.0),
+            # Dieselben Zahlen wie beim Abtriebsknopf daneben - sonst
+            # schlaegt die Suche Fluegel vor, die die Nachrechnung anders
+            # bewertet.
+            endplatte_mm=float(endplatte or 0.0))
 
         v = aero_entwurf.suche(
             float(ziel or 60.0), profil, element.spannweite,
