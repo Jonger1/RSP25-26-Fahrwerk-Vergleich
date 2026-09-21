@@ -75,10 +75,19 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+rem Die Paketliste steht in requirements.txt und NICHT hier. Solange sie an
+rem zwei Stellen stand, fehlte in dieser hier matplotlib - es kam nur zufaellig
+rem als Beifang von neuralfoil mit. Ein Ort, eine Wahrheit.
+if not exist "%~dp0requirements.txt" (
+    echo   [FEHLER] requirements.txt fehlt neben dieser Datei.
+    echo   Sie gehoert ins Repository - bitte den Ordner vollstaendig holen.
+    pause
+    exit /b 1
+)
+
 echo   Pakete werden geladen...
 "%VPY%" -m pip install --upgrade --quiet pip
-"%VPY%" -m pip install --quiet --no-warn-script-location ^
-    dash plotly numpy scipy pydantic pyyaml ezdxf shapely neuralfoil
+"%VPY%" -m pip install --quiet --no-warn-script-location -r "%~dp0requirements.txt"
 if %errorlevel% neq 0 (
     echo.
     echo   [FEHLER] Die Pakete liessen sich nicht installieren.

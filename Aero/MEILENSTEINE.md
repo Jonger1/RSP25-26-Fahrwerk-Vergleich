@@ -130,7 +130,7 @@ Begründung: passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly au
 
 ---
 
-## Stand am 10.09.2026
+## Stand am 21.09.2026
 
 Was **läuft**, quer über die Meilensteine hinweg — die Reihenfolge oben ist ein
 Plan, keine Reihenfolge, in der gearbeitet werden muss:
@@ -152,6 +152,12 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M2 | Kaskade: Anordnung über Spalt und Überlappung, zähe Rechnung, Abriss über die Saugspitze | `geometrie/kaskade.py`, `aero/kaskade.py` |
 | M2 | Generator: Profilpaarungen und Elementzahl für maximalen Abtrieb | `aero/generator.py` |
 | M4 | Skelett für Creo — Drehachsen, Querlinie, Bezugslinien des Reglements | `formate/skelett.py` |
+| M2 | Kaskaden-Editor in der Oberfläche, Elementliste mit Spalt und Überlappung | Reiter *Kaskade* |
+| M2 | Räumliche Kaskadenprüfung über den Sektionsstapel, getrennte Schnittstapel je Element | `geometrie/spannweite.py`, `formate/export.py` |
+| — | Paketliste als `requirements.txt`, vom Starter benutzt, durch Tests abgesichert | `requirements.txt`, `tests/test_umgebung.py` |
+
+Die Testabdeckung liegt bei **289 Tests**, die in gut drei Minuten
+durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
@@ -163,11 +169,17 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
    gerechnet, und genau die hält die Strömung an. Bis zur Kalibrierung an
    gemessenen oder CFD-Daten sind die Absolutwerte nicht belastbar; der
    Vergleich zweier Entwürfe untereinander ist es eher.
-2. **Kaskaden-Editor in der Oberfläche.** Rechnen kann das Werkzeug die
-   Kaskade, einstellen lässt sie sich nur im Code.
-3. **M4 Rest — Endplatten und Footplates.** Sie sind der Teil, den T 2.1.3
-   und die neue T 2.1.4 am härtesten treffen, und sie fehlen in der
-   Traglinienrechnung, wo sie der größte Zugewinn an Genauigkeit wären.
+2. **M4 Rest — Endplatten und Footplates.** Bisher ist die Endplatte nur
+   eine **Zahl**: eine Höhe in mm, aus der `traglinie.endplattenfaktor`
+   nach Hoerner eine wirksame Streckung macht. Es gibt keinen Umriss, keine
+   Dicke, keinen Keep-out-Check nach T 2.1.3 und keinen Export. Genau diese
+   Teile trifft T 2.1.3 und die neue T 2.1.4 am härtesten.
+3. **Ansicht *Fahrzeug & Regeln*.** Der Validator läuft und seine Befunde
+   erscheinen als Karten in den bestehenden Reitern, aber die im
+   UI-Kapitel beschriebene eigene Ansicht — Seiten- und Draufsicht mit den
+   T-8.2-Hüllkurven, anklickbare Ampel, Regler für Hub, Nick und Wank —
+   gibt es nicht. Solange sie fehlt, ist das "Fertig, wenn" von M2 nicht
+   erfüllt, auch wenn die Fachlogik darunter steht.
 4. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
    keine Toolkit-Anwendungen. Bis zur Vollversion bleibt es beim Weg
    "Werkzeug schreibt .ibl, Import in Creo in vier Klicks".
@@ -179,10 +191,15 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
   Docstring von `regeln/pruefung.py`, damit sie auffindbar ist.
 * Echte Laminatdicken trägt das Team selbst ein; die Vorgaben je Verfahren
   sind Startwerte, keine Messwerte.
-* Die Abtriebszahlen sind eine **Abschätzung**. Nicht enthalten sind die
-  Kanalwirkung zwischen Flügel und Boden, Endplatten, Räder und die Wirkung
-  mehrerer Elemente aufeinander. Der Vergleich zweier Entwürfe untereinander
-  ist belastbarer als der Absolutwert.
+* Die Abtriebszahlen sind eine **Abschätzung**. Inzwischen enthalten sind die
+  Kanalwirkung zwischen Flügel und Boden (`aero/boden.py`), die Endplatten
+  als wirksame Streckung nach Hoerner und die Wirkung mehrerer Elemente
+  aufeinander (`aero/kaskade.py`). Nicht enthalten sind die Räder, der
+  Fahrzeugkörper und alles, was aus der Endplattenform selbst kommt —
+  Wirbelbildung an ihrer Unterkante, Outwash, Footplates. Beide
+  Bodenfaktoren sind bewusst vorsichtig angesetzt und gehören mit CFD
+  abgeglichen; die Begründung steht in `aero/boden.py`. Der Vergleich zweier
+  Entwürfe untereinander bleibt belastbarer als der Absolutwert.
 * Das Logo fehlt: `logo.png` oder `logo.svg` nach `aerostudio/ui/assets/`
   legen, dann erscheint es links oben von selbst.
 
