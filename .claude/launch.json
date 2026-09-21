@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aerostudio-pruefung",
+      "runtimeExecutable": "C:/Users/janni/Desktop/RennschmiedeProgramme/RSP26/0_Fahrwerk_Claude/Aero/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-c", "import os, sys; os.chdir(r'C:/Users/janni/Desktop/RennschmiedeProgramme/RSP26/0_Fahrwerk_Claude/Aero'); sys.path.insert(0, os.getcwd()); from aerostudio.ui.app import app; app.run(debug=False, port=8052)"],
+      "port": 8052
+    }
+  ]
+}
