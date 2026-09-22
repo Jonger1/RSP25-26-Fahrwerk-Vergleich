@@ -163,8 +163,9 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | — | Paketliste als `requirements.txt`, vom Starter benutzt, durch Tests abgesichert | `requirements.txt`, `tests/test_umgebung.py` |
 | M0 | Adapterschicht als Code: Versionsprofil wird gelesen, nicht nur abgelegt | `creo/profil.py` |
 | M0 | Abnahme rechnet sich selbst aus, statt als Häkchenliste zu veralten | `creo/test/M0_abnahme.py` |
+| M4 | Endplatte und Footplate als Geometrie, regelgeprüft und exportierbar | `geometrie/endplatte.py` |
 
-Die Testabdeckung liegt bei **308 Tests**, die in gut zweieinhalb Minuten
+Die Testabdeckung liegt bei **336 Tests**, die in gut dreieinhalb Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -177,11 +178,13 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
    gerechnet, und genau die hält die Strömung an. Bis zur Kalibrierung an
    gemessenen oder CFD-Daten sind die Absolutwerte nicht belastbar; der
    Vergleich zweier Entwürfe untereinander ist es eher.
-2. **M4 Rest — Endplatten und Footplates.** Bisher ist die Endplatte nur
-   eine **Zahl**: eine Höhe in mm, aus der `traglinie.endplattenfaktor`
-   nach Hoerner eine wirksame Streckung macht. Es gibt keinen Umriss, keine
-   Dicke, keinen Keep-out-Check nach T 2.1.3 und keinen Export. Genau diese
-   Teile trifft T 2.1.3 und die neue T 2.1.4 am härtesten.
+2. **Endplatten in der Aerodynamik.** Die *Geometrie* steht seit dem
+   21.09. (`geometrie/endplatte.py`): Umriss, Dicke, Footplate, Keep-out
+   nach T 2.1.3, Export, Bedienung im Reiter *Flügel*. Was fehlt, ist ihre
+   aerodynamische Wirkung über die Hoerner-Näherung hinaus — Wirbelbildung
+   an der Unterkante, Outwash, die Wirkung der Footplate auf den Rad-Wake.
+   Das ist ein CFD-Thema und kein Panelverfahren-Thema; ehrlicher ist es,
+   die Grenze zu benennen, als sie mit einem Korrekturfaktor zu verdecken.
 3. **Ansicht *Fahrzeug & Regeln*.** Der Validator läuft und seine Befunde
    erscheinen als Karten in den bestehenden Reitern, aber die im
    UI-Kapitel beschriebene eigene Ansicht — Seiten- und Draufsicht mit den
@@ -204,10 +207,13 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
   als wirksame Streckung nach Hoerner und die Wirkung mehrerer Elemente
   aufeinander (`aero/kaskade.py`). Nicht enthalten sind die Räder, der
   Fahrzeugkörper und alles, was aus der Endplattenform selbst kommt —
-  Wirbelbildung an ihrer Unterkante, Outwash, Footplates. Beide
-  Bodenfaktoren sind bewusst vorsichtig angesetzt und gehören mit CFD
-  abgeglichen; die Begründung steht in `aero/boden.py`. Der Vergleich zweier
-  Entwürfe untereinander bleibt belastbarer als der Absolutwert.
+  Wirbelbildung an ihrer Unterkante, Outwash, Footplates. Seit dem 21.09.
+  gibt es die Endplatte als *Geometrie*, aber sie geht weiterhin nur über
+  ihre Höhe in die Rechnung ein: Der Bauraum ist damit belastbar, die
+  aerodynamische Wirkung nicht. Beide Bodenfaktoren sind bewusst vorsichtig
+  angesetzt und gehören mit CFD abgeglichen; die Begründung steht in
+  `aero/boden.py`. Der Vergleich zweier Entwürfe untereinander bleibt
+  belastbarer als der Absolutwert.
 * Das Logo fehlt: `logo.png` oder `logo.svg` nach `aerostudio/ui/assets/`
   legen, dann erscheint es links oben von selbst.
 

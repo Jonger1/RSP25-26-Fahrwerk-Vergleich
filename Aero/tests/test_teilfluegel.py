@@ -323,11 +323,11 @@ def test_profil_und_fluegelfelder_erscheinen_auch_im_reiter_kaskade():
 
 
 def _spec_mit_teilflap():
-    from tests.test_export_ui import WERTE
+    from tests.test_export_ui import werte_mit
 
-    werte = list(WERTE)
-    werte[-1] = [{"profil": "e58.dat", "sehne": 0.35, "winkel": -18.0,
-                  "spalt": 0.015, "ueberlappung": 0.02, "y_von": 250.0}]
+    werte = werte_mit(kaskadenzeilen=[
+        {"profil": "e58.dat", "sehne": 0.35, "winkel": -18.0,
+         "spalt": 0.015, "ueberlappung": 0.02, "y_von": 250.0}])
     spec, *_ = UI._profil_aktualisieren(*werte)
     return spec
 

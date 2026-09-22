@@ -45,12 +45,13 @@ from ..aero import kaskade3d as aero_kaskade3d
 from ..geometrie import kaskade as geo_kaskade
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
+from ..geometrie import endplatte as geo_endplatte
 from ..geometrie import spannweite, verwindung
 from ..geometrie.profil import (KATALOG, katalognotiz, katalogoptionen,
                                 katalogprofile, profil_fuer)
-from ..spec.modell import (Fertigung, Kaskadenstufe, ProfilAusDatei,
-                           ProfilNaca, Spannweite, Stuetzstelle,
-                           Wirkrichtung, vorgaben_fuer)
+from ..spec.modell import (Endplatte, Fertigung, Footplate, Kaskadenstufe,
+                           ProfilAusDatei, ProfilNaca, Spannweite,
+                           Stuetzstelle, Wirkrichtung, vorgaben_fuer)
 from ..spec.projekt import AeroSpec
 from . import darstellung
 
@@ -303,12 +304,20 @@ def _fluegelgeometrie() -> list:
                   _zahlenfeld("pos-z", 90.0, 5.0, 0.0, 1500.0),
                   "Tiefster Punkt des ganzen Flügels samt Flaps, über alle "
                   "Schnitte — so misst das Reglement die Bodenfreiheit."),
-            _feld("Endplattenhöhe [mm]",
-                  _zahlenfeld("endplatte", 0.0, 10.0, 0.0, 600.0),
-                  "0 = keine. Geht in die Abtriebsrechnung ein: Nach Hoerner "
-                  "wirkt die Endplatte wie mehr Streckung, "
-                  "AR·(1 + 1,9·h/b)."),
+            _feld("Endplatte",
+                  dcc.Dropdown(id="endplattenart", clearable=False,
+                               options=[
+                                   {"label": "keine", "value": "keine"},
+                                   {"label": "nur Höhe (Abschätzung)",
+                                    "value": "hoehe"},
+                                   {"label": "Geometrie", "value": "geometrie"},
+                               ], value="keine"),
+                  "Nur die Geometrie wird regelgeprüft und exportiert. "
+                  "Die bloße Höhe geht ausschließlich in die "
+                  "Abtriebsabschätzung ein."),
         ], spalten="240px"),
+
+        _endplattenleiste(),
 
         _karte([
             _ueberschrift("Sektionen"),
@@ -349,6 +358,57 @@ def _fluegelgeometrie() -> list:
             html.Div(id="sektionen-meldung", style={"marginTop": "9px"}),
         ]),
     ]
+
+
+def _endplattenleiste() -> html.Div:
+    """Die Felder der Endplatte - zwei Blöcke, je nach gewählter Art.
+
+    Beide liegen immer im Baum und werden nur ein- und ausgeblendet. Dash
+    braucht seine Eingaben im Layout; wer sie herausnimmt, bekommt beim
+    Umschalten Callbacks, die ins Leere greifen.
+    """
+    return html.Div([
+        html.Div(
+            _leiste("Endplatte — Abschätzung", [
+                _feld("Höhe [mm]",
+                      _zahlenfeld("endplatte", 150.0, 10.0, 0.0, 600.0),
+                      "Geht nach Hoerner als wirksame Streckung in die "
+                      "Abtriebsrechnung ein, AR·(1 + 1,9·h/b). Mehr nicht — "
+                      "kein Bauraum, keine Regelprüfung, kein Export."),
+            ], spalten="240px"),
+            id="block-endplatte-hoehe", style={"display": "none"}),
+
+        html.Div(
+            _leiste("Endplatte — Geometrie", [
+                _feld("Dicke [mm]",
+                      _zahlenfeld("ep-dicke", 4.0, 0.5, 0.5, 50.0),
+                      "Wird nach außen aufgetragen — das ist die übliche "
+                      "Bauweise und der ungünstigere Fall für die "
+                      "Breitengrenze T 8.2.2."),
+                _feld("Überstand vorne [mm]",
+                      _zahlenfeld("ep-vorne", 30.0, 5.0, 0.0, 500.0),
+                      "Vor der vordersten Nase der Kaskade."),
+                _feld("Überstand hinten [mm]",
+                      _zahlenfeld("ep-hinten", 30.0, 5.0, 0.0, 500.0),
+                      "Hinter der hintersten Hinterkante. Der Wert, der am "
+                      "ehesten die Keep-out-Zone des Rads reißt."),
+                _feld("Überstand oben [mm]",
+                      _zahlenfeld("ep-oben", 40.0, 5.0, 0.0, 500.0)),
+                _feld("Überstand unten [mm]",
+                      _zahlenfeld("ep-unten", 20.0, 5.0, 0.0, 500.0),
+                      "Der Boden begrenzt das — unter z = 0 wird nicht "
+                      "gebaut."),
+                _feld("Footplate-Breite [mm]",
+                      _zahlenfeld("ep-fuss-breite", 0.0, 10.0, 0.0, 400.0),
+                      "Nach innen, zur Fahrzeugmitte. 0 = keine Footplate."),
+                _feld("Footplate-Höhe [mm]",
+                      _zahlenfeld("ep-fuss-hoehe", 25.0, 5.0, 0.0, 300.0),
+                      "Bis zu welcher Höhe über Grund sie reicht."),
+            ], spalten="200px"),
+            id="block-endplatte-geometrie", style={"display": "none"}),
+
+        html.Div(id="endplattenmasse"),
+    ])
 
 
 def _ansicht_fluegel() -> html.Div:
@@ -650,7 +710,9 @@ def _ansicht_creo() -> html.Div:
                          {"label": " Kaskade im Schnitt (zum Extrudieren)",
                           "value": "kaskade"},
                          {"label": " 3D-Kaskade über die Spannweite",
-                          "value": "kaskadenfluegel"}],
+                          "value": "kaskadenfluegel"},
+                         {"label": " Endplatte samt Footplate",
+                          "value": "endplatte"}],
                 style={"fontSize": "13px"}),
                 "Eine geschlossene Kurve ist der Normalfall: EIN umlaufender "
                 "Spline, aus dem sich sofort eine Skizze und daraus ein "
@@ -660,7 +722,9 @@ def _ansicht_creo() -> html.Div:
                 "Drittel der Punkte. 3D-Flügel schreibt einen Schnittstapel "
                 "über die Spannweite, aus dem in Creo ein Verbund wird. "
                 "3D-Kaskade schreibt für jedes Element einen eigenen Stapel; "
-                "die Schlitze bleiben dabei ausdrücklich offen."),
+                "die Schlitze bleiben dabei ausdrücklich offen. Endplatte "
+                "schreibt nur die Platte — in Creo wird daraus ein eigenes "
+                "Bauteil, das über Copy Geometry am Skelett hängt."),
             _feld("Toleranz [mm]",
                   _zahlenfeld("toleranz", 0.005, 0.001, 0.0005, 0.5),
                   "Creos Modellgenauigkeit liegt bei 0,010 mm."),
@@ -806,6 +870,61 @@ def _reiter_umblenden(reiter):
 def _quelle_umschalten(quelle):
     an, aus = {"display": "block"}, {"display": "none"}
     return (an, aus) if quelle == "datei" else (aus, an)
+
+
+@app.callback(Output("block-endplatte-hoehe", "style"),
+              Output("block-endplatte-geometrie", "style"),
+              Input("endplattenart", "value"))
+def _endplatte_umschalten(art):
+    an, aus = {"display": "block"}, {"display": "none"}
+    return (an if art == "hoehe" else aus,
+            an if art == "geometrie" else aus)
+
+
+@app.callback(Output("endplattenmasse", "children"), Input("spec", "data"))
+def _endplattenmasse_zeigen(daten):
+    """Was aus den Ueberstaenden wird - in Millimetern, nicht in Absichten.
+
+    Die Felder geben Ueberstaende an, gebaut wird eine Platte mit konkreten
+    Massen. Ohne diese Anzeige muesste man exportieren und in Creo nachmessen,
+    um zu sehen, ob die Platte 120 oder 300 mm hoch geworden ist - und genau
+    diese Hoehe ist es, mit der die Abtriebsrechnung arbeitet.
+    """
+    if not daten:
+        return ""
+    try:
+        element = AeroSpec.model_validate(daten).elemente[0]
+        if element.endplatte is None or element.spannweite is None:
+            return ""
+
+        stapel = _elementstapel(element)
+        m = geo_endplatte.masse(stapel, element.endplatte)
+
+        eintraege = [
+            (f"{m.laenge:.0f} × {m.hoehe:.0f} mm", "Länge × Höhe"),
+            (f"{m.z_unten:.0f} … {m.z_oben:.0f} mm", "Unterkante bis Oberkante"),
+            (f"{m.flaeche / 100:.0f} cm²", "Seitenansicht"),
+            (f"{m.y_aussen:.0f} mm", "äußerster Punkt, |y|"),
+        ]
+        if m.footplate_breite > 0.0:
+            eintraege.append((f"{m.footplate_breite:.0f} mm",
+                              "Footplate nach innen"))
+
+        return _karte([
+            _ueberschrift("Daraus wird gebaut"),
+            html.Div([html.Div([html.Div(gross, className="as-grosszahl"),
+                                html.Div(klein, className="as-hinweis")])
+                      for gross, klein in eintraege],
+                     className="as-leiste",
+                     style={"gridTemplateColumns":
+                            "repeat(auto-fit, minmax(160px, 1fr))"}),
+            html.Div(f"Die Abtriebsrechnung arbeitet mit {m.hoehe:.0f} mm "
+                     f"Endplattenhöhe — sie fällt aus dieser Geometrie ab und "
+                     f"wird nicht getrennt eingegeben.",
+                     className="as-hinweis", style={"marginTop": "8px"}),
+        ])
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
 
 
 @app.callback(
@@ -1019,10 +1138,72 @@ def spannweite_aus_tabelle(zeilen, schnitte: int = 13) -> Spannweite:
     return Spannweite(stuetzstellen=stellen, schnitte=int(schnitte))
 
 
+def _elementstapel(element, punkte: int = 40) -> list:
+    """Die Schnittstapel aller Elemente, Hauptelement zuerst.
+
+    Eine Kaskade wird ueber `kaskadenschnitte` gebaut, ein einzelnes Element
+    ueber `schnitte`. Beide liefern dasselbe Format, damit alles Weitere
+    nicht zwischen den Faellen unterscheiden muss.
+    """
+    profil = profil_fuer(element)
+    if element.kaskade:
+        return spannweite.kaskadenschnitte(
+            profil, element.spannweite, element.sehne, element.anstellwinkel,
+            list(element.kaskade), punkte, lage=_lage(element))
+    return [spannweite.schnitte(
+        profil, element.spannweite, element.sehne, element.anstellwinkel,
+        punkte, lage=_lage(element))]
+
+
+def _endplattenhoehe(element, stapel_je_element=None) -> float:
+    """Die Endplattenhoehe, mit der gerechnet wird - aus einer Hand.
+
+    Frueher zog jede Rechnung diese Zahl direkt aus dem Bedienfeld. Das war
+    doppelt unschoen: Der Wert lebte nur im Widget und nicht im Spec, und mit
+    der Geometrie gaebe es ihn jetzt an zwei Stellen. Hier faellt die
+    Entscheidung einmal, und `geometrie.endplatte.wirksame_hoehe` trifft sie.
+
+    Der Schnittstapel wird nur gebaut, wenn er gebraucht wird - ohne
+    Geometrie kostet die Auskunft nichts.
+    """
+    if element.endplatte is None:
+        return float(element.endplattenhoehe or 0.0)
+    return geo_endplatte.wirksame_hoehe(
+        element, stapel_je_element or _elementstapel(element))
+
+
+def _endplatte_aus_feldern(art, dicke, vorne, hinten, oben, unten,
+                           fuss_breite, fuss_hoehe) -> Endplatte | None:
+    """Baut das Endplattenmodell aus den Bedienfeldern.
+
+    Nur bei Art "geometrie" entsteht etwas. Bei "hoehe" und "keine" bleibt es
+    None - die blosse Hoehe ist ein eigenes Feld am Element, weil sie eben
+    KEINE Geometrie ist und auch nicht so tun soll.
+    """
+    if art != "geometrie":
+        return None
+
+    breite = float(fuss_breite or 0.0)
+    return Endplatte(
+        dicke=float(dicke or 4.0),
+        ueberstand_vorne=float(0.0 if vorne is None else vorne),
+        ueberstand_hinten=float(0.0 if hinten is None else hinten),
+        ueberstand_oben=float(0.0 if oben is None else oben),
+        ueberstand_unten=float(0.0 if unten is None else unten),
+        footplate=(Footplate(breite=breite,
+                             hoehe=float(25.0 if fuss_hoehe is None
+                                         else fuss_hoehe))
+                   if breite > 0.0 else None),
+    )
+
+
 def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
                verfahren, wandstaerke, kern, klebespalt, entwurfsname,
                stuetzstellen, schnittzahl, pos_x, pos_z,
-               kaskadenzeilen) -> AeroSpec:
+               kaskadenzeilen,
+               endplattenart, ep_dicke, ep_vorne, ep_hinten, ep_oben,
+               ep_unten, ep_fuss_breite, ep_fuss_hoehe,
+               endplattenhoehe) -> AeroSpec:
     """Sammelt die Bedienelemente zu einem gueltigen Spec.
 
     Einzige Stelle, an der aus Bedienelementen Fachdaten werden - alles Weitere
@@ -1052,6 +1233,15 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
     element.pos_x = -float(pos_x if pos_x is not None else 600.0)
     element.pos_z = float(pos_z if pos_z is not None else 90.0)
 
+    element.endplatte = _endplatte_aus_feldern(
+        endplattenart, ep_dicke, ep_vorne, ep_hinten, ep_oben, ep_unten,
+        ep_fuss_breite, ep_fuss_hoehe)
+    # Die blosse Hoehe wirkt nur, wenn keine Geometrie da ist. Sie steht
+    # trotzdem immer im Spec: Beim Umschalten auf "Geometrie" und zurueck
+    # soll der eingetippte Wert nicht verschwinden.
+    element.endplattenhoehe = (
+        float(endplattenhoehe or 0.0) if endplattenart == "hoehe" else 0.0)
+
     spec.fertigung = Fertigung(
         verfahren=verfahren or "unbestimmt",
         wandstaerke=float(wandstaerke or 0.6),
@@ -1071,6 +1261,12 @@ _EINGABEN = [
     Input("stuetzstellen", "data"), Input(wert("schnittzahl"), "value"),
     Input(wert("pos-x"), "value"), Input(wert("pos-z"), "value"),
     Input("kaskadentabelle", "data"),
+    Input("endplattenart", "value"),
+    Input(wert("ep-dicke"), "value"), Input(wert("ep-vorne"), "value"),
+    Input(wert("ep-hinten"), "value"), Input(wert("ep-oben"), "value"),
+    Input(wert("ep-unten"), "value"),
+    Input(wert("ep-fuss-breite"), "value"), Input(wert("ep-fuss-hoehe"), "value"),
+    Input(wert("endplatte"), "value"),
 ]
 
 
@@ -1227,7 +1423,16 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
         element = spec.elemente[0]
         profil = profil_fuer(element)
 
-        if ausgabe == "kaskade":
+        if ausgabe == "endplatte":
+            if element.endplatte is None:
+                return (html.Div("Für diesen Entwurf ist keine Endplatte "
+                                 "angelegt — im Reiter Flügel unter "
+                                 "\u201eEndplatte\u201c auf \u201eGeometrie\u201c "
+                                 "stellen.", className="as-hinweis"),
+                        "", leer, "", "")
+            plan = export.plane_endplatte(_elementstapel(element),
+                                          element.endplatte)
+        elif ausgabe == "kaskade":
             plan = export.plane_kaskade(
                 profil, element.sehne, element.anstellwinkel,
                 _vorgaben(element.kaskade), float(toleranz or 0.005))
@@ -1247,8 +1452,13 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
                                         element.anstellwinkel,
                                         float(toleranz or 0.005),
                                         geschlossen=(ausgabe != "profil"))
-        ziel = (PROJEKT / (ordner or "export")
-                / export.dateiname(_exportname(dateiname, element)))
+        # Die Endplatte bekommt einen eigenen Dateinamen. Ohne den Zusatz
+        # schriebe sie ueber die Fluegeldatei - gleicher Entwurf, gleicher
+        # Name - und wer danach den Fluegel importiert, bekaeme die Platte.
+        name = _exportname(dateiname, element)
+        if ausgabe == "endplatte":
+            name += " Endplatte"
+        ziel = PROJEKT / (ordner or "export") / export.dateiname(name)
 
         # Beide Schaltflaechen schreiben - die zweite oeffnet zusaetzlich Creo.
         nach_creo = _ausgeloest_von("btn-creo")
@@ -1259,6 +1469,9 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
                 f"Profil {profil.name}, Sehne {element.sehne:.1f} mm, "
                 f"Anstellwinkel {element.anstellwinkel:+.1f} Grad",
                 "Kurvenform: " + (
+                    f"Endplatte samt Footplate, {len(plan.sektionen)} "
+                    f"geschlossene Umrisse"
+                    if plan.ausgabe == "endplatte" else
                     f"Kaskade, {len(plan.sektionen)} geschlossene Kurven - "
                     f"eine je Element, Hauptelement zuerst"
                     if plan.ausgabe == "kaskade" else
@@ -1367,9 +1580,8 @@ def _fluegel_zeichnen(daten, ansicht):
 @app.callback(Output("aero-ergebnis", "children"),
               Input("btn-aero", "n_clicks"),
               State("spec", "data"), State(wert("tempo"), "value"),
-              State(wert("endplatte"), "value"),
               prevent_initial_call=True)
-def _abtrieb_rechnen(n, daten, tempo, endplatte=0.0):
+def _abtrieb_rechnen(n, daten, tempo):
     """Abtrieb abschaetzen. Auf Knopfdruck, nicht bei jeder Aenderung.
 
     Die Traglinienrechnung braucht ein paar Sekunden. Liefe sie bei jedem
@@ -1386,7 +1598,7 @@ def _abtrieb_rechnen(n, daten, tempo, endplatte=0.0):
             profil, element.spannweite, element.sehne, element.anstellwinkel, 60,
             lage=_lage(element))
         v = float(tempo or 15.0)
-        platte = float(endplatte or 0.0)
+        platte = _endplattenhoehe(element)
         ergebnis, wirkung = aero_boden.fluegel(stapel, profil, v,
                                                endplatte_mm=platte)
         kennlinie = aero_boden.kennlinie(
@@ -1405,10 +1617,9 @@ def _abtrieb_rechnen(n, daten, tempo, endplatte=0.0):
               State(wert("sehne-min"), "value"), State(wert("sehne-max"), "value"),
               State(wert("weite-min"), "value"), State(wert("weite-max"), "value"),
               State(wert("winkel-min"), "value"),
-              State(wert("endplatte"), "value"),
               prevent_initial_call=True)
 def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
-                       weite_min, weite_max, winkel_min, endplatte=0.0):
+                       weite_min, weite_max, winkel_min):
     if not daten:
         return "", None
     try:
@@ -1423,7 +1634,7 @@ def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
             # Dieselben Zahlen wie beim Abtriebsknopf daneben - sonst
             # schlaegt die Suche Fluegel vor, die die Nachrechnung anders
             # bewertet.
-            endplatte_mm=float(endplatte or 0.0))
+            endplatte_mm=_endplattenhoehe(element))
 
         v = aero_entwurf.suche(
             float(ziel or 60.0), profil, element.spannweite,
@@ -1861,11 +2072,10 @@ def _kaskadenkarte(elemente, b, tempo: float = 15.0,
               Input("btn-generator", "n_clicks"),
               State("spec", "data"), State(wert("kaskadentempo"), "value"),
               State(wert("maxelemente"), "value"),
-              State(wert("endplatte"), "value"),
               State(wert("innenbereich"), "value"),
               State("feinsuche", "value"), State("kanalwirkung", "value"),
               prevent_initial_call=True)
-def _generator_rechnen(n, daten, tempo, maxelemente, endplatte=0.0,
+def _generator_rechnen(n, daten, tempo, maxelemente,
                        innenbereich=0.0, feinsuche=None, kanal=None):
     if not daten:
         return "", None
@@ -1882,7 +2092,7 @@ def _generator_rechnen(n, daten, tempo, maxelemente, endplatte=0.0,
             lage=(element.pos_x, element.pos_y, element.pos_z),
             elementzahlen=tuple(range(1, int(maxelemente or 3) + 1)),
             spalt=stufe.spalt, ueberlappung=stufe.ueberlappung,
-            endplatte_mm=float(endplatte or 0.0),
+            endplatte_mm=_endplattenhoehe(element),
             feinsuche=3 if feinsuche else 0,
             innenbereich_mm=float(innenbereich or 0.0),
             mit_boden=True if kanal is None else bool(kanal))
@@ -2109,9 +2319,9 @@ def _raumkarte(pruefung, stapel, namen, profile, fertigung) -> html.Div:
 @app.callback(Output("kaskade3d-ergebnis", "children"),
               Input("btn-kaskade3d", "n_clicks"),
               State("spec", "data"), State(wert("kaskadentempo"), "value"),
-              State(wert("endplatte"), "value"), State("kanalwirkung", "value"),
+              State("kanalwirkung", "value"),
               State(wert("abgleich"), "value"), prevent_initial_call=True)
-def _kaskade_abtrieb(n, daten, tempo, endplatte, kanal, abgleich):
+def _kaskade_abtrieb(n, daten, tempo, kanal, abgleich):
     """Abtrieb der ganzen Kaskade, auf Knopfdruck - dauert einige Sekunden."""
     if not daten:
         return ""
@@ -2129,7 +2339,7 @@ def _kaskade_abtrieb(n, daten, tempo, endplatte, kanal, abgleich):
             element.anstellwinkel, _vorgaben(element.kaskade),
             float(tempo or 15.0),
             lage=_lage(element),
-            endplatte_mm=float(endplatte or 0.0), mit_boden=bool(kanal),
+            endplatte_mm=_endplattenhoehe(element), mit_boden=bool(kanal),
             abgleich=float(abgleich or 1.0))
         return _kaskadenabtriebskarte(ergebnis, float(tempo or 15.0))
     except Exception as fehler:

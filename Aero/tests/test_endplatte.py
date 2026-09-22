@@ -319,6 +319,131 @@ def test_export_duennt_die_ecken_nicht_aus(profil):
     assert [len(s) for s in plan.sektionen] == [len(s.punkte) for s in roh]
 
 
+# ------------------------------------------------------------ Oberflaeche
+
+def test_geometrie_landet_im_spec():
+    from aerostudio.spec.projekt import AeroSpec
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(
+        endplattenart="geometrie", ep_dicke=6.0, ep_hinten=45.0,
+        ep_fuss_breite=70.0, ep_fuss_hoehe=30.0))
+
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.endplatte is not None
+    assert element.endplatte.dicke == pytest.approx(6.0)
+    assert element.endplatte.ueberstand_hinten == pytest.approx(45.0)
+    assert element.endplatte.footplate is not None
+    assert element.endplatte.footplate.breite == pytest.approx(70.0)
+
+
+def test_art_keine_erzeugt_keine_geometrie():
+    from aerostudio.spec.projekt import AeroSpec
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    # Die Zahlenfelder stehen auf sinnvollen Werten, die Art aber auf "keine" -
+    # dann darf nichts entstehen. Sonst haette jeder Entwurf still eine
+    # Endplatte, nur weil die Felder Vorgaben tragen.
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(
+        endplattenart="keine", ep_dicke=6.0, ep_fuss_breite=70.0))
+
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.endplatte is None
+    assert element.endplattenhoehe == 0.0
+
+
+def test_blosse_hoehe_landet_im_spec_und_nicht_im_widget():
+    """Der Wert gehoerte bisher nur dem Bedienelement - ein Verstoss gegen
+    das Zustandsprinzip, den die Geometrie mit aufgeraeumt hat."""
+    from aerostudio.spec.projekt import AeroSpec
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(
+        endplattenart="hoehe", endplattenhoehe=180.0))
+
+    element = AeroSpec.model_validate(spec).elemente[0]
+    assert element.endplatte is None
+    assert element.endplattenhoehe == pytest.approx(180.0)
+
+
+def test_geometrie_schlaegt_die_blosse_hoehe():
+    """Wenn beides angegeben waere, gilt die Geometrie - und zwar an genau
+    einer Stelle entschieden, nicht in jedem Callback neu."""
+    from aerostudio.geometrie.profil import Profil as P
+    from aerostudio.spec.modell import Element, ProfilAusDatei
+
+    element = Element(id="X", profil=ProfilAusDatei(datei="e423.dat"),
+                      sehne=250.0, endplattenhoehe=599.0,
+                      endplatte=Endplatte(ueberstand_oben=40.0))
+    stapel = [_fluegel(P.aus_dat("profile/katalog/e423.dat").gespiegelt())]
+
+    hoehe = ep.wirksame_hoehe(element, stapel)
+    assert hoehe != pytest.approx(599.0)
+    assert hoehe == pytest.approx(ep.masse(stapel, element.endplatte).hoehe)
+
+
+def test_masse_werden_in_der_oberflaeche_gezeigt():
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(
+        endplattenart="geometrie", ep_fuss_breite=70.0))
+    karte = UI._endplattenmasse_zeigen(spec)
+
+    text = str(karte)
+    assert "Länge × Höhe" in text
+    assert "Footplate nach innen" in text
+
+
+def test_export_ueber_die_oberflaeche(tmp_path):
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import export_mit_klick, werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(
+        endplattenart="geometrie", ep_fuss_breite=70.0))
+    export_mit_klick(spec, tmp_path, "endplatte", "FW_E1")
+
+    dateien = list(tmp_path.glob("*.ibl"))
+    assert len(dateien) == 1
+    # Eigener Dateiname - sonst ueberschriebe die Platte die Fluegeldatei.
+    assert "Endplatte" in dateien[0].name
+    assert "Endplatte samt Footplate" in dateien[0].read_text()
+
+
+def test_export_ohne_geometrie_erklaert_sich(tmp_path):
+    """Kein Absturz und keine leere Datei, sondern ein brauchbarer Satz."""
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(endplattenart="keine"))
+    info, *_ = UI._export(spec, 0.005, str(tmp_path), "endplatte", "FW_E1", 1, 0)
+
+    assert "keine Endplatte" in str(info)
+    assert not list(tmp_path.glob("*.ibl"))
+
+
+def test_endplattenexport_kollidiert_nicht_mit_dem_fluegel(tmp_path):
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import export_mit_klick, werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(endplattenart="geometrie"))
+    export_mit_klick(spec, tmp_path, "fluegel", "FW_E1")
+    export_mit_klick(spec, tmp_path, "endplatte", "FW_E1")
+
+    assert len(list(tmp_path.glob("*.ibl"))) == 2
+
+
+def test_ohne_geometrie_bleibt_die_masstafel_leer():
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import werte_mit
+
+    spec, *_ = UI._profil_aktualisieren(*werte_mit(endplattenart="keine"))
+    assert UI._endplattenmasse_zeigen(spec) == ""
+
+
 def test_beide_regelstaende_laufen_durch(profil, bezug):
     """Die Platte darf keinen der Regelstaende zum Absturz bringen."""
     stapel = _fluegel(profil)

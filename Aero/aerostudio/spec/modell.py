@@ -537,9 +537,18 @@ class Element(BaseModel):
     endplatte: Optional[Endplatte] = Field(
         default=None,
         description="Endplatte am aeusseren Ende, samt Footplate. None = "
-                    "keine. Die Hoehe fuer die Abtriebsrechnung nach Hoerner "
-                    "faellt daraus ab - sie muss nicht getrennt gepflegt "
-                    "werden.")
+                    "keine Geometrie. Die Hoehe fuer die Abtriebsrechnung "
+                    "nach Hoerner faellt daraus ab - sie muss nicht getrennt "
+                    "gepflegt werden.")
+
+    endplattenhoehe: float = Field(
+        default=0.0, ge=0.0, le=600.0,
+        description="Endplattenhoehe in mm als blosse ABSCHAETZUNG, ohne "
+                    "Geometrie. Wirkt nur, wenn `endplatte` nicht gesetzt "
+                    "ist. Gedacht zum schnellen Ausprobieren, was eine "
+                    "Endplatte ueberhaupt braechte; fuer alles Weitere - "
+                    "Regelpruefung, Bauraum, Export - braucht es die "
+                    "Geometrie.")
 
     fertigung: Optional[Fertigung] = Field(
         default=None,

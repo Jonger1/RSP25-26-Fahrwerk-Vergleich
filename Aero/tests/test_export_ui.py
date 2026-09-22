@@ -225,9 +225,16 @@ SEKTIONEN = [
 
 KASKADE = []      # leer = einzelnes Element
 
+# Endplattenfelder, in der Reihenfolge der Signatur: Art, Dicke, die vier
+# Ueberstaende, Footplate-Breite und -Hoehe, dann die blosse Hoehe. Die
+# Vorgabe ist "keine" - ein Grossteil der Tests hier prueft Dinge, die mit
+# der Endplatte nichts zu tun haben, und soll von ihr auch nicht beeinflusst
+# werden.
+ENDPLATTE_AUS = ("keine", 4.0, 30.0, 30.0, 40.0, 20.0, 0.0, 25.0, 0.0)
+
 WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
          "prepreg", 0.6, 3.0, 0.2, "Frontfluegel Hauptelement",
-         SEKTIONEN, 13.0, 600.0, 90.0, KASKADE)
+         SEKTIONEN, 13.0, 600.0, 90.0, KASKADE) + ENDPLATTE_AUS
 
 
 def test_hauptcallback_liefert_spec_und_vier_figuren():
@@ -240,7 +247,7 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 def test_naca_zweig_erzeugt_ein_anderes_profil():
     naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
             "nasslaminat", 1.2, 0.0, 0.2, "NACA-Versuch",
-            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0, [])
+            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0, []) + ENDPLATTE_AUS
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
     assert AeroSpec.model_validate(a).hash() != AeroSpec.model_validate(b).hash()
@@ -486,6 +493,28 @@ def _werte(index, wert):
     return werte
 
 
+def werte_mit(**aenderungen):
+    """Eingabefolge mit benannten Aenderungen - nach PARAMETERNAME, nicht Index.
+
+    `_werte(index, ...)` und erst recht `werte[-1] = ...` haengen an der
+    Reihenfolge. Als die Endplattenfelder dazukamen, trafen alle `[-1]`-
+    Zugriffe plotzlich die Endplattenhoehe statt der Kaskadentabelle, und die
+    betroffenen Tests behaupteten, die Kaskade lande nicht im Spec. Wer hier
+    den Parameternamen nennt, ist gegen jede kuenftige Umordnung immun.
+    """
+    import inspect
+
+    namen = list(inspect.signature(UI._baue_spec).parameters)
+    unbekannt = set(aenderungen) - set(namen)
+    if unbekannt:
+        raise KeyError(f"Kein solcher Parameter von _baue_spec: {sorted(unbekannt)}")
+
+    werte = list(WERTE)
+    for name, wert in aenderungen.items():
+        werte[namen.index(name)] = wert
+    return werte
+
+
 def test_die_drei_ausgabeformen_liefern_verschiedenes(tmp_path):
     """Eine Kurve, ein Profil aus zwei Kurven, ein Schnittstapel."""
     spec, *_ = UI._profil_aktualisieren(*WERTE)
@@ -694,6 +723,25 @@ VORSCHLAEGE = [
     {"sehne": 200.0, "halbspannweite": 450.0, "anstellwinkel": -5.0,
      "hoehe": 95.0},
 ]
+
+
+def export_mit_klick(spec, ordner, ausgabe, dateiname="", toleranz=0.005):
+    """Ruft den Exportcallback so auf, als waere der Knopf gedrueckt worden.
+
+    Ohne das schreibt er bewusst nichts: Die Datei entsteht nur auf Klick,
+    sonst laege bei jedem Reglerzucken eine neue IBL auf der Platte. Im
+    direkten Funktionsaufruf ist der Dash-Kontext aber leer, also muss der
+    Ausloeser vorgetaeuscht werden.
+    """
+    from dash import callback_context
+
+    original = type(callback_context).triggered_id
+    try:
+        type(callback_context).triggered_id = property(
+            lambda self: "btn-export")
+        return UI._export(spec, toleranz, str(ordner), ausgabe, dateiname, 1, 0)
+    finally:
+        type(callback_context).triggered_id = original
 
 
 def _klick(nr, vorschlaege=None, tabelle=None):

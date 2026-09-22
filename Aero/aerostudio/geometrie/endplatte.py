@@ -245,3 +245,22 @@ def hoehe_fuer_abtrieb(stapel_je_element: list[list[Schnitt]],
     nicht mehr gab.
     """
     return masse(stapel_je_element, vorgabe).hoehe_fuer_hoerner
+
+
+def wirksame_hoehe(element, stapel_je_element: list[list[Schnitt]]) -> float:
+    """Die Endplattenhoehe eines Elements, aus welcher Quelle auch immer.
+
+    Es gibt zwei Wege, eine Endplatte anzugeben, und genau eine Stelle, an
+    der entschieden wird, welcher gilt:
+
+    * `element.endplatte` ist gesetzt -> die Hoehe faellt aus der Geometrie
+      ab. Sie ist dann immer stimmig, auch nach der zehnten Aenderung an
+      Sehne oder Flapstellung.
+    * sonst gilt `element.endplattenhoehe`, die blosse Abschaetzung.
+
+    Jede Abtriebsrechnung holt die Hoehe hier ab. Stuende die Entscheidung in
+    jedem Callback einzeln, waere sie nach dem dritten Aufrufer verschieden.
+    """
+    if getattr(element, "endplatte", None) is not None:
+        return hoehe_fuer_abtrieb(stapel_je_element, element.endplatte)
+    return float(getattr(element, "endplattenhoehe", 0.0) or 0.0)

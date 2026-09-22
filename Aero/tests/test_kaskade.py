@@ -328,10 +328,10 @@ def test_werte_ausserhalb_des_gueltigen_werden_geklemmt():
 
 def test_kaskade_landet_im_spec():
     werte = list(UI._EINGABEN)          # nur zur Laengenpruefung
-    from tests.test_export_ui import WERTE
-    eigene = list(WERTE)
-    eigene[-1] = [{"profil": "e58.dat", "sehne": 0.3, "winkel": -22.0,
-                   "spalt": 0.012, "ueberlappung": 0.03}]
+    from tests.test_export_ui import werte_mit
+    eigene = werte_mit(kaskadenzeilen=[
+        {"profil": "e58.dat", "sehne": 0.3, "winkel": -22.0,
+         "spalt": 0.012, "ueberlappung": 0.03}])
     spec, *_ = UI._profil_aktualisieren(*eigene)
     from aerostudio.spec.projekt import AeroSpec
     element = AeroSpec.model_validate(spec).elemente[0]
