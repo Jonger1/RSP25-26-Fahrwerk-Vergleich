@@ -191,6 +191,35 @@ def plane_fluegel(profil: Profil, spannweite, sehne_mm: float,
                       ausgeduennt=entfernt, ausgabe="fluegel", stapel=stapel)
 
 
+def plane_endplatte(stapel_je_element: list, vorgabe) -> Exportplan:
+    """Bereitet die Endplatte samt Footplate fuer Creo vor.
+
+    Eine eigene Datei und kein Anhang an den Fluegel: In Creo wird die
+    Endplatte ein eigenes Bauteil (`FW_ENDPL.PRT`), das ueber Copy Geometry
+    am Skelett haengt. Alles in eine Datei zu schreiben hiesse, die Kurven
+    hinterher in Creo wieder auseinanderzusortieren.
+
+    Anders als beim Fluegel wird hier NICHT ausgeduennt und nicht auf gleiche
+    Punktzahl gebracht. Die Umrisse sind Polygone aus geraden Kanten - dort
+    gibt es keine Kontur zu treffen und keine Toleranz zu erfuellen. Jeder
+    weggelassene Punkt waere schlicht eine fehlende Ecke.
+    """
+    from ..geometrie.endplatte import schnitte as endplattenschnitte
+
+    platte = endplattenschnitte(stapel_je_element, vorgabe)
+    sektionen = [s.punkte.copy() for s in platte]
+
+    return Exportplan(
+        sektionen=sektionen,
+        punktzahl=max(len(s) for s in sektionen),
+        # Gerade Kanten werden exakt getroffen - eine Toleranz gibt es hier
+        # nicht zu verfehlen.
+        toleranz_mm=0.0, toleranz_gefordert=0.0,
+        geschlossen=True, ausgabe="endplatte", stapel=platte,
+        elementanzahl=len(sektionen),
+    )
+
+
 def _auf_laenge(umlauf: np.ndarray, ziel: int) -> np.ndarray:
     """Kuerzt einen Umlauf gleichmaessig auf `ziel` Punkte.
 

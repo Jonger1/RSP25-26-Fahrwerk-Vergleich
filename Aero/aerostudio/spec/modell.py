@@ -411,6 +411,82 @@ class Kaskadenstufe(BaseModel):
         return self
 
 
+class Footplate(BaseModel):
+    """Der nach innen gezogene Fuss der Endplatte.
+
+    Am Frontfluegel ist sie kein Zierrat: Die Kante erzeugt einen Wirbel, der
+    den Nachlauf des Vorderrads nach aussen draengt. Teams, die sie weglassen,
+    verlieren nicht nur Abtrieb, sondern handeln sich einen unsauberen Zulauf
+    zum Unterboden ein.
+
+    Bewusst als HUELLFORM beschrieben, nicht als echte Kontur: ein waagerechter
+    Streifen am unteren Rand, `breite` weit nach innen, bis `hoehe` ueber
+    Grund. Echte Footplates haben geschwungene Kanten und eine Aufkantung -
+    fuer die beiden Fragen, die dieses Werkzeug beantwortet (passt sie in den
+    Bauraum, reisst sie eine Regel?), ist die Huellform die richtige und die
+    strengere Naeherung. Wer die Wirbelstaerke rechnen will, braucht CFD und
+    nicht dieses Modell.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    breite: float = Field(
+        default=60.0, ge=0.0, le=400.0,
+        description="Wie weit die Footplate nach innen reicht, in mm. "
+                    "0 = keine Footplate.")
+    hoehe: float = Field(
+        default=25.0, ge=0.0, le=300.0,
+        description="Bis zu welcher Hoehe ueber Grund sie reicht, in mm. "
+                    "Darueber ist die Endplatte wieder nur so dick wie "
+                    "angegeben.")
+
+
+class Endplatte(BaseModel):
+    """Die Endplatte am aeusseren Ende des Fluegels.
+
+    Beschrieben ueber UEBERSTAENDE statt ueber absolute Masse: Die Platte
+    umschliesst die ganze Kaskade an ihrer aeussersten Station und steht rundum
+    ueber. Damit waechst sie mit, wenn sich Sehne, Anstellwinkel oder
+    Flapstellung aendern - eine absolut vermasste Platte muesste man nach jeder
+    Aenderung von Hand nachfuehren und waere nach der dritten Iteration falsch.
+
+    Die Innenseite sitzt am Fluegelende, die Dicke geht nach AUSSEN. Das ist
+    die uebliche Bauweise und zugleich der ungLuenstigere Fall fuer T 8.2.2:
+    Was die Breitengrenze reisst, soll auffallen und nicht durch eine bequeme
+    Annahme verschwinden.
+
+    **Was hier NICHT drinsteckt:** Wirbelbildung an der Unterkante, Outwash,
+    Louvres und Ausschnitte. Die Endplatte geht in die Abtriebsrechnung
+    weiterhin nur als Hoehe nach Hoerner ein (`traglinie.endplattenfaktor`).
+    Dieses Modell beschreibt ihren BAURAUM - und der entscheidet, ob T 2.1.3
+    und T 8.2.2 eingehalten sind.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dicke: float = Field(
+        default=4.0, gt=0.0, le=50.0,
+        description="Wandstaerke der Platte in mm, nach aussen aufgetragen.")
+
+    ueberstand_vorne: float = Field(
+        default=30.0, ge=0.0, le=500.0,
+        description="Wie weit die Platte vor der vordersten Nase steht, in mm.")
+    ueberstand_hinten: float = Field(
+        default=30.0, ge=0.0, le=500.0,
+        description="Wie weit sie hinter die hinterste Hinterkante reicht.")
+    ueberstand_oben: float = Field(
+        default=40.0, ge=0.0, le=500.0,
+        description="Wie weit sie ueber den hoechsten Punkt der Kaskade steht.")
+    ueberstand_unten: float = Field(
+        default=20.0, ge=0.0, le=500.0,
+        description="Wie weit sie unter den tiefsten Punkt reicht. Der Boden "
+                    "begrenzt das: Die Platte wird nie unter z = 0 gefuehrt.")
+
+    footplate: Optional[Footplate] = Field(
+        default=None,
+        description="Fuss der Endplatte. None = keine Footplate.")
+
+
 class Element(BaseModel):
     """Ein Fluegelelement: Profil, Sehne, Anstellwinkel.
 
@@ -457,6 +533,13 @@ class Element(BaseModel):
         default=None,
         description="Verteilung ueber die Spannweite. None = ebener Schnitt, "
                     "also nur ein Profil ohne Fluegel.")
+
+    endplatte: Optional[Endplatte] = Field(
+        default=None,
+        description="Endplatte am aeusseren Ende, samt Footplate. None = "
+                    "keine. Die Hoehe fuer die Abtriebsrechnung nach Hoerner "
+                    "faellt daraus ab - sie muss nicht getrennt gepflegt "
+                    "werden.")
 
     fertigung: Optional[Fertigung] = Field(
         default=None,
