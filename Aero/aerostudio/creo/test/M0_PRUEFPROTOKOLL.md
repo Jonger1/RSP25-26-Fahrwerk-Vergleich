@@ -119,6 +119,8 @@ Bei Fehlern: Meldung **wörtlich** notieren.
 | 5 | Spline glatt, ohne Beulen oder Schlingen? | ja |
 | 6 | Vier Rechteckkanten sichtbar zusammenhängend? | ja |
 
+**Alle sechs sind seit dem 23.09. rechnerisch vorweggenommen** — `M0_abnahme.py` prüft sie in Creos Koordinatensystem an der geschriebenen Datei und meldet grün. Bewiesen ist damit, dass die Datei das Richtige *enthält*, nicht dass Creo sie so *liest*. Der Blick in Creo bleibt also nötig, ist aber nur noch eine Bestätigung: Fiele die Rechnung durch, säße der Fehler bei uns und niemand müsste Creo dafür öffnen.
+
 Beim ersten Versuch am 05.09.2026 — noch mit ungedrehter Datei — lag das Rechteck flach, der Spline hing in die Tiefe, die Marke zeigte nach oben und das kleine Rechteck schwebte 300 mm darüber. Genau das kehrt die Drehung im Exporter jetzt um.
 
 ---
@@ -188,10 +190,11 @@ Jede Datei in ein frisches Teil importieren, wie in Schritt 3. Fehlermeldungen *
 
 **Was daraus folgt:**
 
-- **Mindestens eine Variante klappt** → der Spec-Hash darf in die Datei. Jede Kurve in Creo ist bis auf den Git-Stand rückverfolgbar, ohne Umweg über Modellparameter. Die klappende Variante wird zur Vorgabe.
-- **Keine klappt** → IBL-Dateien bleiben kommentarfrei. In `creo8.yaml` genügt dann `befunde.ibl_kommentarzeilen_erlaubt: false`; der Exporter lässt sie ab dem nächsten Start von selbst weg. **Am Code ist nichts zu ändern** — genau dafür gibt es die Adapterschicht. Die Herkunft steht dann nur im Creo-Parameter `AERO_SPEC_HASH`, den M5 setzt.
+- **Variante 1 klappt** → der Spec-Hash darf in die Datei. Jede Kurve in Creo ist bis auf den Git-Stand rückverfolgbar, ohne Umweg über Modellparameter. Das ist der Stand, auf dem das Werkzeug heute schon arbeitet.
+- **Variante 1 scheitert, eine andere klappt** → der Exporter bekommt in M1 einen anderen `kommentarort`. Die Rückfallebene ist gebaut, sie muss nur gewählt werden.
+- **Keine klappt** → IBL-Dateien bleiben kommentarfrei. In `creo8.yaml` genügt `ibl_kommentar_vor_kopf: false`; der Exporter lässt sie ab dem nächsten Start von selbst weg. **Am Code ist nichts zu ändern** — genau dafür gibt es die Adapterschicht. Die Herkunft steht dann nur im Creo-Parameter `AERO_SPEC_HASH`, den M5 setzt.
 
-Einzutragen in `creo8.yaml` unter `befunde`: `ibl_kommentar_vor_kopf`, `ibl_kommentar_nach_kopf`, `ibl_kommentar_zwischen_sektionen` und die Zusammenfassung `ibl_kommentarzeilen_erlaubt`.
+Einzutragen in `creo8.yaml` unter `befunde`, drei Zeilen `true`/`false`: `ibl_kommentar_vor_kopf`, `ibl_kommentar_nach_kopf`, `ibl_kommentar_zwischen_sektionen`. Eine vierte Zusammenfassung gab es bis zum 23.09., sie ist entfallen — was sich ableiten lässt, soll niemand eintippen.
 
 ---
 
@@ -226,10 +229,9 @@ Alles wandert nach `creo8.yaml`, nicht in eine Notiz — nur dort wirkt es.
 | 2 | Kommentare über `open`? | `befunde.ibl_kommentar_vor_kopf` |
 | 3 | Kommentare unter `arclength`? | `befunde.ibl_kommentar_nach_kopf` |
 | 4 | Kommentare vor jeder Sektion? | `befunde.ibl_kommentar_zwischen_sektionen` |
-| 5 | Zusammenfassung daraus | `befunde.ibl_kommentarzeilen_erlaubt` |
-| 6 | Mapkey-Text | `mapkeys.import_curve` |
-| 7 | Mapkey zum Löschen des Import-Features | `mapkeys.delete_import_feature` |
-| 8 | Steckt der Dateiname fest im Mapkey? | `mapkeys.dateiname_im_mapkey` |
+| 5 | Mapkey-Text | `mapkeys.import_curve` |
+| 6 | Mapkey zum Löschen des Import-Features | `mapkeys.delete_import_feature` |
+| 7 | Steckt der Dateiname fest im Mapkey? | `mapkeys.dateiname_im_mapkey` |
 
 Alles, was unerwartet war, gehört dazu — Fehlermeldungen bitte **wörtlich**. Was nicht klappt, wird nicht weggelassen, sondern notiert: Davon hängt der Zuschnitt von M5 ab.
 

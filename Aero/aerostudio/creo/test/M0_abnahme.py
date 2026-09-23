@@ -61,6 +61,23 @@ def _sektionen(pfad: Path) -> list[np.ndarray]:
     return sektionen
 
 
+def _creo_spline():
+    """Holt `creo_spline` aus dem Nachbarskript, unabhaengig vom Arbeitsordner.
+
+    Ein schlichtes `import spline_verifikation` traegt nur, solange man das
+    Skript aus genau diesem Ordner startet - unter pytest oder von der
+    Projektwurzel aus faellt es um. Beides kommt vor, also wird der Pfad
+    ausgerechnet statt gehofft.
+    """
+    import importlib.util
+
+    pfad = HIER / "spline_verifikation.py"
+    spec = importlib.util.spec_from_file_location("m0_spline", pfad)
+    modul = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modul)
+    return modul.creo_spline
+
+
 # --------------------------------------------------------- Nachrechenbares
 
 def pruefe_frame() -> tuple[bool, str]:
@@ -104,6 +121,84 @@ def pruefe_pruefkurven() -> tuple[bool, str]:
     return True, (f"{len(varianten) + 1} Dateien, {len(referenz)} Sektionen, "
                   f"Geometrie punktgleich - der Unterschied sind allein die "
                   f"Kommentare")
+
+
+def pruefe_lage() -> tuple[bool, str]:
+    """Die sechs Sichtpruefungen aus Schritt 4 - rechnerisch vorweggenommen.
+
+    Sie fragen nach Lage und Orientierung: Steht das Rechteck senkrecht?
+    Woelbt sich der Spline nach oben? Zeigt die Marke zur Seite? Genau das
+    laesst sich aus den geschriebenen Koordinaten nachrechnen, und zwar in
+    CREOS System - denn dort steht die Datei, wenn sie importiert wird.
+
+    Das ersetzt den Blick in Creo NICHT: Bewiesen wird hier, dass die Datei
+    das Richtige enthaelt, nicht dass Creo sie so liest, wie wir sie meinen.
+    Aber es verschiebt die Frage. Faellt diese Rechnung durch, braucht
+    niemand Creo zu oeffnen - der Fehler sitzt dann bei uns.
+    """
+    basis = HIER / "M0_pruefkurve.ibl"
+    if not basis.exists():
+        return False, "M0_pruefkurve.ibl fehlt"
+
+    sektionen = _sektionen(basis)
+    if len(sektionen) < 10:
+        return False, f"Nur {len(sektionen)} Sektionen, erwartet sind 10"
+
+    # In Creo-Koordinaten: X wie unser x, Y ist unsere Hoehe, Z die Spannweite.
+    CX, CY, CZ = 0, 1, 2
+    rechteck = np.vstack(sektionen[:4])
+    spline = sektionen[4]
+    klein = np.vstack(sektionen[5:9])
+    marke = sektionen[9]
+
+    maengel = []
+
+    # 1 Das grosse Rechteck steht senkrecht: Es hat Hoehe, aber keine
+    #   Ausdehnung in Spannweitenrichtung. Laege es flach, waere es umgekehrt.
+    if not (np.ptp(rechteck[:, CY]) > 1.0 and np.allclose(rechteck[:, CZ], rechteck[0, CZ])):
+        maengel.append("grosses Rechteck steht nicht senkrecht")
+
+    # 2 Der Spline woelbt sich nach OBEN: sein Scheitel liegt ueber beiden
+    #   Enden. Haengt er durch, ist die Hochachse verdreht.
+    if not spline[:, CY].max() > max(spline[0, CY], spline[-1, CY]) + 1.0:
+        maengel.append("Spline woelbt sich nicht nach oben")
+    # ... und zwar 30 mm ueber der Rechteckoberkante.
+    ueberhoehung = float(spline[:, CY].max() - rechteck[:, CY].max())
+    if not np.isclose(ueberhoehung, 30.0, atol=1e-6):
+        maengel.append(f"Scheitel {ueberhoehung:.3f} mm ueber der Oberkante statt 30")
+
+    # 3 Die Richtungsmarke zeigt waagerecht zur Seite: Ausdehnung nur in
+    #   Creos Z, nicht in der Hoehe.
+    if not (abs(np.ptp(marke[:, CZ])) > 1.0 and np.allclose(marke[:, CY], marke[0, CY])):
+        maengel.append("Richtungsmarke zeigt nicht waagerecht zur Seite")
+
+    # 4 Das kleine Rechteck steht SEITLICH versetzt, nicht darueber.
+    seitlich = abs(float(klein[:, CZ].mean() - rechteck[:, CZ].mean()))
+    hoeher = abs(float(klein[:, CY].mean() - rechteck[:, CY].mean()))
+    if not (seitlich > 100.0 and hoeher < seitlich):
+        maengel.append("kleines Rechteck sitzt nicht seitlich versetzt")
+
+    # 5 Der Spline ist glatt: Der Kurventyp, den Creo bauen wird, darf
+    #   zwischen den Stuetzpunkten nicht ueber sie hinausschiessen.
+    try:
+        kurve, laengen = _creo_spline()(spline)
+        fein = kurve(np.linspace(laengen[0], laengen[-1], 2000))
+        if fein[:, CY].max() > spline[:, CY].max() + 1e-6:
+            maengel.append("Spline schwingt ueber seine Stuetzpunkte hinaus")
+    except Exception as fehler:                  # pragma: no cover
+        maengel.append(f"Spline nicht nachrechenbar: {fehler}")
+
+    # 6 Die vier Rechteckkanten haengen zusammen: Jede Sektion beginnt, wo
+    #   die vorige endete. Darauf baut jede spaetere Profilkontur auf.
+    for i in range(3):
+        if not np.allclose(sektionen[i][-1], sektionen[i + 1][0]):
+            maengel.append(f"Rechteckkante {i + 1} haengt nicht an {i + 2}")
+
+    if maengel:
+        return False, "; ".join(maengel)
+    return True, ("Rechteck senkrecht, Spline 30 mm ueberhoeht und ohne "
+                  "Ueberschwingen, Marke waagerecht, kleines Rechteck "
+                  f"{seitlich:.0f} mm seitlich, Kanten zusammenhaengend")
 
 
 def pruefe_masse() -> tuple[bool, str]:
@@ -180,6 +275,8 @@ def _hauptteil() -> int:
     ergebnisse = []
     for titel, pruefung in (("Achsabbildung ist eine Drehung", pruefe_frame),
                             ("Sollmasse stecken in der Datei", pruefe_masse),
+                            ("Lage und Orientierung stimmen (Schritt 4)",
+                             pruefe_lage),
                             ("Kommentarvarianten sind geometriegleich",
                              pruefe_pruefkurven)):
         ok, text = pruefung()

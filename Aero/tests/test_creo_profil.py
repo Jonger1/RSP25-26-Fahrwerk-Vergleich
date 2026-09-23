@@ -109,8 +109,9 @@ def test_offene_punkte_trennt_jetzt_von_vertagt():
     jetzt = dict(p.offene_punkte("jetzt"))
     vertagt = dict(p.offene_punkte("vertagt"))
 
-    # Der Kommentarbefund ist der offene Kern von M0.
-    assert "befunde.ibl_kommentarzeilen_erlaubt" in jetzt
+    # Der Kommentarbefund ist der offene Kern von M0 - jetzt in den drei
+    # Einzelstellen, aus denen der Sammelbefund abgeleitet wird.
+    assert "befunde.ibl_kommentar_vor_kopf" in jetzt
     # Was erst M4 und M5 beantworten koennen, darf M0 nicht blockieren.
     assert "koordinatensystem.ausrichtung_im_fahrzeugmodell" in vertagt
     assert "umgebung.java_konflikt_geklaert" in vertagt
@@ -119,7 +120,7 @@ def test_offene_punkte_trennt_jetzt_von_vertagt():
 
 def test_beantworteter_befund_verschwindet_aus_der_liste(tmp_path, monkeypatch):
     (tmp_path / "fertig.yaml").write_text(
-        "befunde:\n  ibl_kommentarzeilen_erlaubt: true\n", encoding="utf-8")
+        "befunde:\n  ibl_kommentar_vor_kopf: true\n", encoding="utf-8")
     monkeypatch.setattr(profilmodul, "PROFILORDNER", tmp_path)
     profil.cache_clear()
 
@@ -144,7 +145,7 @@ def test_negativer_befund_schaltet_kommentare_ab_ohne_codeaenderung(
         profilmodul, "profil",
         lambda name="creo8": Creoprofil(
             id="test", quelle=tmp_path / "x.yaml",
-            daten={"befunde": {"ibl_kommentarzeilen_erlaubt": False}}))
+            daten={"befunde": {"ibl_kommentar_vor_kopf": False}}))
 
     ziel = ibl.write_ibl(tmp_path / "b.ibl", [np.zeros((2, 3))],
                          kommentare=["AERO_SPEC_HASH: abc"])
@@ -194,7 +195,7 @@ def _abnahme():
 
 
 @pytest.mark.parametrize("pruefung", ["pruefe_frame", "pruefe_masse",
-                                      "pruefe_pruefkurven"])
+                                      "pruefe_lage", "pruefe_pruefkurven"])
 def test_abnahme_rechenpruefungen_sind_gruen(pruefung):
     """Was M0_abnahme.py ohne Creo nachrechnet, muss stimmen.
 
@@ -235,3 +236,39 @@ def test_versionierte_pruefkurven_sind_aktuell(tmp_path):
         assert frisch.read_text() == (ordner / f"M0_kommentar_{ort}.ibl").read_text(), (
             f"M0_kommentar_{ort}.ibl ist nicht mehr aktuell."
         )
+
+
+def test_sammelbefund_wird_abgeleitet_nicht_gepflegt(tmp_path, monkeypatch):
+    """Was sich ausrechnen laesst, soll niemand eintippen.
+
+    Bis zum 23.09. gab es in creo8.yaml einen vierten Eintrag, der die drei
+    Einzelbefunde zusammenfasste. Das war eine weitere Stelle, an der jemand
+    ein `false` vergessen konnte, ohne dass es auffiel.
+    """
+    (tmp_path / "p.yaml").write_text(
+        "befunde:\n"
+        "  ibl_kommentar_vor_kopf: false\n"
+        "  ibl_kommentar_nach_kopf: true\n"
+        "  ibl_kommentar_zwischen_sektionen: true\n", encoding="utf-8")
+    monkeypatch.setattr(profilmodul, "PROFILORDNER", tmp_path)
+    profil.cache_clear()
+    p = profil("p")
+
+    # Der Exporter schreibt vor den Kopf - dort steht false, also nein.
+    assert p.kommentare_erlaubt is False
+    assert not p.kommentarbefund_offen
+    # Die anderen beiden bleiben als Rueckfallebene sichtbar.
+    assert p.kommentarorte()["ibl_kommentar_nach_kopf"] is True
+
+
+def test_ein_offener_kommentarort_haelt_den_befund_offen(tmp_path, monkeypatch):
+    (tmp_path / "halb.yaml").write_text(
+        "befunde:\n"
+        "  ibl_kommentar_vor_kopf: true\n"
+        "  ibl_kommentar_nach_kopf: AUSFUELLEN\n", encoding="utf-8")
+    monkeypatch.setattr(profilmodul, "PROFILORDNER", tmp_path)
+    profil.cache_clear()
+    p = profil("halb")
+
+    assert p.kommentarbefund_offen
+    assert p.kommentarorte()["ibl_kommentar_nach_kopf"] is None

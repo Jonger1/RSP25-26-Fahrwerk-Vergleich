@@ -177,12 +177,12 @@ befunde:
   ibl_kommentar_nach_kopf: AUSFUELLEN       # "!"-Zeilen NACH "arclength"
   ibl_kommentar_zwischen_sektionen: AUSFUELLEN
 
-  # Zusammenfassung der drei. Steht hier `false`, laesst formate/ibl.py die
-  # Kommentare von selbst weg - ohne Codeaenderung, nur ueber diese Zeile.
-  # Solange AUSFUELLEN, bleibt es beim bisherigen Verhalten (geschrieben):
-  # Ein Fehlschlag faellt beim Import sofort auf und richtet keinen stillen
-  # Schaden an - anders als eine Spiegelung, die man der Form nicht ansieht.
-  ibl_kommentarzeilen_erlaubt: AUSFUELLEN
+  # Einen vierten Eintrag als Zusammenfassung gab es hier bis zum 23.09. Er
+  # ist entfallen: Was sich ableiten laesst, soll niemand eintippen. Der
+  # Exporter schreibt vor den Kopf, also entscheidet `ibl_kommentar_vor_kopf`
+  # allein, ob formate/ibl.py Kommentare schreibt - siehe
+  # creo/profil.py:kommentare_erlaubt. Steht dort `false`, hoert er von
+  # selbst damit auf, ohne Codeaenderung.
 
   # BEFUND 09.09.2026: Das Plugin laedt NICHT.
   # Weder ueber Werkzeuge -> Hilfsanwendungen (der Knopf ist in der Student

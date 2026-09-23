@@ -98,26 +98,44 @@ class Creoprofil:
             return dict(VORGABE_FRAME)
         return {s: str(gelesen[s]) for s in VORGABE_FRAME}
 
+    # Die drei Stellen, an denen eine Kommentarzeile stehen kann. Der
+    # Exporter schreibt "vor_kopf"; die beiden anderen sind Rueckfallebenen,
+    # falls Creo genau diese Stelle nicht mag.
+    KOMMENTARORTE = ("ibl_kommentar_vor_kopf", "ibl_kommentar_nach_kopf",
+                     "ibl_kommentar_zwischen_sektionen")
+
     @property
     def kommentare_erlaubt(self) -> bool:
         """Darf eine .ibl "!"-Kommentarzeilen im Kopf tragen?
 
-        Solange der Befund offen ist, wird geschrieben - das ist der Stand,
+        ABGELEITET aus den drei Einzelbefunden, nicht getrennt gepflegt: Was
+        sich ausrechnen laesst, soll niemand eintippen - ein vierter Eintrag
+        waere nur eine weitere Stelle, an der jemand ein `false` vergisst.
+
+        Solange die Befunde offen sind, wird geschrieben. Das ist der Stand,
         auf dem das Werkzeug seit M1 laeuft, und ein Fehlschlag faellt beim
-        Import sofort auf. Sobald in creo8.yaml `false` steht, hoert der
-        Exporter von selbst damit auf, ohne dass eine Zeile Code geaendert
-        werden muss. Genau dafuer gibt es die Adapterschicht.
+        Import sofort auf - anders als eine Spiegelung, die man der Form
+        nicht ansieht. Sobald in creo8.yaml `ibl_kommentar_vor_kopf: false`
+        steht, hoert der Exporter von selbst damit auf, ohne dass eine Zeile
+        Code geaendert werden muss.
         """
-        wert = self._pfad("befunde", "ibl_kommentarzeilen_erlaubt")
+        # Der Exporter schreibt vor den Kopf - nur dieser Befund entscheidet.
+        wert = self._pfad("befunde", "ibl_kommentar_vor_kopf")
         if isinstance(wert, bool):
             return wert
         return True
 
     @property
     def kommentarbefund_offen(self) -> bool:
-        """Ist der Kommentarbefund noch ungeprueft?"""
-        return not isinstance(
-            self._pfad("befunde", "ibl_kommentarzeilen_erlaubt"), bool)
+        """Ist auch nur einer der drei Kommentarbefunde noch ungeprueft?"""
+        return any(not isinstance(self._pfad("befunde", ort), bool)
+                   for ort in self.KOMMENTARORTE)
+
+    def kommentarorte(self) -> dict[str, bool | None]:
+        """Die drei Befunde einzeln - True, False oder None fuer ungeprueft."""
+        return {ort: (w if isinstance(w := self._pfad("befunde", ort), bool)
+                      else None)
+                for ort in self.KOMMENTARORTE}
 
     def offene_punkte(self, art: str = "jetzt") -> list[tuple[str, str]]:
         """Eintraege, die noch auf eine Antwort warten, mit Pfadangabe.
