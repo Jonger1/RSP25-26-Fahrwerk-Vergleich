@@ -39,6 +39,16 @@ matplotlib>=3.5
 # sieht den Zusammenhang. Entweder es steht hier, oder schneiden_sich rechnet
 # den Punkt-im-Polygon selbst.
 
+# --- Fertigungsvorlagen ----------------------------------------------------
+ezdxf>=1.0
+# Fuer formate/dxf.py - Rippen und Schablonen zum Laserschneiden.
+# Stand bis zum 21.09. ungenutzt in der Liste und flog deshalb raus; seit
+# dem 23.09. gibt es den Writer wirklich, also ist es zurueck. Warum eine
+# Bibliothek und nicht selbst geschrieben wie beim IBL-Format: IBL hat zehn
+# Zeilen Kopf und ist gegen Creo verifiziert. DXF hat Sections, Tabellen und
+# Handles, und ein selbstgebautes DXF faellt irgendeinem CAM-Programm vor die
+# Fuesse - was man erst beim Zuschnitt merkt, und dann ist das Material weg.
+
 # --- Aerodynamik -----------------------------------------------------------
 neuralfoil>=0.3
 # Zieht AeroSandbox samt pandas, seaborn und casadi nach und ist damit der

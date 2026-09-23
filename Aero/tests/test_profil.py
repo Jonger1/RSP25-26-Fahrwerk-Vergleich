@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from aerostudio.geometrie.profil import Profil
+from aerostudio.geometrie.profil import Profil, kosinus
 from aerostudio.geometrie.spline import abweichung_zur_kontur, bogenlaenge
 from aerostudio.spec.modell import Fertigung, Verfahren
 
@@ -270,3 +270,90 @@ def test_alle_katalogprofile_lassen_sich_lesen():
         p = Profil.aus_dat(d)
         assert 0.02 < p.max_dicke < 0.30, f"{d.name}: Dicke {p.max_dicke:.3f}"
         assert p.punktzahl(250.0, 0.005) is not None, f"{d.name}: keine Punktzahl"
+
+
+# ----------------------------------------------------- NACA-5 (M1 Aufgabe 3)
+
+def test_naca5_trifft_die_publizierten_kennwerte():
+    """NACA 23012: 12 % dick, Skelettlinie 1,8 % bei 15 % Sehne.
+
+    Der Sinn dieser Profilfamilie im Werkzeug ist genau das - fuer Abtrieb
+    taugt sie nichts, aber ihre Kennwerte sind publiziert und damit ein
+    Pruefstein fuer Dicken- und Woelbungsrechnung.
+    """
+    p = Profil.aus_naca5("23012")
+    assert p.max_dicke == pytest.approx(0.12, abs=0.001)
+    assert p.name == "NACA 23012"
+
+
+def test_naca5_skelettlinie_stimmt_mit_der_literatur():
+    """Geprueft wird die SKELETTLINIE, nicht die Mittellinie aus Koordinaten.
+
+    Die beiden sind bei der Fuenfziffernfamilie deutlich verschieden - siehe
+    den Docstring von woelbungsverlauf. Wer hier max_woelbung nimmt, misst
+    1,49 % und haelt eine korrekte Formel faelschlich fuer falsch.
+    """
+    r, k1 = 0.2025, 15.957            # Tabellenwerte fuer 230xx
+    x = kosinus(401)
+    yc = np.where(x < r,
+                  k1 / 6.0 * (x**3 - 3 * r * x**2 + r**2 * (3 - r) * x),
+                  k1 * r**3 / 6.0 * (1 - x))
+
+    assert yc.max() == pytest.approx(0.018, abs=0.001)
+    assert x[yc.argmax()] == pytest.approx(0.15, abs=0.01)
+
+
+def test_mittellinie_weicht_bei_naca5_staerker_ab_als_bei_naca4():
+    """Haelt die Zahlen aus dem Docstring von woelbungsverlauf fest.
+
+    Sie standen dort urspruenglich als "wenige Hundertstel Prozent" - das
+    ist fuer NACA-4 knapp und fuer NACA-5 schlicht falsch.
+    """
+    vier = Profil.aus_naca(0.04, 0.4, 0.12).max_woelbung
+    fuenf = Profil.aus_naca5("23012").max_woelbung
+
+    assert vier == pytest.approx(0.0383, abs=0.001)     # Skelett 4,00 %
+    assert fuenf == pytest.approx(0.0149, abs=0.001)    # Skelett 1,84 %
+    # Die Fuenfziffernfamilie weicht relativ deutlich staerker ab.
+    assert (0.0184 - fuenf) / 0.0184 > (0.04 - vier) / 0.04
+
+
+def test_naca5_dickenreihe_ist_dieselbe_wie_bei_naca4():
+    """Der Unterschied steckt allein in der Skelettlinie.
+
+    Deshalb wird die Dickenformel im Code auch nicht zweimal hingeschrieben -
+    zwei Kopien waeren zwei Stellen, an denen ein Koeffizient abweichen kann.
+    """
+    for dicke in (0.10, 0.12, 0.15, 0.18):
+        vier = Profil.aus_naca(0.0, 0.4, dicke)
+        fuenf = Profil.aus_naca5(f"230{int(dicke*100):02d}")
+        assert fuenf.max_dicke == pytest.approx(vier.max_dicke, abs=0.0005)
+
+
+def test_naca5_woelbungsziffer_wirkt():
+    """Die erste Ziffer ist der Auslegungsauftrieb, cl = Ziffer * 0,15."""
+    schwach = Profil.aus_naca5("21012").max_woelbung
+    stark = Profil.aus_naca5("25012").max_woelbung
+    assert stark > schwach * 2.0
+
+
+def test_naca5_ruecklageziffer_wirkt():
+    """Die zweite Ziffer ist die Ruecklage in Zwanzigsteln."""
+    for ziffer, erwartet in ((2, 0.10), (3, 0.15), (4, 0.20)):
+        p = Profil.aus_naca5(f"2{ziffer}012")
+        x, yc = p.woelbungsverlauf()
+        assert x[yc.argmax()] == pytest.approx(erwartet, abs=0.02)
+
+
+@pytest.mark.parametrize("kennzahl,grund", [
+    ("2301", "fuenf Ziffern"),
+    ("230123", "fuenf Ziffern"),
+    ("2a012", "fuenf Ziffern"),
+    ("23112", "reflexe"),          # dritte Ziffer 1
+    ("20012", "Woelbungsruecklage"),
+    ("26012", "Woelbungsruecklage"),
+])
+def test_naca5_lehnt_unbrauchbare_kennzahlen_verstaendlich_ab(kennzahl, grund):
+    """Eine klare Meldung ist besser als eine halb richtige Formel."""
+    with pytest.raises(ValueError, match=grund):
+        Profil.aus_naca5(kennzahl)

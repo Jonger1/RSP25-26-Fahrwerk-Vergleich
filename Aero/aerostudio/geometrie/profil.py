@@ -234,6 +234,87 @@ class Profil:
         return Profil(punkte, name=name, herkunft="naca")
 
     @staticmethod
+    def aus_naca5(kennzahl: str = "23012", n: int = 201) -> "Profil":
+        """Analytisch erzeugtes NACA-5-Profil, etwa 23012.
+
+        Der Unterschied zur Vierziffernfamilie steckt allein in der
+        SKELETTLINIE. Die Dickenverteilung ist dieselbe Formel - deshalb
+        wird sie hier auch nicht zum zweiten Mal hingeschrieben, sondern aus
+        `aus_naca` geholt. Zwei Kopien derselben Reihe waeren zwei Stellen,
+        an denen ein Koeffizient abweichen kann.
+
+        Die fuenf Ziffern lesen sich so:
+          1. Auslegungsauftrieb, cl = Ziffer * 0.15
+          2. Woelbungsruecklage in ZWANZIGSTELN der Sehne
+          3. 0 = einfache, 1 = reflexe Skelettlinie
+          4./5. Dicke in Prozent
+
+        **Was das hier soll.** Fuer Abtrieb sind diese Profile keine Wahl -
+        sie stammen aus dem Flugzeugbau und sind auf geringen Widerstand bei
+        kleinem Auftrieb ausgelegt, also auf das Gegenteil dessen, was ein
+        Frontfluegel braucht. Sie stehen im Plan als ANALYTISCHE REFERENZ:
+        Ihre Kennwerte sind publiziert, also laesst sich an ihnen pruefen,
+        ob Dicken-, Woelbungs- und Kruemmungsrechnung stimmen - ohne sich
+        auf eine eingelesene .dat-Datei verlassen zu muessen.
+
+        Reflexe Skelettlinien (dritte Ziffer 1) sind nicht umgesetzt: Sie
+        sind selten, und eine halb richtige Formel waere schlechter als eine
+        klare Fehlermeldung.
+        """
+        text = str(kennzahl).strip()
+        if len(text) != 5 or not text.isdigit():
+            raise ValueError(f"NACA-5 braucht fuenf Ziffern, bekommen: {kennzahl!r}")
+
+        cl_ziffer, p_ziffer, reflex = int(text[0]), int(text[1]), int(text[2])
+        dicke = int(text[3:]) / 100.0
+
+        if reflex:
+            raise ValueError(
+                f"NACA {text}: reflexe Skelettlinien (dritte Ziffer 1) sind "
+                f"nicht umgesetzt. Sie sind selten, und eine halb richtige "
+                f"Formel waere schlechter als diese Meldung.")
+        if not 1 <= p_ziffer <= 5:
+            raise ValueError(
+                f"NACA {text}: die zweite Ziffer ist die Woelbungsruecklage in "
+                f"Zwanzigsteln und liegt zwischen 1 und 5, hier {p_ziffer}.")
+
+        # Die Tabellenwerte der Standardfamilie. r ist die Stelle, an der die
+        # Skelettlinie in die Gerade uebergeht, k1 skaliert sie auf den
+        # Auslegungsauftrieb. Beide stammen aus NACA Report 537 und werden
+        # nicht gerechnet, sondern nachgeschlagen - die zugrunde liegende
+        # Bedingung ist implizit und nur numerisch loesbar.
+        TABELLE = {
+            1: (0.0580, 361.400),    # 210xx
+            2: (0.1260, 51.640),     # 220xx
+            3: (0.2025, 15.957),     # 230xx
+            4: (0.2900, 6.643),      # 240xx
+            5: (0.3910, 3.230),      # 250xx
+        }
+        r, k1 = TABELLE[p_ziffer]
+        # Die Tabelle gilt fuer cl = 0.3, also die erste Ziffer 2.
+        k1 *= (cl_ziffer * 0.15) / 0.3
+
+        x = kosinus(n)
+        yt = 5 * dicke * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2
+                          + 0.2843 * x**3 - 0.1015 * x**4)
+
+        yc = np.where(
+            x < r,
+            k1 / 6.0 * (x**3 - 3 * r * x**2 + r**2 * (3 - r) * x),
+            k1 * r**3 / 6.0 * (1 - x))
+        dy = np.where(
+            x < r,
+            k1 / 6.0 * (3 * x**2 - 6 * r * x + r**2 * (3 - r)),
+            -k1 * r**3 / 6.0)
+        th = np.arctan(dy)
+
+        oben = np.column_stack([x - yt * np.sin(th), yc + yt * np.cos(th)])
+        unten = np.column_stack([x + yt * np.sin(th), yc - yt * np.cos(th)])
+        punkte = np.vstack([oben[::-1], unten[1:]])
+
+        return Profil(punkte, name=f"NACA {text}", herkunft="naca5")
+
+    @staticmethod
     def aus_cst(oben: list[float] | np.ndarray, unten: list[float] | np.ndarray,
                 hinterkante_dicke: float = 0.0, n: int = 201,
                 name: str = "CST") -> "Profil":
@@ -269,8 +350,13 @@ class Profil:
         """Unterseite, von der Nase zur Hinterkante, streng steigend in x."""
         return _monoton(self.punkte[self._nasenindex():])
 
-    def _seiten_auf(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def seiten_auf(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Ober- und Unterseite an gegebenen x-Stellen.
+
+        Oeffentlich, seit formate/dxf.py sie fuer den Normalenversatz der
+        Rippen-Innenkontur braucht. Sie war nie wirklich privat - sie liefert
+        die Kontur auf einem frei waehlbaren Raster, und genau das braucht
+        jeder, der etwas anderes als die gespeicherten Stuetzpunkte will.
 
         Interpoliert mit PCHIP, nicht linear. Katalogprofile haben oft nur 30
         bis 100 Punkte; linear interpoliert waere die Kontur dazwischen ein
@@ -287,18 +373,33 @@ class Profil:
 
     def dickenverlauf(self, n: int = 401) -> tuple[np.ndarray, np.ndarray]:
         x = kosinus(n)
-        yo, yu = self._seiten_auf(x)
+        yo, yu = self.seiten_auf(x)
         return x, yo - yu
 
     def woelbungsverlauf(self, n: int = 401) -> tuple[np.ndarray, np.ndarray]:
         """Mittellinie als Mittel von Ober- und Unterseite bei gleichem x.
 
-        Das ist die uebliche Definition aus Koordinaten. Sie stimmt bei
-        NACA-Profilen bis auf wenige Hundertstel Prozent mit der Skelettlinie
-        ueberein, aus der sie konstruiert werden.
+        Das ist die uebliche Definition aus Koordinaten, und fuer alles, was
+        aus einer .dat-Datei kommt, die einzig moegliche.
+
+        **Sie ist nicht dasselbe wie die Skelettlinie.** Ein NACA-Profil
+        entsteht, indem die Dicke SENKRECHT zur Skelettlinie aufgetragen
+        wird; dadurch wandern Ober- und Unterseite gegenlaeufig in x, und
+        die Mittellinie bei konstantem x faellt flacher aus. Wie weit, haengt
+        an der Steigung der Skelettlinie:
+
+            NACA 4412   Skelett 4,00 %  ->  Mittellinie 3,83 %   (-4 %)
+            NACA 23012  Skelett 1,84 %  ->  Mittellinie 1,49 %   (-19 %)
+
+        Bei der Vierziffernfamilie sind das wenige Prozent, bei der
+        Fuenfziffernfamilie fast ein Fuenftel - deren Skelettlinie steigt
+        nahe der Nase sehr steil an. Wer den publizierten Auslegungswert
+        eines NACA-Profils nachrechnen will, muss also die Skelettlinie
+        nehmen und nicht diese Mittellinie. Die Zahlen oben sind gemessen,
+        nicht geschaetzt; test_profil.py haelt sie fest.
         """
         x = kosinus(n)
-        yo, yu = self._seiten_auf(x)
+        yo, yu = self.seiten_auf(x)
         return x, 0.5 * (yo + yu)
 
     # --------------------------------------------------------------- Kennwerte
@@ -385,7 +486,7 @@ class Profil:
     def repanelisiert(self, n_je_seite: int = 40) -> "Profil":
         """Neue Punktverteilung mit Kosinus-Clustering je Seite."""
         x = kosinus(n_je_seite)
-        yo, yu = self._seiten_auf(x)
+        yo, yu = self.seiten_auf(x)
         punkte = np.vstack([
             np.column_stack([x, yo])[::-1],
             np.column_stack([x, yu])[1:],

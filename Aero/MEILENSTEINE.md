@@ -164,8 +164,10 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M0 | Adapterschicht als Code: Versionsprofil wird gelesen, nicht nur abgelegt | `creo/profil.py` |
 | M0 | Abnahme rechnet sich selbst aus, statt als Häkchenliste zu veralten | `creo/test/M0_abnahme.py` |
 | M4 | Endplatte und Footplate als Geometrie, regelgeprüft und exportierbar | `geometrie/endplatte.py` |
+| M1 | DXF-Fertigungsvorlagen: Rippen mit Hohlraum, Schablonen, Rippensätze | `formate/dxf.py` |
+| M1 | NACA-5-Generator als analytische Referenz | `geometrie/profil.py` |
 
-Die Testabdeckung liegt bei **336 Tests**, die in gut dreieinhalb Minuten
+Die Testabdeckung liegt bei **367 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -264,13 +266,13 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 **Aufgaben**
 1. Projektgerüst `aerostudio/` mit pydantic-Datenmodell für ein Einzelprofil.
 2. Profilimport aus UIUC-`.dat` (beide gängigen Formatvarianten robust einlesen).
-3. NACA-4/5-Generator als analytische Referenz.
+3. NACA-4/5-Generator als analytische Referenz. **Beide stehen** (`Profil.aus_naca`, `Profil.aus_naca5`). Dabei kam heraus, dass die Mittellinie aus Koordinaten bei der Fünfziffernfamilie fast ein Fünftel unter der Skelettlinie liegt — 1,49 statt 1,84 % beim 23012. Der Docstring von `woelbungsverlauf` behauptete „wenige Hundertstel Prozent"; das war für NACA-4 knapp und für NACA-5 falsch und steht jetzt mit gemessenen Zahlen da.
 4. CST/Kulfan-Repräsentation, Konvertierung Punktwolke ↔ CST, Rückrechnungsfehler messbar machen.
 5. Repanelisierung mit Cosinus-Clustering, 60–120 Punkte, Ober-/Unterseite getrennt, Knick an Nase und Hinterkante.
 6. Fertigungscheck: Hinterkantendicke ≥ 2,0 mm, Nasenradius ≥ 3,0 mm (T 2.4.1), Mindestdicke über die Sehne. Bei Verletzung: Vorschlag zur Korrektur, nicht nur Fehlermeldung.
 7. Krümmungsplot in Plotly — ein zappelnder Krümmungsverlauf ist der beste Frühwarnindikator für schlechte Profile.
 8. **IBL-Writer** nach verifiziertem PTC-Format (`open` / `arclength` / `begin section ! n` / `begin curve` / XYZ), Koordinaten in mm im Fahrzeug-KS.
-9. DXF-Writer (ezdxf) als Nebenstrecke für Fertigungsvorlagen.
+9. DXF-Writer (ezdxf) als Nebenstrecke für Fertigungsvorlagen. **Steht seit 23.09.** (`formate/dxf.py`): Schablonen als reine Außenkontur, Rippen mit Hohlraum, Rippensätze über die Spannweite. Wo die Rippe hohl ist, entscheidet nicht ein eigenes Kriterium, sondern `Profil.laminatzonen` — dieselbe Antwort wie in der Fertigungsampel. Schnittpfade und Hilfslinien liegen auf getrennten Layern: Wer die Sehnenlinie mitschneidet, zersägt sein Teil.
 10. Unit-Tests inkl. Regression auf Referenzprofile (E423, S1223).
 
 **UI dazu:** Grundgerüst mit Navigation und den Ansichten **Projekt**, **Profil-Editor** und **Creo** (vorerst nur *Dateien schreiben*). Spec laden und speichern, CST-Regler mit Live-Kontur, Krümmungs- und Dickenverlauf, Fertigungsampel. Ab hier gilt das Zustandsprinzip: Die Oberfläche schreibt ins Spec, sonst nirgendwohin.
