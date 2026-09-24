@@ -1,0 +1,64 @@
+meta:
+  name: Heckfluegel (Beispiel)
+  fahrzeug: RSP27
+  regelstand: 2026_v1.1
+  bearbeiter: Beispiel
+  geaendert: 2026-09-24 11:27
+fertigung:
+  verfahren: prepreg
+  wandstaerke: 0.6
+  kern: 3.0
+  kern_zonenweise: true
+  dicke_min_ueberschreibung: null
+  hinterkante_min: 2.0
+  hinterkante_durch_verklebung: true
+  klebespalt: 0.2
+  verklebung_beginn_max: 0.85
+  nasenradius_min: 3.0
+elemente:
+- id: RW_E1
+  name: Heckfluegel Hauptelement
+  profil:
+    art: datei
+    datei: s1223.dat
+  sehne: 300.0
+  anstellwinkel: -6.0
+  wirkrichtung: abtrieb
+  pos_x: 1550.0
+  pos_y: 0.0
+  pos_z: 900.0
+  kaskade:
+  - profil: e58.dat
+    sehne: 0.4
+    winkel: -20.0
+    spalt: 0.018
+    ueberlappung: 0.02
+    y_von: null
+    y_bis: null
+    winkel_aussen: null
+  spannweite:
+    stuetzstellen:
+    - y: 0.0
+      sehne: 1.0
+      verwindung: 0.0
+      z: 0.0
+      x: 0.0
+    - y: 280.0
+      sehne: 1.0
+      verwindung: 0.0
+      z: 0.0
+      x: 0.0
+    schnitte: 9
+  endplatte:
+    dicke: 4.0
+    ueberstand_vorne: 20.0
+    ueberstand_hinten: 20.0
+    ueberstand_oben: 30.0
+    ueberstand_unten: 30.0
+    footplate: null
+  endplattenhoehe: 0.0
+  fertigung: null
+export:
+  ordner: export
+  toleranz_mm: 0.005
+  punktzahl_manuell: null

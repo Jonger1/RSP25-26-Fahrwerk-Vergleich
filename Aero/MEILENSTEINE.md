@@ -168,8 +168,10 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M1 | NACA-5-Generator als analytische Referenz | `geometrie/profil.py` |
 | M2 | Ansicht *Fahrzeug & Regeln*: Seiten- und Draufsicht, Ampel, Envelope-Regler | Reiter *Fahrzeug & Regeln* |
 | M1 | DXF-Vorlagen in der Oberfläche, eigene Karte im Reiter *Creo* | `ui/app.py` |
+| M6 | Undo über die Spec-Historie, mit Bedienung im Reiter *Projekt* | `spec/projekt.py` |
+| M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
 
-Die Testabdeckung liegt bei **396 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **425 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -381,10 +383,10 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 **Aufgaben**
 1. **`Aero Studio.bat`** — Doppelklick, Umgebung fährt hoch, Oberfläche öffnet sich. Keine Konsole, keine virtuelle Umgebung, keine Pfadvariablen.
 2. Fehlerbehandlung durchgängig: jede Ausnahme wird in einen handlungsleitenden Satz übersetzt, technisches Detail nur auf Ausklappen.
-3. Undo über die Spec-Historie.
+3. Undo über die Spec-Historie. **Steht seit 24.09.** Jedes Speichern, bei dem sich etwas ändert, legt den vorherigen Stand unter `.historie/` ab; Zurückholen lässt sich selbst zurückholen. Warum nicht einfach Git: Wer einen Nachmittag lang Flapwinkel probiert, committet nicht nach jedem Reglerzug — und genau der Stand von vor zwanzig Minuten ist der gesuchte.
 4. Kurze Bedienungsanleitung mit Screenshots, im Repo neben dem Code.
 5. **Bedientest mit zwei Teammitgliedern, die das Tool noch nie gesehen haben** — ohne Hilfestellung, mit Beobachtung. Was sie nicht finden, wird geändert, nicht erklärt.
-6. Beispiel-Specs als Startpunkte (Frontflügel, Heckflügel) im Repo.
+6. Beispiel-Specs als Startpunkte (Frontflügel, Heckflügel) im Repo. **Stehen seit 24.09.** in `specs/beispiele/`, beide mit Spannweite, Kaskade und Endplatte — und in beiden Regelständen grün. Ein Beispiel mit roter Ampel wäre schlimmer als keins: Der Anfänger hält den Verstoß für normal oder sucht den Fehler bei sich.
 
 **Fertig, wenn:** Zwei Personen ohne Vorkenntnis bauen jeweils in unter 30 Minuten einen regelkonformen Zwei-Element-Flügel und exportieren ihn nach Creo. Ohne Rückfrage.
 

@@ -52,6 +52,7 @@ from ..geometrie.profil import (KATALOG, katalognotiz, katalogoptionen,
 from ..spec.modell import (Endplatte, Fertigung, Footplate, Kaskadenstufe,
                            ProfilAusDatei, ProfilNaca, Spannweite,
                            Stuetzstelle, Wirkrichtung, vorgaben_fuer)
+from ..spec import projekt
 from ..spec.projekt import AeroSpec
 from . import darstellung
 
@@ -857,6 +858,17 @@ def _ansicht_projekt() -> html.Div:
     return html.Div([
         _karte([_ueberschrift("Aktueller Stand"),
                 html.Div(id="projekt-info", style={"fontSize": "13px"})]),
+
+        _karte([
+            _ueberschrift("Frühere Stände"),
+            html.Div("Jedes Speichern, bei dem sich etwas geändert hat, legt "
+                     "den vorherigen Stand hier ab. Zurückholen lässt sich "
+                     "wieder zurückholen — ein Fehlgriff ist also keiner.",
+                     className="as-hinweis", style={"marginBottom": "9px"}),
+            html.Div(id="historienliste"),
+            html.Div(id="historien-status", className="as-hinweis",
+                     style={"marginTop": "9px"}),
+        ]),
         _karte([
             _ueberschrift("AeroSpec"),
             html.Div("Das hier ist der gesamte Zustand des Programms. Genau diese "
@@ -1228,9 +1240,14 @@ def _elementstapel(element, punkte: int = 40) -> list:
     """
     profil = profil_fuer(element)
     if element.kaskade:
+        # ueber _vorgaben und nicht direkt: Die Kaskadenstufen im Spec sind
+        # ein anderes Datenmodell als die Vorgaben der Geometrie - sie nennen
+        # das Flapprofil als DATEINAME, nicht als geladenes Profil. Ein
+        # direkt durchgereichtes Spec-Objekt fliegt erst auf, wenn jemand
+        # eine Kaskade anlegt, denn ohne Flaps ist die Liste leer.
         return spannweite.kaskadenschnitte(
             profil, element.spannweite, element.sehne, element.anstellwinkel,
-            list(element.kaskade), punkte, lage=_lage(element))
+            _vorgaben(element.kaskade), punkte, lage=_lage(element))
     return [spannweite.schnitte(
         profil, element.spannweite, element.sehne, element.anstellwinkel,
         punkte, lage=_lage(element))]
@@ -1486,6 +1503,62 @@ def _speichern(n, daten):
     except Exception as fehler:
         return html.Span(f"Speichern fehlgeschlagen: {fehler}",
                          className="as-status-fehler")
+
+
+@app.callback(Output("historienliste", "children"),
+              Input("spec", "data"), Input("historien-status", "children"))
+def _historie_zeigen(_daten, _status):
+    """Die Liste der frueheren Staende. Haengt am Spec, damit sie nach dem
+    Speichern von selbst nachzieht."""
+    try:
+        staende = projekt.historie(SPEC_VORGABE)
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
+
+    if not staende:
+        return html.Div("Noch keine früheren Stände — sie entstehen beim "
+                        "Speichern, sobald sich etwas geändert hat.",
+                        className="as-hinweis")
+
+    zeilen = []
+    for nr, stand in enumerate(staende):
+        beschriftung = f"{stand.lesbar}   {stand.kennung}"
+        if stand.name:
+            beschriftung += f"   {stand.name}"
+        zeilen.append(html.Div([
+            html.Button("zurückholen",
+                        id={"typ": "stand", "nr": nr}, n_clicks=0,
+                        className="as-knopf as-knopf-klein"),
+            html.Span(beschriftung, className="as-messwert",
+                      style={"marginLeft": "10px"}),
+        ], style={"marginBottom": "5px"}))
+    return html.Div(zeilen)
+
+
+@app.callback(Output("historien-status", "children"),
+              Input({"typ": "stand", "nr": ALL}, "n_clicks"),
+              prevent_initial_call=True)
+def _stand_zurueckholen(klicks):
+    if not klicks or not any(k for k in klicks):
+        return no_update
+    ausloeser = callback_context.triggered_id
+    if not isinstance(ausloeser, dict):
+        return no_update
+    try:
+        staende = projekt.historie(SPEC_VORGABE)
+        nr = int(ausloeser.get("nr", 0))
+        if nr >= len(staende):
+            return html.Div("Diesen Stand gibt es nicht mehr.",
+                            className="as-status-hinweis")
+        stand = staende[nr]
+        projekt.zurueck(SPEC_VORGABE, stand.datei)
+        return html.Div(
+            f"Stand vom {stand.lesbar} zurückgeholt. Die Oberfläche zeigt "
+            f"ihn erst nach einem Neuladen der Seite — sie liest das Spec "
+            f"beim Start, nicht fortlaufend.",
+            className="as-status-ok")
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
 
 
 @app.callback(Output("export-info", "children"), Output("ibl-vorschau", "children"),

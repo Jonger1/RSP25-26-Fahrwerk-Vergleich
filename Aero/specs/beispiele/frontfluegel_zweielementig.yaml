@@ -1,0 +1,71 @@
+meta:
+  name: Frontfluegel zweielementig (Beispiel)
+  fahrzeug: RSP27
+  regelstand: 2026_v1.1
+  bearbeiter: Beispiel
+  geaendert: 2026-09-24 11:27
+fertigung:
+  verfahren: prepreg
+  wandstaerke: 0.6
+  kern: 3.0
+  kern_zonenweise: true
+  dicke_min_ueberschreibung: null
+  hinterkante_min: 2.0
+  hinterkante_durch_verklebung: true
+  klebespalt: 0.2
+  verklebung_beginn_max: 0.85
+  nasenradius_min: 3.0
+elemente:
+- id: FW_E1
+  name: Frontfluegel Hauptelement
+  profil:
+    art: datei
+    datei: e423.dat
+  sehne: 250.0
+  anstellwinkel: -4.0
+  wirkrichtung: abtrieb
+  pos_x: -700.0
+  pos_y: 0.0
+  pos_z: 80.0
+  kaskade:
+  - profil: s1223.dat
+    sehne: 0.35
+    winkel: -18.0
+    spalt: 0.015
+    ueberlappung: 0.02
+    y_von: null
+    y_bis: null
+    winkel_aussen: null
+  spannweite:
+    stuetzstellen:
+    - y: 0.0
+      sehne: 0.95
+      verwindung: -3.0
+      z: 0.0
+      x: 0.0
+    - y: 300.0
+      sehne: 1.0
+      verwindung: -1.0
+      z: 4.0
+      x: 0.0
+    - y: 600.0
+      sehne: 1.0
+      verwindung: 1.0
+      z: 14.0
+      x: 0.0
+    schnitte: 13
+  endplatte:
+    dicke: 4.0
+    ueberstand_vorne: 30.0
+    ueberstand_hinten: 20.0
+    ueberstand_oben: 40.0
+    ueberstand_unten: 20.0
+    footplate:
+      breite: 60.0
+      hoehe: 25.0
+  endplattenhoehe: 0.0
+  fertigung: null
+export:
+  ordner: export
+  toleranz_mm: 0.005
+  punktzahl_manuell: null
