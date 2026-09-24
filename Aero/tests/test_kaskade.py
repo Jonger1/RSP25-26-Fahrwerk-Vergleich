@@ -596,3 +596,128 @@ def test_kraft_waechst_mit_dem_quadrat_der_geschwindigkeit(haupt, flap):
 
     verhaeltnis = kraft(30.0) / kraft(15.0)
     assert verhaeltnis == pytest.approx(4.0, rel=0.25)
+
+
+# ------------------------- Abrisskriterium (kalibriert am 24.09.2026)
+
+def test_nasensingularitaet_wird_ausgeschlossen():
+    """Der Grund, warum keine dreielementige Kaskade ueberlebte.
+
+    Der kleinste Druckbeiwert lag bei x/c = 0,002 und wuchs mit jedem Flap.
+    Das ist keine Saugspitze, sondern eine numerische Spitze: Das
+    Panelverfahren loest den Nasenradius nicht auf. Der Beweis ist, dass der
+    Ausschluss beim EINZELPROFIL nichts aendert und im Verbund alles.
+    """
+    from aerostudio.aero import kaskade as aero
+    from aerostudio.aero import panel as pnl
+    from aerostudio.geometrie import kaskade as geo
+
+    haupt = Profil.aus_dat("profile/katalog/e423.dat").gespiegelt()
+    flap = Profil.aus_dat("profile/katalog/s1223.dat").gespiegelt()
+
+    def cp_min(flapwinkel):
+        flaps = [geo.Kaskadenvorgabe(profil=flap, sehne_faktor=0.35 - 0.06 * i,
+                                     winkel_relativ=w, spalt=0.015,
+                                     ueberlappung=0.02)
+                 for i, w in enumerate(flapwinkel)]
+        el = geo.platziere(haupt, 250.0, -4.0, flaps or None, punkte=100)
+        k = [pnl.Koerper(punkte=e.punkte) for e in el]
+        loesung = pnl.loese(k, alpha_grad=-4.0,
+                            bezugssehne=geo.gesamtsehne(el))
+        roh = float(loesung.cp[0].min())
+        ohne_nase = aero.saugspitze(loesung.cp[0], k[0].punkte)
+        return roh, ohne_nase
+
+    roh1, ohne1 = cp_min([])
+    roh3, ohne3 = cp_min([-16.0, -14.0])
+
+    # Einzelprofil: der Ausschluss aendert nichts.
+    assert ohne1 == pytest.approx(roh1, abs=0.02)
+    # Drei Elemente: er halbiert den Wert beinahe.
+    assert ohne3 > roh3 + 5.0
+
+
+def test_saugspitze_ohne_punkte_wertet_alles_aus():
+    """Die grobe Form bleibt erreichbar - fuer Vergleichsrechnungen."""
+    from aerostudio.aero import kaskade as aero
+    cp = np.array([0.5, -9.0, -2.0, 0.4])
+    assert aero.saugspitze(cp) == pytest.approx(-9.0)
+
+
+def test_abriss_haengt_am_druckanstieg_nicht_an_der_saugspitze():
+    """Der Kern der Umstellung vom 24.09.2026.
+
+    Zwei Elemente mit gleicher Saugspitze, aber verschiedenem Rueckgewinn
+    duerfen nicht gleich bewertet werden - eine tiefe Spitze ist harmlos,
+    solange die Stroemung danach nicht weit zurueckgewinnen muss.
+    """
+    from aerostudio.aero.kaskade import Elementbeiwert
+
+    def beiwert(rueckgewinn):
+        return Elementbeiwert(
+            name="x", winkel=-4.0, cl_allein=-1.0, cl_verbund=-1.5,
+            cl_zaeh=-1.3, cd_zaeh=0.02, wirkungsgrad=0.86,
+            saugspitze=-12.0, saugspitze_grenze=-5.0,
+            rueckgewinn=rueckgewinn, rueckgewinn_grenze=6.0, vertrauen=1.0)
+
+    # Sehr tiefe Saugspitze (-12 gegen Grenze -5), aber kleiner Rueckgewinn:
+    # nicht abgerissen. Nach dem alten Kriterium waere das ein Abriss.
+    assert not beiwert(4.0).abgerissen
+    assert beiwert(7.0).abgerissen
+
+
+def test_kalibrierfaktor_steht_auf_unkalibriert():
+    """Er ist zum Anpassen an Messdaten da, nicht zum Gruenfaerben.
+
+    Solange niemand gemessen hat, bleibt er auf 1.0 - sonst waere das
+    Ergebnis eine Zahl, die aussieht wie ein Messwert und keiner ist.
+    """
+    from aerostudio.aero.kaskade import GRENZSCHICHTRESERVE
+    assert GRENZSCHICHTRESERVE == 1.0
+
+
+def test_kalibrierfaktor_wirkt_auf_das_kriterium():
+    from aerostudio.aero import kaskade as aero
+    from aerostudio.aero.kaskade import Elementbeiwert
+
+    e = Elementbeiwert(
+        name="x", winkel=-4.0, cl_allein=-1.0, cl_verbund=-1.5, cl_zaeh=-1.3,
+        cd_zaeh=0.02, wirkungsgrad=0.86, saugspitze=-8.0,
+        saugspitze_grenze=-5.0, rueckgewinn=7.0, rueckgewinn_grenze=6.0,
+        vertrauen=1.0)
+
+    assert e.abgerissen
+    # Mit 30 % mehr zulaessigem Druckanstieg haelt dasselbe Element.
+    aero.GRENZSCHICHTRESERVE = 1.3
+    try:
+        assert not e.abgerissen
+    finally:
+        aero.GRENZSCHICHTRESERVE = 1.0
+
+
+def test_dreielementige_kaskade_faellt_weiterhin_durch():
+    """Haelt den bekannten Stand fest, damit er nicht unbemerkt kippt.
+
+    Das Modell ist nach den Korrekturen physikalisch stimmiger, aber
+    nachweislich immer noch zu streng: Reale FS-Frontfluegel sind
+    dreielementig mit Flapsehnen um 0,3 c, und fuer die sagt es Abriss
+    voraus. Schlaegt dieser Test um, hat jemand das Modell kalibriert - dann
+    gehoert die Datengrundlage in den Docstring von GRENZSCHICHTRESERVE.
+    """
+    from aerostudio.aero import kaskade as aero
+    from aerostudio.geometrie import kaskade as geo
+
+    haupt = Profil.aus_dat("profile/katalog/e423.dat").gespiegelt()
+    flap = Profil.aus_dat("profile/katalog/s1223.dat").gespiegelt()
+    flaps = [geo.Kaskadenvorgabe(profil=flap, sehne_faktor=0.35 - 0.06 * i,
+                                 winkel_relativ=-15.0, spalt=0.015,
+                                 ueberlappung=0.02) for i in range(2)]
+
+    _lage, r = aero.baue_und_rechne(haupt, 250.0, -4.0, flaps,
+                                    geschwindigkeit=15.0)
+
+    assert r.elemente[0].abgerissen, (
+        "Das Hauptelement haelt jetzt - wurde das Modell kalibriert? "
+        "Dann bitte die Datengrundlage bei GRENZSCHICHTRESERVE vermerken.")
+    # Die Flaps selbst sind unkritisch - das war schon vorher so.
+    assert not any(e.abgerissen for e in r.elemente[1:])

@@ -169,19 +169,30 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M2 | Ansicht *Fahrzeug & Regeln*: Seiten- und Draufsicht, Ampel, Envelope-Regler | Reiter *Fahrzeug & Regeln* |
 | M1 | DXF-Vorlagen in der Oberfläche, eigene Karte im Reiter *Creo* | `ui/app.py` |
 
-Die Testabdeckung liegt bei **390 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **396 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
-1. **Kaskadenmodell kalibrieren.** Das Verfahren steht, aber sein
-   Abrisskriterium ist STRENG: Von 80 durchgerechneten Kombinationen fielen
-   68 durch, und keine einzige dreielementige überlebte. Reale
-   FS-Frontflügel sind dreielementig. Die Ursache ist bekannt und im Modul
-   beschrieben — die Grenzschicht über den Spalt hinweg wird nicht
-   gerechnet, und genau die hält die Strömung an. Bis zur Kalibrierung an
-   gemessenen oder CFD-Daten sind die Absolutwerte nicht belastbar; der
-   Vergleich zweier Entwürfe untereinander ist es eher.
+1. **Kaskadenmodell kalibrieren.** Am 24.09. deutlich verbessert, aber
+   nicht erledigt. Zwei Fehler im Abrisskriterium sind gefunden und behoben:
+
+   * **Die Nasensingularität.** Der ausgewertete kleinste Druckbeiwert lag
+     bei x/c = 0,002 und wuchs mit jedem Flap (−2,8 / −9,8 / −23,0 bei
+     einem, zwei, drei Elementen). Beim Einzelprofil ändert ein Ausschluss
+     des ersten Sehnenprozents nichts, im Verbund halbiert er den Wert —
+     es war keine Saugspitze, sondern eine numerische Spitze.
+   * **Die falsche Größe.** Verglichen wurde die absolute Saugspitze. Eine
+     Grenzschicht löst aber am DRUCKANSTIEG dahinter ab, nicht an der
+     Spitze (A. M. O. Smith, 1975).
+
+   Die Reserve des Hauptelements stieg damit von −1,47 auf −0,65. Es bleibt
+   zu streng: Bei drei Elementen fällt das Hauptelement durch, sobald die
+   Flaps üblich groß sind. **Negativbefund dazu:** Der Dumping-Effekt, der
+   das Hauptelement entlasten müsste, zeigt sich in der reibungsfreien
+   Rechnung nicht (cp am Ende der Saugseite bleibt bei 0,26 / 0,68 / 0,64).
+   Dort sollte eine CFD-Rechnung zuerst nachsehen. `GRENZSCHICHTRESERVE`
+   steht auf 1,0 — unkalibriert, und bleibt dort, bis Daten vorliegen.
 2. **Endplatten in der Aerodynamik.** Die *Geometrie* steht seit dem
    21.09. (`geometrie/endplatte.py`): Umriss, Dicke, Footplate, Keep-out
    nach T 2.1.3, Export, Bedienung im Reiter *Flügel*. Was fehlt, ist ihre

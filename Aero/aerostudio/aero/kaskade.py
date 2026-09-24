@@ -32,15 +32,48 @@ den Druckanstieg an dessen Hinterkante — das ist der eigentliche Zweck einer
 Kaskade. Diesen Gewinn in einen Anstellwinkel zu übersetzen unterstellt
 gerade das Gegenteil.
 
-**Was dieses Modell unterschätzt:** Der Spalt tut mehr, als die Zirkulation zu
-erhöhen. Er bläst frische, schnelle Luft in die Grenzschicht des folgenden
-Elements und hält sie dadurch anliegend, weit über den Winkel hinaus, bei dem
-das Profil allein abreissen würde. Diese Wirkung steckt hier nicht drin — sie
-lässt sich ohne Grenzschichtrechnung über den Spalt hinweg nicht erfassen.
+**Das Abrisskriterium, Stand 24.09.2026.** Es hat zwei Korrekturen bekommen,
+nachdem der alte Stand jede dreielementige Kaskade verworfen hatte — 68 von
+80 Kombinationen fielen durch, während reale FS-Frontflügel durchweg
+dreielementig sind.
 
-Die Richtung des Fehlers ist damit bekannt: Bei gut gesetztem Spalt liefert
-dieses Modell eher ZU WENIG. Der reibungsfreie Wert wird deshalb mit
-ausgewiesen; er ist die Obergrenze.
+*Erstens, die Nasensingularität.* Der kleinste Druckbeiwert lag durchweg bei
+x/c = 0,002, also an der Nase, und wuchs mit jedem Flap: −2,8 bei einem
+Element, −9,8 bei zweien, −23,0 bei dreien. Beim Einzelprofil ändert ein
+Ausschluss des ersten Sehnenprozents nichts, im Verbund halbiert er den Wert
+— das ist der Beweis, dass es keine Saugspitze war, sondern eine numerische
+Spitze: Das Panelverfahren löst den Nasenradius mit hundert Panels nicht auf,
+und je höher die Zirkulation, desto stärker entgleist es dort. Ausgewertet
+wird deshalb ab `NASENAUSSCHLUSS`.
+
+*Zweitens, die falsche Größe.* Verglichen wurde die absolute Saugspitze. Eine
+Grenzschicht löst aber nicht an einer tiefen Spitze ab, sondern an dem
+DRUCKANSTIEG dahinter — das ist A. M. O. Smiths Argument (High-Lift
+Aerodynamics, 1975). Ein Flap bei −26 Grad hat eine sehr tiefe Saugspitze und
+liegt trotzdem an, weil der Rückgewinn dahinter klein bleibt. Verglichen wird
+jetzt `rueckgewinn` gegen den Wert, den dasselbe Profil allein an seinem
+Abrisswinkel erreicht.
+
+**Was weiterhin fehlt, und ein Negativbefund dazu.** Der Spalt bläst frische,
+schnelle Luft in die Grenzschicht des folgenden Elements und hält sie
+anliegend, weit über den Winkel hinaus, bei dem das Profil allein abreissen
+würde. Diese Wirkung steckt hier nicht drin.
+
+Der Versuch, wenigstens den Dumping-Effekt zu erfassen — das Element entlässt
+seine Grenzschicht in die beschleunigte Strömung des Spalts statt auf
+Umgebungsdruck —, ist gescheitert: Der Druck am Ende der Saugseite des
+Hauptelements ändert sich kaum, ob null, ein oder zwei Flaps dahinter sitzen
+(cp = 0,26 / 0,68 / 0,64 bei 95 % Sehne). In dieser reibungsfreien Rechnung
+zeigt sich der Effekt nicht. Das ist festgehalten statt weggelassen, weil es
+die erste Stelle ist, an der jemand mit CFD nachsehen sollte.
+
+**Die Folge, ehrlich benannt:** Das Modell ist nach beiden Korrekturen
+physikalisch stimmiger, aber immer noch ZU STRENG. Bei drei Elementen fällt
+das Hauptelement durch, sobald die Flaps üblich groß sind. Der Vergleich
+zweier Entwürfe untereinander trägt; die absolute Aussage "reisst ab" trägt
+nicht. `GRENZSCHICHTRESERVE` ist der Ort, an dem eine Kalibrierung an
+gemessenen oder gerechneten Daten einzutragen wäre — sie steht auf 1,0, also
+unkalibriert, und bleibt dort, bis jemand solche Daten hat.
 """
 
 from __future__ import annotations
@@ -72,6 +105,8 @@ class Elementbeiwert:
     wirkungsgrad: float         # zäh je reibungsfrei, allein gemessen
     saugspitze: float           # kleinster cp im Verbund
     saugspitze_grenze: float    # was das Profil beim Abriss erreicht
+    rueckgewinn: float          # cp_Hinterkante - cp_min, im Verbund
+    rueckgewinn_grenze: float   # derselbe Wert am Einzelprofil beim Abriss
     vertrauen: float
 
     @property
@@ -83,15 +118,34 @@ class Elementbeiwert:
 
     @property
     def abgerissen(self) -> bool:
-        """Saugspitze über dem, was die Grenzschicht des Profils verträgt."""
-        return self.saugspitze < self.saugspitze_grenze
+        """Muss die Grenzschicht mehr Druckanstieg überstehen als sie kann?
+
+        **Nicht** mehr über die absolute Saugspitze. Das war das Kriterium bis
+        zum 24.09., und es war zu streng: Von 80 durchgerechneten
+        Kombinationen fielen 68 durch, keine einzige dreielementige überlebte
+        — während reale FS-Frontflügel durchweg dreielementig sind.
+
+        Der Fehler war grundsätzlich, nicht eine Frage der Kalibrierung. Eine
+        Grenzschicht reißt nicht an einer tiefen Saugspitze ab, sondern an
+        dem DRUCKANSTIEG dahinter. Und genau den verkürzt ein Spalt: Das
+        Element bläst seine Hinterkante in die beschleunigte Strömung des
+        folgenden Schlitzes, statt auf Umgebungsdruck zurückgewinnen zu
+        müssen. Das ist A. M. O. Smiths Dumping-Effekt, einer der fünf
+        Gründe, warum Mehrelementflügel überhaupt funktionieren.
+
+        Ein Flap bei −26 Grad hat deshalb eine sehr tiefe Saugspitze und
+        trotzdem anliegende Strömung: Er dumpt in einen ebenso tiefen
+        Hinterkantendruck, der Rückgewinn dazwischen bleibt klein.
+        """
+        return self.rueckgewinn > self.rueckgewinn_grenze * GRENZSCHICHTRESERVE
 
     @property
     def reserve(self) -> float:
-        """Wieviel Saugspitze noch übrig ist, als Anteil der Grenze."""
-        if abs(self.saugspitze_grenze) < 1e-9:
+        """Wieviel Druckanstieg die Grenzschicht noch verträgt, als Anteil."""
+        grenze = self.rueckgewinn_grenze * GRENZSCHICHTRESERVE
+        if abs(grenze) < 1e-9:
             return 1.0
-        return 1.0 - self.saugspitze / self.saugspitze_grenze
+        return 1.0 - self.rueckgewinn / grenze
 
 
 @dataclass
@@ -194,13 +248,17 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
         # tatsaechlich traegt.
         cd_zaeh = _cd_beim_beiwert(pol, cl_zaeh, cd_zaeh_allein)
 
+        grenze_spitze, grenze_rueckgewinn = _grenzen_beim_abriss(
+            element.profil, pol.abriss_winkel)
+
         beitraege.append(Elementbeiwert(
             name=element.name, winkel=winkel,
             cl_allein=cl_allein, cl_verbund=cl_verbund, cl_zaeh=cl_zaeh,
             cd_zaeh=cd_zaeh, wirkungsgrad=wirkungsgrad,
-            saugspitze=float(verbund.cp[i].min()),
-            saugspitze_grenze=_saugspitze_beim_abriss(element.profil,
-                                                      pol.abriss_winkel),
+            saugspitze=saugspitze(verbund.cp[i], koerper[i].punkte),
+            saugspitze_grenze=grenze_spitze,
+            rueckgewinn=rueckgewinn(verbund.cp[i], koerper[i].punkte),
+            rueckgewinn_grenze=grenze_rueckgewinn,
             vertrauen=float(pol.vertrauen_bei(winkel))))
 
         # Auf die Gesamtsehne umrechnen, damit sich die Beitraege addieren.
@@ -234,12 +292,157 @@ def _cd_beim_beiwert(pol, cl_ziel: float, rueckfall: float) -> float:
     return float(pol.cd_bei(alpha_wirksam))
 
 
+# Das erste Sehnenprozent bleibt bei der Auswertung aussen vor.
+#
+# BEFUND vom 24.09.2026, und der Grund, warum keine dreielementige Kaskade
+# ueberlebte: Der kleinste Druckbeiwert lag durchweg bei x/c = 0,002, also
+# unmittelbar an der Nase - und er wuchs mit der Zirkulation, also mit jedem
+# zusaetzlichen Flap:
+#
+#     Ausschluss    1 Element   2 Elemente   3 Elemente
+#            0 %       -2,82       -9,81       -23,03
+#            2 %       -2,82       -6,59       -10,77
+#            5 %       -2,82       -5,79        -8,87
+#
+# Beim Einzelprofil aendert der Ausschluss NICHTS. Das ist der Beweis, dass
+# es sich nicht um eine Saugspitze handelt, sondern um eine numerische
+# Spitze: Das Panelverfahren loest den Nasenradius mit hundert Panels nicht
+# auf, und je hoeher die Zirkulation, desto staerker entgleist es dort.
+#
+# Physikalisch ist die Nase ohnehin der falsche Ort, um nach Abloesung zu
+# suchen. Dort ist die Grenzschicht duenn und stark beschleunigt; was es dort
+# wirklich gibt, ist eine kurze laminare Abloeseblase, die wieder anlegt -
+# und die eine reibungsfreie Rechnung grundsaetzlich nicht abbildet.
+# Abgeloest wird stromab, im Druckanstieg.
+#
+# Zwei Prozent, weil die Reihe oben dort flach zu werden beginnt. Der Wert
+# ist gewaehlt und nicht hergeleitet; deshalb steht die Empfindlichkeit hier
+# und ein Test haelt sie fest.
+NASENAUSSCHLUSS = 0.02
+
+
+def _x_relativ(punkte: np.ndarray) -> np.ndarray:
+    """Panelmittelpunkte als Sehnenanteil, 0 an der Nase, 1 an der Hinterkante."""
+    mitte = 0.5 * (punkte[:-1] + punkte[1:])
+    x = mitte[:, 0]
+    spanne = float(np.ptp(punkte[:, 0]))
+    return (x - float(punkte[:, 0].min())) / max(spanne, 1e-12)
+
+
+# Wo die Saugseite ausgewertet wird - kurz VOR der Hinterkante.
+#
+# BEFUND vom 24.09.2026: An der Hinterkante selbst zwingt die
+# Kutta-Bedingung den Druck auf Staupunktniveau, cp ~ +0,5. Gemessen am
+# Hauptelement, unabhaengig von der Zahl der Flaps dahinter:
+#
+#     1 Element   cp an der Hinterkante  +0,49
+#     2 Elemente                         +0,54
+#     3 Elemente                         +0,44
+#
+# Wer dort auswertet, sieht vom Dumping-Effekt NICHTS - und der ist der
+# Hauptgrund, warum ein Mehrelementfluegel mehr vertraegt als ein
+# Einzelprofil. Gemeint ist der Druck dort, wo die Grenzschicht das Element
+# tatsaechlich verlaesst und in den Spalt entlassen wird, also kurz vor der
+# Hinterkante auf der SAUGSEITE.
+ABLESESTELLE = 0.95
+
+# Kalibrierfaktor auf den zulaessigen Druckanstieg. 1.0 heisst unkalibriert.
+#
+# Was dieser Faktor NICHT ist: eine Stellschraube, an der gedreht wird, bis
+# ein Entwurf gruen meldet. Er steht auf 1.0 und bleibt dort, bis jemand
+# gemessene oder mit CFD gerechnete Daten hat.
+#
+# Wozu er da ist: Das Kriterium unten ist nach zwei Korrekturen (Nasen-
+# singularitaet, Druckanstieg statt Saugspitze) physikalisch stimmig, aber
+# nachweislich immer noch ZU STRENG. Stand 24.09.2026 faellt bei drei
+# Elementen das Hauptelement durch, sobald die Flaps ueblich gross sind:
+#
+#     Flapsehne   Spalt 1,5 %   Spalt 6 %
+#       0,35 c       -0,64        -0,49      (Reserve des Hauptelements)
+#       0,28 c       -0,38        -0,23
+#       0,22 c       -0,14         0,00
+#
+# Reale FS-Frontfluegel sind dreielementig mit Flapsehnen um 0,3 c und
+# Spalten um 2 %. Das Modell sagt fuer sie Abriss voraus, die Autos fahren
+# trotzdem. Die Luecke ist also belegt, ihre Groesse nicht - dafuer braucht
+# es Daten, nicht noch eine Annahme.
+#
+# Ein FUNDIERTER Verdacht, wohin die Luecke gehoert, steht bei ABLESESTELLE:
+# Der Dumping-Effekt, der das Hauptelement entlasten muesste, zeigt sich in
+# dieser reibungsfreien Rechnung nicht. Wer das Modell kalibriert, sollte
+# dort zuerst nachsehen.
+GRENZSCHICHTRESERVE = 1.0
+
+
+def _saugseite(cp: np.ndarray, x_rel: np.ndarray) -> np.ndarray:
+    """Maske der Panels auf der Seite, auf der die Saugspitze liegt.
+
+    Welche der beiden Seiten das ist, haengt am Vorzeichen des Auftriebs und
+    damit an Profil und Anstellwinkel - bei einem Abtriebsfluegel ist es die
+    untere. Deshalb wird sie gesucht und nicht angenommen: Die Panelfolge
+    laeuft ab Hinterkante ueber eine Seite zur Nase und ueber die andere
+    zurueck, also trennt der Index der Nase die beiden Haelften.
+    """
+    nase = int(np.argmin(x_rel))
+    maske = np.zeros(len(cp), dtype=bool)
+    spitze = int(np.argmin(cp))
+    if spitze <= nase:
+        maske[:nase + 1] = True
+    else:
+        maske[nase:] = True
+    return maske
+
+
+def rueckgewinn(cp: np.ndarray, punkte: np.ndarray | None = None) -> float:
+    """Der Druckanstieg, den die Grenzschicht der Saugseite ueberstehen muss.
+
+    Von der Saugspitze bis zur Ablesestelle kurz vor der Hinterkante. Das ist
+    die Groesse, an der eine Grenzschicht wirklich abloest - nicht die
+    Saugspitze allein. Eine tiefe Spitze ist unproblematisch, solange die
+    Stroemung danach nicht weit zurueckgewinnen muss, und genau das ist der
+    Dumping-Effekt: Das Element entlaesst seine Grenzschicht in die
+    beschleunigte Stroemung des folgenden Spalts statt auf Umgebungsdruck.
+
+    Ohne `punkte` wird schlicht gegen den Mittelwert der Randpanels
+    gerechnet. Das ist die alte, grobe Form - nur fuer Vergleichsrechnungen.
+    """
+    cp = np.asarray(cp, dtype=float)
+    if punkte is None:
+        return 0.5 * (float(cp[0]) + float(cp[-1])) - float(cp.min())
+
+    x_rel = _x_relativ(punkte)
+    saug = _saugseite(cp, x_rel)
+    hinten = saug & (x_rel >= ABLESESTELLE)
+    if not hinten.any():
+        hinten = saug & (x_rel >= x_rel[saug].max() - 0.05)
+    cp_ablese = float(cp[hinten].mean()) if hinten.any() else float(cp[-1])
+    return cp_ablese - saugspitze(cp, punkte)
+
+
+def saugspitze(cp: np.ndarray, punkte: np.ndarray | None = None) -> float:
+    """Der kleinste Druckbeiwert ausserhalb der Nasensingularitaet."""
+    cp = np.asarray(cp, dtype=float)
+    if punkte is None:
+        return float(cp.min())
+    maske = _x_relativ(punkte) >= NASENAUSSCHLUSS
+    return float(cp[maske].min()) if maske.any() else float(cp.min())
+
+
 @lru_cache(maxsize=64)
-def _saugspitze_beim_abriss_roh(punkte_bytes, form, abrisswinkel) -> float:
+def _beim_abriss_roh(punkte_bytes, form, abrisswinkel) -> tuple[float, float]:
+    """Saugspitze UND Rueckgewinn des Einzelprofils an seinem Abrisswinkel.
+
+    Mit demselben Nasenausschluss wie im Verbund - sonst waere der Vergleich
+    zwischen beiden Aepfel gegen Birnen.
+    """
     p = np.frombuffer(punkte_bytes, dtype=float).reshape(form)
     loesung = panel.loese([panel.Koerper(punkte=p)], alpha_grad=abrisswinkel,
                           bezugssehne=1.0)
-    return float(loesung.cp[0].min())
+    return (saugspitze(loesung.cp[0], p), rueckgewinn(loesung.cp[0], p))
+
+
+def _saugspitze_beim_abriss_roh(punkte_bytes, form, abrisswinkel) -> float:
+    return _beim_abriss_roh(punkte_bytes, form, abrisswinkel)[0]
 
 
 def _saugspitze_beim_abriss(profil, abrisswinkel: float) -> float:
@@ -254,8 +457,23 @@ def _saugspitze_beim_abriss(profil, abrisswinkel: float) -> float:
     und nur von Profil und Abrisswinkel abhaengt.
     """
     punkte = profil.repanelisiert(100).punkte
-    return _saugspitze_beim_abriss_roh(punkte.tobytes(), punkte.shape,
-                                       round(float(abrisswinkel), 2))
+    return _beim_abriss_roh(punkte.tobytes(), punkte.shape,
+                            round(float(abrisswinkel), 2))[0]
+
+
+def _grenzen_beim_abriss(profil, abrisswinkel: float) -> tuple[float, float]:
+    """Saugspitze und zulaessiger Rueckgewinn des Profils, beides beim Abriss.
+
+    Der Rueckgewinn ist das eigentliche Kriterium; die Saugspitze wird
+    weiterhin mitgefuehrt, weil sie in der Anzeige steht und beim Vergleich
+    zweier Entwuerfe anschaulicher ist.
+
+    Gepuffert, weil dieselben Zahlen in jeder Iteration der Suche gebraucht
+    werden und nur von Profil und Abrisswinkel abhaengen.
+    """
+    punkte = profil.repanelisiert(100).punkte
+    return _beim_abriss_roh(punkte.tobytes(), punkte.shape,
+                            round(float(abrisswinkel), 2))
 
 
 def baue_und_rechne(haupt, sehne: float, winkel: float,
