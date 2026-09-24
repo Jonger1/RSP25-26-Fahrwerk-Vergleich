@@ -485,3 +485,144 @@ def kaskade3d(stapel_je_element, namen=None, befunde=None) -> go.Figure:
                    yaxis=dict(title="y [mm] ab Mitte"),
                    zaxis=dict(title="z [mm] über Boden")))
     return fig
+
+
+# ------------------------------------------------ Fahrzeug und Reglement
+
+def _rad(fig: go.Figure, mitte_x: float, radius: float, *,
+         name: str) -> None:
+    """Ein Rad in der Seitenansicht, als Kreis auf dem Boden."""
+    t = np.linspace(0.0, 2.0 * np.pi, 80)
+    fig.add_trace(go.Scatter(
+        x=mitte_x + radius * np.cos(t), y=radius + radius * np.sin(t),
+        mode="lines", line=dict(color="#6b7280", width=1.5),
+        fill="toself", fillcolor="rgba(107,114,128,0.12)",
+        name=name, hoverinfo="name"))
+
+
+def _zone(fig: go.Figure, x0: float, x1: float, y0: float, y1: float,
+          farbe: str, name: str) -> None:
+    """Eine Keep-out- oder Grenzflaeche als getoentes Rechteck."""
+    fig.add_shape(type="rect", x0=x0, x1=x1, y0=y0, y1=y1,
+                  line=dict(color=farbe, width=1, dash="dot"),
+                  fillcolor=_durchsichtig(farbe, 0.10), layer="below")
+    fig.add_trace(go.Scatter(x=[(x0 + x1) / 2], y=[(y0 + y1) / 2],
+                             mode="markers", marker=dict(size=0.1, opacity=0),
+                             name=name, hoverinfo="name"))
+
+
+def seitenansicht(stapel, bezug, regelsatz, zustand=None) -> go.Figure:
+    """Fahrzeug von der Seite, mit den Hoehengrenzen aus T 8.2.
+
+    Hier wird sichtbar, was die Regelampel als Zahl sagt. Eine Ampel allein
+    beantwortet die Frage "wo genau ist es zu hoch?" nicht - und genau die
+    stellt sich, sobald sie rot wird.
+
+    Der Fluegel wird in seiner HOECHSTEN Lage gezeichnet, denn dort werden
+    die Hoehengrenzen kritisch. Die Konstruktionslage steht blass daneben,
+    damit der Unterschied sichtbar bleibt.
+    """
+    fig = go.Figure()
+    hoch = zustand.hoch if zustand is not None else 0.0
+
+    punkte = np.vstack([s.punkte for s in stapel])
+    x_min = min(float(punkte[:, 0].min()), bezug.vorderreifen_vorderkante_x) - 150
+    x_max = max(float(punkte[:, 0].max()), bezug.hinterreifen_hinterkante_x) + 150
+
+    r = regelsatz["t8_2_1"] or {}
+    vor = r.get("vor_vorderreifen") or {}
+    grenze_vorn = float(vor.get("max_hoehe", 250))
+    grenze_kopf = float((r.get("vor_kopfstuetze") or {}).get("max_hoehe", 500))
+
+    # Die Grenzflaechen zuerst, damit der Fluegel darueber liegt.
+    bezugsebene = (0.0 if "zusatzbedingung" in vor
+                   else bezug.vorderreifen_vorderkante_x)
+    _zone(fig, x_min, bezugsebene, 0.0, grenze_vorn, FARBE_AKZENT,
+          f"T 8.2.1: max {grenze_vorn:.0f} mm")
+    _zone(fig, bezugsebene, bezug.kopfstuetze_x, 0.0, grenze_kopf, "#2f6f4e",
+          f"T 8.2.1: max {grenze_kopf:.0f} mm")
+
+    # Keep-out T 2.1.3, in der Seitenansicht der auffaelligste Bereich.
+    r213 = regelsatz["t2_1_3"] or {}
+    vorn = float(r213.get("abstand_vor_reifen", 75))
+    hint = float(r213.get("abstand_hinter_reifen", 75))
+    _zone(fig, -bezug.radius_vorne - vorn, bezug.radius_vorne + hint,
+          0.0, bezug.reifen_durchmesser_vorne, "#9333ea",
+          "T 2.1.3: Keep-out Vorderrad")
+
+    _rad(fig, 0.0, bezug.radius_vorne, name="Vorderrad")
+    _rad(fig, bezug.radstand, bezug.radius_hinten, name="Hinterrad")
+
+    # Boden.
+    fig.add_trace(go.Scatter(x=[x_min, x_max], y=[0, 0], mode="lines",
+                             line=dict(color=FARBE_KONTUR, width=2),
+                             name="Boden", hoverinfo="name"))
+
+    # Der Fluegel: Konstruktionslage blass, hoechste Lage kraeftig.
+    for schnitt in stapel:
+        p = schnitt.punkte
+        if hoch:
+            fig.add_trace(go.Scatter(
+                x=p[:, 0], y=p[:, 2], mode="lines",
+                line=dict(color=FARBE_HILFE, width=1),
+                name="Konstruktionslage", hoverinfo="skip"))
+        fig.add_trace(go.Scatter(
+            x=p[:, 0], y=p[:, 2] + hoch, mode="lines",
+            line=dict(color=FARBE_KONTUR, width=1.5),
+            name="höchste Lage" if hoch else "Flügel", hoverinfo="skip"))
+
+    titel = "Seitenansicht — Höhengrenzen T 8.2.1 und Keep-out T 2.1.3"
+    if hoch:
+        titel += f" (Flügel {hoch:.0f} mm ausgefedert)"
+    fig.update_layout(**_grundlayout(titel, hoehe=380))
+    fig.update_yaxes(scaleanchor="x", scaleratio=1.0, title="z [mm]")
+    fig.update_xaxes(title="x [mm] — 0 = Vorderachse, positiv nach hinten")
+    return _achsen(fig)
+
+
+def draufsicht(stapel, bezug, regelsatz) -> go.Figure:
+    """Fahrzeug von oben, mit den Breitengrenzen aus T 8.2.2.
+
+    Gespiegelt gezeichnet, wie der Validator auch rechnet: Das Reglement
+    begrenzt ueber den BETRAG von y, und ein nur rechts modellierter Fluegel
+    steht links genauso weit aussen.
+    """
+    fig = go.Figure()
+
+    punkte = np.vstack([s.punkte for s in stapel])
+    x_min = min(float(punkte[:, 0].min()), bezug.vorderreifen_vorderkante_x) - 150
+    x_max = max(float(punkte[:, 0].max()), bezug.hinterreifen_hinterkante_x) + 150
+
+    grenze = bezug.rad_aussen
+    for s in (+1, -1):
+        fig.add_trace(go.Scatter(
+            x=[x_min, x_max], y=[s * grenze, s * grenze], mode="lines",
+            line=dict(color=FARBE_AKZENT, width=1.5, dash="dot"),
+            name=f"T 8.2.2: |y| ≤ {grenze:.0f} mm", hoverinfo="name"))
+
+    # Die Raeder als Rechtecke in der Draufsicht.
+    for mitte_x, radius, innen, aussen, name in (
+            (0.0, bezug.radius_vorne, bezug.rad_innen_vorne,
+             bezug.rad_aussen_vorne, "Vorderrad"),
+            (bezug.radstand, bezug.radius_hinten, bezug.rad_innen_hinten,
+             bezug.rad_aussen_hinten, "Hinterrad")):
+        for s in (+1, -1):
+            fig.add_shape(type="rect", x0=mitte_x - radius, x1=mitte_x + radius,
+                          y0=s * innen, y1=s * aussen,
+                          line=dict(color="#6b7280", width=1),
+                          fillcolor="rgba(107,114,128,0.12)", layer="below")
+
+    # Der Fluegel, beide Seiten.
+    for schnitt in stapel:
+        p = schnitt.punkte
+        for s in (+1, -1):
+            fig.add_trace(go.Scatter(
+                x=p[:, 0], y=s * p[:, 1], mode="lines",
+                line=dict(color=FARBE_KONTUR, width=1),
+                name="Flügel", hoverinfo="skip"))
+
+    fig.update_layout(**_grundlayout(
+        "Draufsicht — Breitengrenze T 8.2.2", hoehe=380))
+    fig.update_yaxes(scaleanchor="x", scaleratio=1.0, title="y [mm]")
+    fig.update_xaxes(title="x [mm] — 0 = Vorderachse, positiv nach hinten")
+    return _achsen(fig)

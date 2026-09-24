@@ -166,8 +166,10 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M4 | Endplatte und Footplate als Geometrie, regelgeprüft und exportierbar | `geometrie/endplatte.py` |
 | M1 | DXF-Fertigungsvorlagen: Rippen mit Hohlraum, Schablonen, Rippensätze | `formate/dxf.py` |
 | M1 | NACA-5-Generator als analytische Referenz | `geometrie/profil.py` |
+| M2 | Ansicht *Fahrzeug & Regeln*: Seiten- und Draufsicht, Ampel, Envelope-Regler | Reiter *Fahrzeug & Regeln* |
+| M1 | DXF-Vorlagen in der Oberfläche, eigene Karte im Reiter *Creo* | `ui/app.py` |
 
-Die Testabdeckung liegt bei **367 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **390 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -187,13 +189,7 @@ Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
    an der Unterkante, Outwash, die Wirkung der Footplate auf den Rad-Wake.
    Das ist ein CFD-Thema und kein Panelverfahren-Thema; ehrlicher ist es,
    die Grenze zu benennen, als sie mit einem Korrekturfaktor zu verdecken.
-3. **Ansicht *Fahrzeug & Regeln*.** Der Validator läuft und seine Befunde
-   erscheinen als Karten in den bestehenden Reitern, aber die im
-   UI-Kapitel beschriebene eigene Ansicht — Seiten- und Draufsicht mit den
-   T-8.2-Hüllkurven, anklickbare Ampel, Regler für Hub, Nick und Wank —
-   gibt es nicht. Solange sie fehlt, ist das "Fertig, wenn" von M2 nicht
-   erfüllt, auch wenn die Fachlogik darunter steht.
-4. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
+3. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
    keine Toolkit-Anwendungen. Bis zur Vollversion bleibt es beim Weg
    "Werkzeug schreibt .ibl, Import in Creo in vier Klicks".
 

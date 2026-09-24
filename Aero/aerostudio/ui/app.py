@@ -698,6 +698,47 @@ def _ansicht_kaskade() -> html.Div:
     ])
 
 
+def _fertigungsvorlagen() -> html.Div:
+    """Die DXF-Karte — Rippen und Schablonen zum Zuschneiden.
+
+    Bewusst eine eigene Karte und keine weitere Zeile in der
+    IBL-Ausgabewahl: Das hier geht nicht nach Creo, sondern an den Laser.
+    Wer beides in dieselbe Liste packt, lädt dazu ein, versehentlich eine
+    Schnittvorlage nach Creo zu importieren.
+    """
+    return _leiste("Fertigungsvorlagen (DXF)", [
+        _feld("Vorlage", dcc.RadioItems(
+            id="dxf-art", value="rippe",
+            options=[{"label": " Rippe mit Hohlraum", "value": "rippe"},
+                     {"label": " Schablone (nur Außenkontur)",
+                      "value": "schablone"},
+                     {"label": " Rippensatz über die Spannweite",
+                      "value": "satz"}],
+            style={"fontSize": "13px"}),
+            "Die Rippe ist das Teil im fertigen Flügel, die Schablone liegt "
+            "auf der Form. Wo die Rippe hohl ist, folgt aus Wandstärke und "
+            "Kern des gewählten Verfahrens — dieselbe Rechnung wie die "
+            "Fertigungsampel im Reiter Profil."),
+        _feld("Rippen im Satz",
+              _zahlenfeld("dxf-stationen", 5.0, 1.0, 1.0, 25.0),
+              "Nur beim Rippensatz. Je Station eine eigene Datei, damit "
+              "sich die Teile beim Zuschnitt schachteln lassen."),
+        _feld("Anstellwinkel übernehmen", dcc.Checklist(
+            id="dxf-angestellt", value=["ja"],
+            options=[{"label": " wie im Entwurf", "value": "ja"}],
+            style={"fontSize": "13px"}),
+            "Angestellt liegt die Vorlage so, wie das Bauteil später steht — "
+            "richtig für eine Vorrichtung. Ohne Anstellung liegt sie flach, "
+            "was beim Schachteln Material spart."),
+        html.Div([
+            html.Button("DXF schreiben", id="btn-dxf", n_clicks=0,
+                        className="as-knopf as-knopf-leer"),
+            html.Div(id="dxf-status", className="as-hinweis",
+                     style={"marginTop": "9px"}),
+        ]),
+    ], spalten="250px")
+
+
 def _ansicht_creo() -> html.Div:
     return html.Div([
         _leiste("Export nach Creo", [
@@ -771,6 +812,44 @@ def _ansicht_creo() -> html.Div:
         _karte([_ueberschrift("Vorschau der IBL-Datei"),
                 html.Pre(id="ibl-vorschau", className="as-code",
                          style={"maxHeight": "300px"})]),
+
+        _fertigungsvorlagen(),
+    ])
+
+
+def _ansicht_regeln() -> html.Div:
+    """Ansicht *Fahrzeug & Regeln* — das „Fertig, wenn" von M2.
+
+    Die Fachlogik dahinter steht seit M2: `regeln/pruefung.py` prüft über den
+    gesamten Fahrzustands-Envelope, und die Befunde erschienen bisher als
+    Karte im Creo-Reiter. Was fehlte, war das Bild dazu. Eine Ampel sagt
+    „250 mm überschritten", aber nicht, wo — und genau das ist die Frage,
+    die sich stellt, sobald sie rot wird.
+    """
+    return html.Div([
+        _leiste("Fahrzustand", [
+            _feld("Ausfedern [mm]",
+                  _zahlenfeld("zustand-hoch", 24.35, 2.5, 0.0, 120.0),
+                  "Höchste Lage des Flügels. Hier werden die Höhengrenzen "
+                  "kritisch. Vorgabe ist der Radhub vorne aus den "
+                  "RSP26-Kinematikexporten."),
+            _feld("Einfedern und Nicken [mm]",
+                  _zahlenfeld("zustand-tief", 24.35, 2.5, 0.0, 120.0),
+                  "Tiefste Lage. Hier wird die Bodenfreiheit kritisch. "
+                  "Beim Bremsen kommt das Nicken dazu."),
+            _feld("Regelstand", dcc.Dropdown(
+                id="regelstand", clearable=False,
+                options=[{"label": "2026 (gültig)", "value": "2026"},
+                         {"label": "2027 (Entwurf)", "value": "2027"}],
+                value="2026"),
+                "Der Entwurf 2027 bringt T 2.1.4 neu und lockert T 8.2.2. "
+                "Was es nur im Entwurf gibt, warnt — es blockiert nicht."),
+        ], spalten="240px"),
+
+        html.Div(id="regelampel"),
+
+        _karte([dcc.Graph(id="fig-seitenansicht", **_GRAPH)]),
+        _karte([dcc.Graph(id="fig-draufsicht", **_GRAPH)]),
     ])
 
 
@@ -823,6 +902,7 @@ def layout() -> html.Div:
             dcc.Tab(label="Profil", value="profil"),
             dcc.Tab(label="Flügel", value="fluegel"),
             dcc.Tab(label="Kaskade", value="kaskade"),
+            dcc.Tab(label="Fahrzeug & Regeln", value="regeln"),
             dcc.Tab(label="Creo", value="creo"),
             dcc.Tab(label="Projekt", value="projekt"),
         ]),
@@ -834,6 +914,7 @@ def layout() -> html.Div:
             html.Div(_fluegelgeometrie(), id="block-geometrie"),
             html.Div(_ansicht_fluegel(), id="view-fluegel"),
             html.Div(_ansicht_kaskade(), id="view-kaskade"),
+            html.Div(_ansicht_regeln(), id="view-regeln"),
             html.Div(_ansicht_creo(), id="view-creo"),
             html.Div(_ansicht_projekt(), id="view-projekt"),
         ], className="as-inhalt"),
@@ -846,7 +927,7 @@ app = Dash(__name__, title="Aero Studio")
 app.layout = layout
 
 
-ANSICHTEN = ("profil", "fluegel", "kaskade", "creo", "projekt")
+ANSICHTEN = ("profil", "fluegel", "kaskade", "regeln", "creo", "projekt")
 
 
 # Gemeinsame Bloecke und die Reiter, in denen sie erscheinen. Die Kaskade
@@ -1885,6 +1966,79 @@ def _aerokarte(e, kennlinie, wirkung=None) -> html.Div:
     ])
 
 
+@app.callback(Output("dxf-status", "children"),
+              Input("btn-dxf", "n_clicks"),
+              State("spec", "data"), State("exportordner", "value"),
+              State("dateiname", "value"), State("dxf-art", "value"),
+              State(wert("dxf-stationen"), "value"),
+              State("dxf-angestellt", "value"),
+              prevent_initial_call=True)
+def _dxf_schreiben(n, daten, ordner, dateiname, art, stationen, angestellt):
+    """Schreibt eine Fertigungsvorlage. Nur auf Klick, wie jeder Export."""
+    if not daten:
+        return ""
+    try:
+        from ..formate import dxf as dxf_format
+
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        profil = profil_fuer(element)
+        fertigung = element.fertigung_wirksam(spec.fertigung)
+        winkel = element.anstellwinkel if (angestellt or []) else 0.0
+        ziel_ordner = PROJEKT / (ordner or "export")
+        name = _exportname(dateiname, element)
+
+        if art == "satz":
+            if element.spannweite is None:
+                return html.Div("Ohne Sektionstabelle gibt es keine "
+                                "Spannweite — ein Rippensatz braucht sie.",
+                                className="as-hinweis")
+            satz = dxf_format.schreibe_rippensatz(
+                ziel_ordner, profil, element.spannweite, element.sehne,
+                fertigung, stationen=int(stationen or 5),
+                grundwinkel=winkel, name=name)
+            voll = [b for _p, b in satz if not b.hat_hohlraum]
+            zeilen = [html.Div(f"{len(satz)} Rippen geschrieben nach "
+                               f"{ziel_ordner}", className="as-status-ok")]
+            if voll:
+                zeilen.append(html.Div(
+                    f"{len(voll)} davon ohne Hohlraum — dort ist das Profil "
+                    f"für die Wandstärke von {fertigung.wandstaerke:.1f} mm "
+                    f"zu dünn. Das ist ein Befund, kein Fehler: Diese Rippen "
+                    f"werden aus Vollmaterial.", className="as-hinweis"))
+            return html.Div(zeilen)
+
+        if art == "schablone":
+            ziel = dxf_format.schreibe_schablone(
+                ziel_ordner / export.dateiname(f"{name} Schablone", ".dxf"),
+                profil, element.sehne, anstellwinkel=winkel)
+            return html.Div(f"Schablone geschrieben: {ziel}",
+                            className="as-status-ok")
+
+        ziel, befund = dxf_format.schreibe_rippe(
+            ziel_ordner / export.dateiname(f"{name} Rippe", ".dxf"),
+            profil, element.sehne, fertigung, anstellwinkel=winkel)
+
+        zeilen = [html.Div(f"Rippe geschrieben: {ziel}",
+                           className="as-status-ok")]
+        if befund.hat_hohlraum:
+            zeilen.append(html.Div(
+                f"Hohl von {befund.hohl_von * 100:.0f} % bis "
+                f"{befund.hohl_bis * 100:.0f} % der Sehne, "
+                f"{befund.vollmaterial_anteil * 100:.0f} % Vollmaterial. "
+                f"Wandstärke {befund.wandstaerke:.1f} mm.",
+                className="as-hinweis"))
+        else:
+            zeilen.append(html.Div(
+                f"Kein Hohlraum — bei {element.sehne:.0f} mm Sehne ist das "
+                f"Profil für {befund.wandstaerke:.1f} mm Wandstärke überall "
+                f"zu dünn. Die Rippe wird aus Vollmaterial.",
+                className="as-hinweis"))
+        return html.Div(zeilen)
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
+
+
 @app.callback(Output("skelett-status", "children"),
               Input("btn-skelett", "n_clicks"),
               State("spec", "data"), State("exportordner", "value"),
@@ -2481,6 +2635,99 @@ def _regelzeile(b) -> html.Div:
     if b.hinweis and not b.ok:
         zeilen.append(html.Div(b.hinweis, className="as-befund-hinweis"))
     return html.Div(zeilen, className="as-befund")
+
+
+@app.callback(Output("regelampel", "children"),
+              Output("fig-seitenansicht", "figure"),
+              Output("fig-draufsicht", "figure"),
+              Input("spec", "data"), Input("regelstand", "value"),
+              Input(wert("zustand-hoch"), "value"),
+              Input(wert("zustand-tief"), "value"))
+def _regelansicht(daten, stand, hoch, tief):
+    """Ampel und die beiden Ansichten zum eingestellten Fahrzustand.
+
+    Live und nicht auf Knopfdruck: Die Ampel muss beim Schieben eines
+    Reglers sofort reagieren, sonst wird sie ignoriert. Das geht hier auch -
+    die Regelpruefung ist ein paar Vergleiche auf einer Punktwolke und
+    braucht Millisekunden, anders als die Traglinienrechnung.
+    """
+    leer = {"data": [], "layout": {"height": 380}}
+    if not daten:
+        return "", leer, leer
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        if element.spannweite is None:
+            return (html.Div("Ohne Sektionstabelle gibt es keine Spannweite — "
+                             "und ohne sie keine Regelprüfung.",
+                             className="as-hinweis"), leer, leer)
+
+        # Die Endplatte gehoert dazu: Sie ist der aeusserste und oft
+        # kritischste Teil des Fluegels. Wer sie hier weglaesst, bekommt
+        # eine gruene Ampel fuer einen Fluegel, den es so nicht gibt.
+        stapel = [s for teil in _elementstapel(element) for s in teil]
+        if element.endplatte is not None:
+            stapel = stapel + geo_endplatte.schnitte(
+                _elementstapel(element), element.endplatte)
+
+        bezug = regeln.Bezugsgeometrie.aus_datei()
+        zustand = regeln.Fahrzustand(
+            hoch=float(0.0 if hoch is None else hoch),
+            tief=float(0.0 if tief is None else tief),
+            quelle="im Reiter Fahrzeug & Regeln eingestellt")
+        satz = regeln.lade(stand or "2026")
+
+        befunde = regeln.pruefe_fluegel(stapel, satz, bezug, zustand)
+        return (_ampelkarte(befunde, satz, zustand, element),
+                darstellung.seitenansicht(stapel, bezug, satz, zustand),
+                darstellung.draufsicht(stapel, bezug, satz))
+    except Exception as fehler:
+        return _fehlerkarte(fehler), leer, leer
+
+
+def _ampelkarte(befunde, satz, zustand, element) -> html.Div:
+    """Die Ampel: erst das Urteil, dann die Verstoesse, dann der Rest.
+
+    Reihenfolge nach Dringlichkeit und nicht nach Regelnummer - wer die
+    Ampel aufmacht, will wissen, was NICHT geht, und nicht die vierzehn
+    Punkte lesen, die in Ordnung sind.
+    """
+    schlecht = [b for b in befunde if not b.ok]
+    harte = [b for b in schlecht if b.blockiert]
+    warnungen = [b for b in schlecht if not b.blockiert]
+    gut = [b for b in befunde if b.ok]
+
+    if harte:
+        kopf, klasse = f"{len(harte)} Verstoß" + ("e" if len(harte) > 1 else ""), "fehler"
+    elif warnungen:
+        kopf, klasse = f"{len(warnungen)} Hinweis" + ("e" if len(warnungen) > 1 else ""), "hinweis"
+    else:
+        kopf, klasse = "Regelkonform", "ok"
+
+    kinder = [
+        html.Div([
+            html.Span("✗" if harte else ("!" if warnungen else "✓"),
+                      className=f"as-zeichen {klasse}"),
+            html.Span(kopf, className="as-pruefung"),
+            html.Span(f"  Regelstand {satz.version}", className="as-regel"),
+        ]),
+        html.Div(f"Geprüft über den Fahrzustand: {zustand.hoch:.1f} mm "
+                 f"ausgefedert, {zustand.tief:.1f} mm eingefedert. "
+                 f"{len(gut)} von {len(befunde)} Prüfungen in Ordnung.",
+                 className="as-hinweis", style={"marginBottom": "9px"}),
+    ]
+
+    if element.endplatte is None:
+        kinder.append(html.Div(
+            "Ohne Endplattengeometrie geprüft — sie ist oft der äußerste "
+            "und kritischste Teil des Flügels. Im Reiter Flügel unter "
+            "„Endplatte“ auf „Geometrie“ stellen.",
+            className="as-befund-hinweis", style={"marginBottom": "9px"}))
+
+    for b in harte + warnungen + gut:
+        kinder.append(_regelzeile(b))
+
+    return _karte([_ueberschrift("Regelampel")] + kinder)
 
 
 def _creo_oeffnen(ziel: Path):

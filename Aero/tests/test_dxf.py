@@ -267,3 +267,78 @@ def test_rippensatz_nennt_die_spannweitenposition(profil, tmp_path, fertigung):
     namen = [p.name for p, _b in satz]
     assert any("y0" in n for n in namen)
     assert any("y600" in n for n in namen)
+
+
+# ---------------------------------------------------------- Oberflaeche
+
+def _spec():
+    from aerostudio.ui import app as UI
+    from tests.test_export_ui import WERTE
+    spec, *_ = UI._profil_aktualisieren(*WERTE)
+    return spec
+
+
+def test_ui_schreibt_eine_rippe(tmp_path):
+    from aerostudio.ui import app as UI
+
+    status = UI._dxf_schreiben(1, _spec(), str(tmp_path), "FW_E1",
+                               "rippe", 5, ["ja"])
+    dateien = list(tmp_path.glob("*.dxf"))
+    assert len(dateien) == 1
+    assert "Rippe" in dateien[0].name
+    # Die Meldung nennt, wo die Rippe hohl ist - das ist die Zahl, die
+    # entscheidet, ob das Teil zu schwer wird.
+    assert "Hohl von" in str(status)
+
+
+def test_ui_schreibt_eine_schablone(tmp_path):
+    from aerostudio.ui import app as UI
+
+    UI._dxf_schreiben(1, _spec(), str(tmp_path), "FW_E1",
+                      "schablone", 5, ["ja"])
+    dateien = list(tmp_path.glob("*.dxf"))
+    assert len(dateien) == 1
+    assert "Schablone" in dateien[0].name
+    # Eine Schablone hat keinen Hohlraum.
+    assert _punkte(dateien[0], dxf.LAYER_HOHLRAUM) == []
+
+
+def test_ui_schreibt_einen_rippensatz(tmp_path):
+    from aerostudio.ui import app as UI
+
+    status = UI._dxf_schreiben(1, _spec(), str(tmp_path), "FW_E1",
+                               "satz", 4, ["ja"])
+    assert len(list(tmp_path.glob("*.dxf"))) == 4
+    assert "4 Rippen" in str(status)
+
+
+def test_ui_uebernimmt_den_anstellwinkel_nur_auf_wunsch(tmp_path):
+    from aerostudio.ui import app as UI
+
+    spec = _spec()
+    UI._dxf_schreiben(1, spec, str(tmp_path / "mit"), "A", "schablone", 5, ["ja"])
+    UI._dxf_schreiben(1, spec, str(tmp_path / "ohne"), "A", "schablone", 5, [])
+
+    mit = _punkte(next((tmp_path / "mit").glob("*.dxf")), dxf.LAYER_KONTUR)[0]
+    ohne = _punkte(next((tmp_path / "ohne").glob("*.dxf")), dxf.LAYER_KONTUR)[0]
+
+    assert not np.allclose(mit, ohne)
+    # Ohne Anstellung liegt die Kontur flach: Nase und Hinterkante auf
+    # derselben Hoehe.
+    assert ohne[np.argmin(ohne[:, 0]), 1] == pytest.approx(
+        ohne[np.argmax(ohne[:, 0]), 1], abs=0.5)
+
+
+def test_ui_ohne_spannweite_erklaert_sich_beim_satz(tmp_path):
+    """Kein Absturz, sondern ein Satz, der sagt was fehlt."""
+    from aerostudio.spec.projekt import AeroSpec
+    from aerostudio.ui import app as UI
+
+    spec = _spec()
+    roh = AeroSpec.model_validate(spec)
+    roh.elemente[0].spannweite = None
+
+    status = UI._dxf_schreiben(1, roh.model_dump(mode="json"), str(tmp_path),
+                               "A", "satz", 5, ["ja"])
+    assert "Spannweite" in str(status)
+    assert not list(tmp_path.glob("*.dxf"))
