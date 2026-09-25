@@ -54,7 +54,7 @@ from ..spec.modell import (Endplatte, Fertigung, Footplate, Kaskadenstufe,
                            Stuetzstelle, Wirkrichtung, vorgaben_fuer)
 from ..spec import projekt
 from ..spec.projekt import AeroSpec
-from . import darstellung
+from . import darstellung, meldungen
 
 PROJEKT = Path(__file__).resolve().parents[2]
 SPEC_VORGABE = PROJEKT / "specs" / "aktuell.yaml"
@@ -1459,14 +1459,35 @@ def _ampel(profil, sehne, fertigung, befunde) -> html.Div:
 
 
 def _fehlerkarte(fehler: Exception) -> html.Div:
-    return html.Div([
-        html.Div("Das lässt sich so nicht berechnen.", className="as-status-fehler"),
-        html.Div(str(fehler), style={"marginTop": "7px"}),
-        html.Details([html.Summary("Einzelheiten"),
-                      html.Pre(traceback.format_exc(), className="as-code",
-                               style={"marginTop": "7px"})],
-                     style={"marginTop": "9px"}),
-    ], className="as-fehlerkarte")
+    """Eine Ausnahme so zeigen, dass sie weiterhilft.
+
+    Vorher stand hier "Das lässt sich so nicht berechnen" und darunter die
+    rohe Python-Meldung. Der erste Satz sagt nichts, die zweite Zeile ist für
+    jemanden ohne Python eine Sackgasse. Die Übersetzung steckt in
+    `meldungen.uebersetze`; hier wird sie nur dargestellt.
+
+    Die rohe Meldung bleibt IMMER erreichbar, auch bei erkannten Fehlern.
+    Eine Oberfläche, die Fehler glattbügelt, ist schlimmer als eine, die sie
+    roh zeigt: Beim Glattbügeln sucht der Anwender den Fehler bei sich.
+    """
+    m = meldungen.uebersetze(fehler)
+
+    # Eine Fehleingabe und ein Programmfehler sehen verschieden aus. Beim
+    # ersten ist der Anwender am Zug, beim zweiten wir - das soll man dem
+    # Kasten ansehen, bevor man den Text liest.
+    kinder = [html.Div(m.satz, className="as-status-fehler" if m.erkannt
+                       else "as-status-hinweis")]
+    if m.rat:
+        kinder.append(html.Div(m.rat, style={"marginTop": "7px"}))
+
+    kinder.append(html.Details(
+        [html.Summary("Technische Einzelheiten"),
+         html.Div(meldungen.technisch(fehler), className="as-hinweis",
+                  style={"marginTop": "7px"}),
+         html.Pre(traceback.format_exc(), className="as-code",
+                  style={"marginTop": "7px"})],
+        style={"marginTop": "9px"}))
+    return html.Div(kinder, className="as-fehlerkarte")
 
 
 @app.callback(Output("kopf-hash", "children"), Input("spec", "data"))
@@ -2924,9 +2945,30 @@ def _verfahren_merken(wandstaerke, kern, klebespalt, verfahren, speicher):
 
 
 def starten(port: int = 8051, browser: bool = True) -> None:
+    """Startet die Oberflaeche und uebersetzt auch Startfehler.
+
+    Der haeufigste ist der belegte Port: Ein zweites Aero Studio laeuft
+    schon, oft unbemerkt in einem anderen Fenster. Python meldet das als
+    "OSError: [Errno 98] Address already in use" - und der Anwender schliesst
+    das Fenster und versucht es noch einmal, mit demselben Ergebnis.
+    """
     if browser:
         Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
-    app.run(debug=False, port=port)
+    try:
+        app.run(debug=False, port=port)
+    except OSError as fehler:
+        if getattr(fehler, "errno", None) in (48, 98) or "in use" in str(fehler):
+            print()
+            print(f"  Der Port {port} ist belegt.")
+            print()
+            print("  Meist laeuft Aero Studio schon - sieh nach, ob ein")
+            print(f"  Browserfenster auf http://127.0.0.1:{port} offen ist,")
+            print("  oder ein zweites schwarzes Fenster im Hintergrund.")
+            print()
+            print(f"  Sonst mit einem anderen Port starten, etwa {port + 1}.")
+            print()
+            raise SystemExit(1) from None
+        raise
 
 
 if __name__ == "__main__":

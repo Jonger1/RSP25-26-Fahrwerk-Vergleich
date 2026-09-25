@@ -170,8 +170,9 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M1 | DXF-Vorlagen in der Oberfläche, eigene Karte im Reiter *Creo* | `ui/app.py` |
 | M6 | Undo über die Spec-Historie, mit Bedienung im Reiter *Projekt* | `spec/projekt.py` |
 | M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
+| M6 | Fehlermeldungen in handlungsleitende Sätze übersetzt | `ui/meldungen.py` |
 
-Die Testabdeckung liegt bei **425 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **441 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -382,7 +383,7 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 
 **Aufgaben**
 1. **`Aero Studio.bat`** — Doppelklick, Umgebung fährt hoch, Oberfläche öffnet sich. Keine Konsole, keine virtuelle Umgebung, keine Pfadvariablen.
-2. Fehlerbehandlung durchgängig: jede Ausnahme wird in einen handlungsleitenden Satz übersetzt, technisches Detail nur auf Ausklappen.
+2. Fehlerbehandlung durchgängig: jede Ausnahme wird in einen handlungsleitenden Satz übersetzt, technisches Detail nur auf Ausklappen. **Steht seit 25.09.** (`ui/meldungen.py`). Drei Regeln tragen das: Was schon gut formuliert ist, bleibt — ein großer Teil der Ausnahmen wird von uns selbst geworfen und trägt bereits einen brauchbaren deutschen Satz. Nichts verschwindet — ein unbekannter Fehler wird als unerwartet benannt statt mit einem Allgemeinplatz zugedeckt, und die rohe Meldung bleibt immer ausklappbar. Und der Rat nennt einen Ort: nicht „bitte Eingaben prüfen", sondern „im Reiter Profil ein Katalogprofil wählen".
 3. Undo über die Spec-Historie. **Steht seit 24.09.** Jedes Speichern, bei dem sich etwas ändert, legt den vorherigen Stand unter `.historie/` ab; Zurückholen lässt sich selbst zurückholen. Warum nicht einfach Git: Wer einen Nachmittag lang Flapwinkel probiert, committet nicht nach jedem Reglerzug — und genau der Stand von vor zwanzig Minuten ist der gesuchte.
 4. Kurze Bedienungsanleitung mit Screenshots, im Repo neben dem Code.
 5. **Bedientest mit zwei Teammitgliedern, die das Tool noch nie gesehen haben** — ohne Hilfestellung, mit Beobachtung. Was sie nicht finden, wird geändert, nicht erklärt.
