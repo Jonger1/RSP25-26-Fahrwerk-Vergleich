@@ -238,10 +238,11 @@ class Profil:
         """Analytisch erzeugtes NACA-5-Profil, etwa 23012.
 
         Der Unterschied zur Vierziffernfamilie steckt allein in der
-        SKELETTLINIE. Die Dickenverteilung ist dieselbe Formel - deshalb
-        wird sie hier auch nicht zum zweiten Mal hingeschrieben, sondern aus
-        `aus_naca` geholt. Zwei Kopien derselben Reihe waeren zwei Stellen,
-        an denen ein Koeffizient abweichen kann.
+        SKELETTLINIE; die Dickenverteilung ist dieselbe Reihe. Sie steht
+        hier trotzdem ein zweites Mal, weil `aus_naca` sie nicht einzeln
+        herausgibt - sie ist dort mit der Woelbung verwoben. Ein Test haelt
+        beide Fassungen zusammen (test_naca5_dickenreihe_ist_dieselbe_wie_
+        bei_naca4); wer eine Ziffer aendert, merkt es sofort.
 
         Die fuenf Ziffern lesen sich so:
           1. Auslegungsauftrieb, cl = Ziffer * 0.15

@@ -435,10 +435,16 @@ class Footplate(BaseModel):
         description="Wie weit die Footplate nach innen reicht, in mm. "
                     "0 = keine Footplate.")
     hoehe: float = Field(
-        default=25.0, ge=0.0, le=300.0,
-        description="Bis zu welcher Hoehe ueber Grund sie reicht, in mm. "
-                    "Darueber ist die Endplatte wieder nur so dick wie "
-                    "angegeben.")
+        default=25.0, gt=0.0, le=300.0,
+        description="Wie weit sie sich von der UNTERKANTE der Endplatte nach "
+                    "oben erstreckt, in mm.\n\n"
+                    "Bis zum 26.09.2026 stand hier 'Hoehe ueber Grund'. Das "
+                    "war unbrauchbar: Die Plattenunterkante liegt beim "
+                    "Beispielfluegel bei 71 mm, eine Footplate 'bis 25 mm "
+                    "ueber Grund' kann daran nicht haengen. Sie bekam "
+                    "stillschweigend null Erstreckung, waehrend die "
+                    "Oberflaeche weiter '60 mm Footplate nach innen' "
+                    "meldete.")
 
 
 class Endplatte(BaseModel):

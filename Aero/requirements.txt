@@ -56,8 +56,8 @@ neuralfoil>=0.3
 # ohne es aus und sagt dann verstaendlich, was fehlt - wer nur Geometrie und
 # Export braucht, kann die Zeile also streichen.
 
-# Nicht mehr dabei: ezdxf und shapely. Beide standen in der .bat, werden aber
-# von keiner einzigen Zeile importiert - ezdxf war fuer den DXF-Writer (M1
-# Punkt 9) vorgesehen, der noch nicht existiert, shapely fuer die
-# Kollisionspruefung (M2 Punkt 3), die am Ende ohne es gebaut wurde. Sie
-# kommen zurueck, sobald sie jemand wirklich benutzt.
+# Nicht dabei: shapely. Es stand jahrelang in der .bat, ohne dass eine Zeile
+# es importiert haette - vorgesehen war es fuer die Kollisionspruefung (M2
+# Punkt 3), die am Ende ohne es gebaut wurde. Es kommt zurueck, sobald es
+# jemand wirklich benutzt. (ezdxf stand bis zum 23.09. in derselben Liste
+# und ist seit dem DXF-Writer wieder oben dabei.)

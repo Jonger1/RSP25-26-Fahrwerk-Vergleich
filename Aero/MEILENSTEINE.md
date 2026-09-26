@@ -172,7 +172,7 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
 | M6 | Fehlermeldungen in handlungsleitende Sätze übersetzt | `ui/meldungen.py` |
 
-Die Testabdeckung liegt bei **441 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **452 Tests**, die in knapp fünf Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:

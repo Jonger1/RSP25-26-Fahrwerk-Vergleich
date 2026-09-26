@@ -203,7 +203,7 @@ def test_ui_zeigt_die_staende(tmp_path, monkeypatch):
     _speichern(ziel, 250.0)
     _speichern(ziel, 300.0)
 
-    text = str(UI._historie_zeigen(None, None))
+    text = str(UI._historie_zeigen(None, None, None))
     assert "zurückholen" in text
     assert historie(ziel)[0].kennung in text
 
@@ -212,7 +212,7 @@ def test_ui_ohne_staende_erklaert_sich(tmp_path, monkeypatch):
     UI, ziel = _ui_mit_spec(tmp_path, monkeypatch)
     AeroSpec.beispiel().speichern(ziel)
 
-    assert "Noch keine früheren Stände" in str(UI._historie_zeigen(None, None))
+    assert "Noch keine früheren Stände" in str(UI._historie_zeigen(None, None, None))
 
 
 def test_ui_holt_einen_stand_zurueck(tmp_path, monkeypatch):

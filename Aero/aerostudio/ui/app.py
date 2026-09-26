@@ -403,8 +403,9 @@ def _endplattenleiste() -> html.Div:
                       _zahlenfeld("ep-fuss-breite", 0.0, 10.0, 0.0, 400.0),
                       "Nach innen, zur Fahrzeugmitte. 0 = keine Footplate."),
                 _feld("Footplate-Höhe [mm]",
-                      _zahlenfeld("ep-fuss-hoehe", 25.0, 5.0, 0.0, 300.0),
-                      "Bis zu welcher Höhe über Grund sie reicht."),
+                      _zahlenfeld("ep-fuss-hoehe", 25.0, 5.0, 1.0, 300.0),
+                      "Wie weit sie sich von der Unterkante der Endplatte "
+                      "nach oben erstreckt."),
             ], spalten="200px"),
             id="block-endplatte-geometrie", style={"display": "none"}),
 
@@ -1334,9 +1335,11 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
     element.endplatte = _endplatte_aus_feldern(
         endplattenart, ep_dicke, ep_vorne, ep_hinten, ep_oben, ep_unten,
         ep_fuss_breite, ep_fuss_hoehe)
-    # Die blosse Hoehe wirkt nur, wenn keine Geometrie da ist. Sie steht
-    # trotzdem immer im Spec: Beim Umschalten auf "Geometrie" und zurueck
-    # soll der eingetippte Wert nicht verschwinden.
+    # Die blosse Hoehe wirkt nur in der Betriebsart "hoehe". In jeder
+    # anderen steht im Spec eine Null - der eingetippte Wert bleibt im
+    # Bedienfeld stehen und kommt beim Zurueckschalten von dort wieder.
+    # (Der Kommentar behauptete bis zum 26.09.2026, der Wert stehe immer im
+    # Spec. Er stand dort nicht, und das Spec ist die Wahrheit.)
     element.endplattenhoehe = (
         float(endplattenhoehe or 0.0) if endplattenart == "hoehe" else 0.0)
 
@@ -1527,10 +1530,17 @@ def _speichern(n, daten):
 
 
 @app.callback(Output("historienliste", "children"),
-              Input("spec", "data"), Input("historien-status", "children"))
-def _historie_zeigen(_daten, _status):
-    """Die Liste der frueheren Staende. Haengt am Spec, damit sie nach dem
-    Speichern von selbst nachzieht."""
+              Input("spec", "data"), Input("historien-status", "children"),
+              Input("kopf-status", "children"))
+def _historie_zeigen(_daten, _status, _gespeichert):
+    """Die Liste der frueheren Staende.
+
+    Haengt auch am Speicherstatus: Ein neuer Stand entsteht beim SPEICHERN,
+    und das aendert weder das Spec noch den Historienstatus. Ohne diesen
+    dritten Ausloeser erschien der frische Eintrag erst, wenn zufaellig
+    etwas anderes die Oberflaeche anfasste - der Docstring behauptete das
+    Gegenteil.
+    """
     try:
         staende = projekt.historie(SPEC_VORGABE)
     except Exception as fehler:
@@ -2759,10 +2769,14 @@ def _regelansicht(daten, stand, hoch, tief):
         # Die Endplatte gehoert dazu: Sie ist der aeusserste und oft
         # kritischste Teil des Fluegels. Wer sie hier weglaesst, bekommt
         # eine gruene Ampel fuer einen Fluegel, den es so nicht gibt.
-        stapel = [s for teil in _elementstapel(element) for s in teil]
+        # EINMAL bauen, nicht zweimal. Der Stapel kostet gut eine Viertel-
+        # sekunde, und dieser Callback laeuft bei jedem Reglerzug - er ist
+        # bewusst live, damit die Ampel sofort reagiert. Zweimal gebaut
+        # halbierte genau die Eigenschaft, um derentwillen er live ist.
+        teile = _elementstapel(element)
+        stapel = [s for teil in teile for s in teil]
         if element.endplatte is not None:
-            stapel = stapel + geo_endplatte.schnitte(
-                _elementstapel(element), element.endplatte)
+            stapel = stapel + geo_endplatte.schnitte(teile, element.endplatte)
 
         bezug = regeln.Bezugsgeometrie.aus_datei()
         zustand = regeln.Fahrzustand(
@@ -2864,19 +2878,33 @@ def _exportname(dateiname: str | None, element) -> str:
 
 
 def _exportinfo(plan, ziel: Path, geschrieben: Path | None) -> html.Div:
+    # Die Endplatte ist ein Polygon aus geraden Kanten. Eine Toleranz gibt
+    # es dort nicht zu treffen, und "berechnet fuer 0.0000 mm Toleranz"
+    # waere schlicht falsch.
+    ist_endplatte = plan.ausgabe == "endplatte"
+
     zeilen = [
         html.Div([html.Span("Punktzahl: ", style={"fontWeight": 600}),
-                  html.Span(f"{plan.punktzahl} je Seite, berechnet für "
-                            f"{plan.toleranz_mm:.4f} mm Toleranz "
-                            f"({plan.punkte_gesamt} Punkte gesamt"
-                            + (f", {len(plan.sektionen[0])} je Schnitt)"
-                               if plan.ist_fluegel else ")"))]),
+                  html.Span(
+                      f"{plan.punkte_gesamt} Punkte auf "
+                      f"{len(plan.sektionen)} Umrissen — gerade Kanten, "
+                      f"exakt getroffen"
+                      if ist_endplatte else
+                      f"{plan.punktzahl} je Seite, berechnet für "
+                      f"{plan.toleranz_mm:.4f} mm Toleranz "
+                      f"({plan.punkte_gesamt} Punkte gesamt"
+                      + (f", {len(plan.sektionen[0])} je Schnitt)"
+                         if plan.ist_fluegel else ")"))]),
         html.Div(f"Die geforderten {plan.toleranz_gefordert:.4f} mm waren nicht "
                  f"erreichbar — gerechnet wurde mit {plan.toleranz_mm:.4f} mm.",
                  className="as-status-hinweis", style={"marginTop": "5px"})
         if plan.gelockert else html.Div(),
         html.Div([html.Span("Kurvenform: ", style={"fontWeight": 600}),
                   html.Span(
+                      f"Endplatte samt Footplate: {len(plan.sektionen)} "
+                      "geschlossene Umrisse — in Creo ein eigenes Bauteil, "
+                      "das über Copy Geometry am Skelett hängt"
+                      if ist_endplatte else
                       f"Kaskade aus {len(plan.sektionen)} Elementen, je eine "
                       "geschlossene Kurve — in Creo jede einzeln projizieren "
                       "und extrudieren"
@@ -2957,7 +2985,16 @@ def starten(port: int = 8051, browser: bool = True) -> None:
     try:
         app.run(debug=False, port=port)
     except OSError as fehler:
-        if getattr(fehler, "errno", None) in (48, 98) or "in use" in str(fehler):
+        # 98 ist Linux, 48 macOS, 10048 Windows (WSAEADDRINUSE). Windows
+        # ist die Zielplattform, und dort ist die Meldung ausserdem
+        # uebersetzt - auf "in use" zu pruefen greift genau da nicht, wo es
+        # gebraucht wird. Deshalb zuerst die Nummer, und den Text nur noch
+        # als Zugabe.
+        belegt = (getattr(fehler, "errno", None) in (48, 98, 10048)
+                  or getattr(fehler, "winerror", None) == 10048
+                  or "in use" in str(fehler).lower()
+                  or "wird bereits verwendet" in str(fehler).lower())
+        if belegt:
             print()
             print(f"  Der Port {port} ist belegt.")
             print()

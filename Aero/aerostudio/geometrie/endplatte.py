@@ -210,11 +210,19 @@ def schnitte(stapel_je_element: list[list[Schnitt]], vorgabe) -> list[Schnitt]:
     if hat_fuss:
         # Die Footplate liegt waagerecht: ein Rechteck in der x-y-Ebene, von
         # der Plattenwurzel `breite` weit nach innen. Sie reicht von der
-        # Unterkante der Platte bis `hoehe` ueber Grund - zwei Umrisse, also
-        # ein Quader. Die Hoehe wird auf die Platte geklemmt: Eine Footplate,
-        # die oben aus der Endplatte herausragt oder unter ihr in der Luft
-        # haengt, waere eine Geometrie, die niemand gebaut hat.
-        z_oberkante = max(m.z_unten, min(float(fuss.hoehe), m.z_oben))
+        # Unterkante der Platte `hoehe` weit NACH OBEN - zwei Umrisse, also
+        # ein Quader.
+        #
+        # Ab der Unterkante und nicht ab dem Boden: Die Plattenunterkante
+        # liegt bei einem Frontfluegel um 70 mm ueber Grund, eine Footplate
+        # "bis 25 mm ueber Grund" kann daran nicht haengen. Bis zum
+        # 26.09.2026 wurde genau so gerechnet - die Footplate bekam
+        # stillschweigend null Erstreckung, und die Oberflaeche meldete
+        # trotzdem Vollzug.
+        #
+        # Nach oben auf die Platte geklemmt: Eine Footplate, die oben aus
+        # der Endplatte herausragt, waere eine Geometrie, die niemand baut.
+        z_oberkante = min(m.z_unten + float(fuss.hoehe), m.z_oben)
         y_innen_fuss = m.y_innen - float(fuss.breite)
         umriss = _umlauf([
             (m.x_vorne, y_innen_fuss),

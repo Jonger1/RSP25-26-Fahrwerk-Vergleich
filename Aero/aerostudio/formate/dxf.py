@@ -292,8 +292,15 @@ def schreibe_rippensatz(ordner: str | Path, profil: Profil, spannweite,
     for nr, i in enumerate(index, start=1):
         schnitt = stapel[i]
         ziel = ordner / f"{name}_{nr:02d}_y{schnitt.y:.0f}.dxf"
+        # Der Winkel AN DIESER STATION, nicht der Grundwinkel: Ein
+        # verwundener Fluegel hat an jeder Rippe einen anderen, und genau
+        # den soll die Vorlage tragen. Bis zum 26.09.2026 wurde er gar
+        # nicht durchgereicht - die Rippen lagen immer flach, obwohl die
+        # Oberflaeche "Anstellwinkel uebernehmen" versprach.
         ergebnis.append(schreibe_rippe(
             ziel, profil, schnitt.sehne, fertigung,
+            anstellwinkel=schnitt.anstellwinkel,
             beschriftung=f"{name} {nr} bei y = {schnitt.y:.0f} mm, "
-                         f"Sehne {schnitt.sehne:.1f} mm"))
+                         f"Sehne {schnitt.sehne:.1f} mm, "
+                         f"{schnitt.anstellwinkel:+.1f} Grad"))
     return ergebnis

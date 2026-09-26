@@ -385,7 +385,19 @@ def _saugseite(cp: np.ndarray, x_rel: np.ndarray) -> np.ndarray:
     """
     nase = int(np.argmin(x_rel))
     maske = np.zeros(len(cp), dtype=bool)
-    spitze = int(np.argmin(cp))
+
+    # Die Spitze AUSSERHALB der Nase suchen, mit demselben Ausschluss wie
+    # `saugspitze`. Der rohe argmin landet sonst genau in der numerischen
+    # Spitze an der Nase - und die liegt je nach Vernetzung mal auf der
+    # einen, mal auf der anderen Seite. Bei einer dreielementigen Kaskade
+    # traf sie die DRUCKseite, und der Rueckgewinn mischte anschliessend
+    # beide Flaechen. Das ist genau die Groesse, auf der das ganze
+    # Abrisskriterium ruht.
+    frei = x_rel >= NASENAUSSCHLUSS
+    if not frei.any():
+        frei = np.ones(len(cp), dtype=bool)
+    spitze = int(np.argmin(np.where(frei, cp, np.inf)))
+
     if spitze <= nase:
         maske[:nase + 1] = True
     else:
