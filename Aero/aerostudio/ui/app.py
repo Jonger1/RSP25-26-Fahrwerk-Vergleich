@@ -600,7 +600,16 @@ def _ansicht_kaskade() -> html.Div:
                                  "Sehne, Verwindung und Höhe folgen der "
                                  "Sektionstabelle."),
                                  style={"maxWidth": "340px"}),
-                             dcc.Graph(id="fig-kaskade", **_GRAPH)]),
+                             dcc.Graph(id="fig-kaskade", **_GRAPH),
+                             # Der Druck am GLEICHEN Schnitt. Zusammen mit
+                             # dem Schieber daruber ist das die Antwort auf
+                             # die Frage, die man beim Verschieben hat:
+                             # Wandert die Saugspitze nach aussen, oder
+                             # bleibt sie, wo sie war?
+                             dcc.Graph(id="fig-druckbild", **_GRAPH),
+                             dcc.Graph(id="fig-druckverlauf", **_GRAPH),
+                             html.Div(id="druck-hinweis",
+                                      className="as-hinweis")]),
                      style={"flex": "3 1 0", "minWidth": 0,
                             "marginRight": "14px"}),
             html.Div(_karte([_ueberschrift("Beiwerte"),
@@ -2202,6 +2211,69 @@ def _stufe_hinzufuegen(n, daten):
         "ueberlappung": letzte.get("ueberlappung", 0.02)}]
 
 
+@app.callback(Output("fig-druckbild", "figure"),
+              Output("fig-druckverlauf", "figure"),
+              Output("druck-hinweis", "children"),
+              Input("spec", "data"), Input(wert("kaskaden-y"), "value"))
+def _druck_zeichnen(daten, y_schnitt=0.0):
+    """Druckbild und cp-Verlauf am gewaehlten Schnitt.
+
+    Eigener Callback und nicht an `_kaskade_zeichnen` angehaengt: Die
+    Beiwerte dort brauchen NeuralFoil und einige Sekunden, die
+    Druckverteilung nur das Panelverfahren und Millisekunden. Zusammen in
+    einem Callback wuerde das Verschieben des Schnitts genauso lange
+    dauern wie eine Beiwertrechnung - und genau das Verschieben soll
+    fluessig sein.
+    """
+    leer = {"data": [], "layout": {"height": 340}}
+    if not daten:
+        return leer, leer, ""
+    try:
+        element = AeroSpec.model_validate(daten).elemente[0]
+        elemente = _schnittelemente(element, y_schnitt)
+        verlaeufe = aero_kaskade.druckverteilung(elemente,
+                                                 element.anstellwinkel)
+
+        spitzen = ", ".join(
+            f"{v.name}: c_p {v.saugspitze:.2f} bei {v.saugspitze_bei * 100:.0f} % "
+            f"der Sehne" for v in verlaeufe)
+        hinweis = html.Div([
+            html.Div(spitzen, style={"marginBottom": "5px"}),
+            html.Div("Reibungsfrei gerechnet — das Panelverfahren kennt keine "
+                     "Grenzschicht. Wo die Saugspitze sitzt und wie steil der "
+                     "Druckanstieg dahinter ist, steht damit belastbar da; ob "
+                     "die Strömung dort noch anliegt, beantwortet die "
+                     "Abrissprüfung bei den Beiwerten. Der Ausschlag direkt "
+                     "an der Nase ist eine numerische Spitze des Verfahrens "
+                     "und keine echte — deshalb wird c_p_min erst ab 2 % "
+                     "Sehne abgelesen."),
+        ])
+        return (darstellung.druckbild(elemente, verlaeufe),
+                darstellung.druckverlauf(verlaeufe, float(y_schnitt or 0.0)),
+                hinweis)
+    except Exception as fehler:
+        return leer, leer, _fehlerkarte(fehler)
+
+
+def _schnittelemente(element, y_schnitt) -> list:
+    """Die Kaskade im Schnitt an der Stelle y, oder eben der Schnitt selbst.
+
+    Aus `_kaskade_zeichnen` herausgezogen, weil die Druckverteilung dieselbe
+    Anordnung braucht. Zwei Kopien waeren zwei Stellen, an denen sich die
+    Lage unterscheiden kann - und dann zeigte das Druckbild einen anderen
+    Schnitt als die Zeichnung darueber.
+    """
+    haupt = profil_fuer(element)
+    vorgaben = _vorgaben(element.kaskade)
+    if element.spannweite is not None:
+        return spannweite.kaskade_bei(
+            haupt, element.spannweite, element.sehne, element.anstellwinkel,
+            vorgaben, float(y_schnitt or 0.0),
+            lage=(0.0, 0.0, _lage(element)[2]))
+    return geo_kaskade.platziere(haupt, element.sehne, element.anstellwinkel,
+                                 vorgaben, lage=(0.0, _lage(element)[2]))
+
+
 @app.callback(Output("fig-kaskade", "figure"),
               Output("kaskaden-beiwerte", "children"),
               Input("spec", "data"), Input(wert("kaskadentempo"), "value"),
@@ -2214,17 +2286,7 @@ def _kaskade_zeichnen(daten, tempo, y_schnitt=0.0):
     try:
         spec = AeroSpec.model_validate(daten)
         element = spec.elemente[0]
-        haupt = profil_fuer(element)
-        vorgaben = _vorgaben(element.kaskade)
-        if element.spannweite is not None:
-            elemente = spannweite.kaskade_bei(
-                haupt, element.spannweite, element.sehne,
-                element.anstellwinkel, vorgaben, float(y_schnitt or 0.0),
-                lage=(0.0, 0.0, _lage(element)[2]))
-        else:
-            elemente = geo_kaskade.platziere(haupt, element.sehne,
-                                             element.anstellwinkel, vorgaben,
-                                             lage=(0.0, _lage(element)[2]))
+        elemente = _schnittelemente(element, y_schnitt)
         bild = darstellung.kaskadenschnitt(elemente, element.pos_z)
 
         if not aero_verfuegbar():

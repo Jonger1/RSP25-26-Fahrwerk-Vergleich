@@ -65,6 +65,23 @@ class Panelloesung:
     cl_gesamt: float
     cl_je_koerper: np.ndarray
     cp: list[np.ndarray]           # Druckbeiwert je Körper und Panel
+    # Die Punkte, auf die sich `cp` BEZIEHT - und nicht die, die der Aufrufer
+    # hereingegeben hat.
+    #
+    # BEFUND vom 27.09.2026: `loese` dreht jede Eingabe einmal auf den
+    # Uhrzeigersinn (siehe `im_uhrzeigersinn`), weil sonst die Normalen nach
+    # innen zeigen. Selig-Profile laufen gegen den Uhrzeigersinn, werden also
+    # umgedreht - und damit passt `cp[i]` NICHT zu `koerper.punkte[i]`.
+    #
+    # Wer das nicht weiss, ordnet den Druck den falschen Stellen zu. Genau das
+    # ist passiert: Ein NACA 0012 bei +5 Grad bekam seine Saugspitze auf die
+    # UNTERseite gerechnet, obwohl cl mit +0,592 korrekt war. Der Fehler fiel
+    # nicht auf, weil cl über die Zirkulation läuft und von der Reihenfolge
+    # unabhängig ist - nur die ORTSZUORDNUNG war verdreht.
+    #
+    # Deshalb liegen die benutzten Punkte jetzt hier. Wer cp einem Ort
+    # zuordnet, nimmt diese und nicht seine eigenen.
+    punkte_je_koerper: list[np.ndarray]
     zirkulation: np.ndarray        # je Körper
     geschwindigkeit: list[np.ndarray]   # Tangentialgeschwindigkeit je Panel
     bezugssehne: float
@@ -306,6 +323,7 @@ def loese(koerper: list[Koerper], alpha_grad: float = 0.0,
                         cd_scheinbar=float(cd_je.sum()),
                         cp=cp_liste, zirkulation=gamma,
                         geschwindigkeit=v_liste, bezugssehne=float(sehne),
+                        punkte_je_koerper=punkte_je,
                         bodennah=bodennah)
 
 

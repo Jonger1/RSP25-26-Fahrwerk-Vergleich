@@ -491,3 +491,76 @@ def test_maximumsuche_verweist_auf_die_kaskade(e423, enge_grenzen):
     v = ent.suche_maximum(e423, Spannweite.frontfluegel_aussen(),
                           geschwindigkeit=15.0, grenzen=enge_grenzen)
     assert any("Kaskade" in b for b in v.begruendung)
+
+
+# ------------------- Zuordnung von cp zu Ort (Befund vom 27.09.2026)
+
+def test_loesung_liefert_die_benutzten_punkte():
+    """`loese` dreht jede Eingabe auf den Uhrzeigersinn - und cp kommt in
+    DIESER Reihenfolge zurueck.
+
+    Wer cp den eigenen Eingabepunkten zuordnet, faerbt die falschen Stellen
+    ein. Genau das ist passiert: Ein NACA 0012 bei +5 Grad bekam seine
+    Saugspitze auf die UNTERseite gerechnet.
+    """
+    from aerostudio.aero import panel as pnl
+
+    profil = Profil.aus_naca(0.0, 0.4, 0.12)
+    punkte = profil.punkte * 250.0
+    loesung = pnl.loese([pnl.Koerper(punkte=punkte)], alpha_grad=5.0,
+                        bezugssehne=250.0)
+
+    assert len(loesung.punkte_je_koerper) == 1
+    benutzt = loesung.punkte_je_koerper[0]
+    assert len(benutzt) == len(punkte)
+    assert len(loesung.cp[0]) == len(benutzt) - 1
+    # Der Uhrzeigersinn ist die Bedingung, unter der die Normalen nach
+    # aussen zeigen - darauf ruht die ganze Tangentialbedingung.
+    assert pnl.umlaufsinn(benutzt) < 0
+
+
+@pytest.mark.parametrize("alpha,oben", [(5.0, True), (-5.0, False)])
+def test_saugspitze_liegt_auf_der_richtigen_seite(alpha, oben):
+    """Der eindeutige Fall: symmetrisches Profil, schiefe Anstroemung.
+
+    Bei +5 Grad liegt der Unterdruck OBEN - daran gibt es nichts zu deuten.
+    Dieser Test haette den Zuordnungsfehler sofort gefunden; es gab ihn
+    nicht, weil alle Pruefungen ueber cl liefen. Und cl laeuft ueber die
+    Zirkulation und ist von der Punktreihenfolge unabhaengig.
+    """
+    from aerostudio.aero import kaskade as aero_k
+    from aerostudio.geometrie import kaskade as geo_k
+
+    profil = Profil.aus_naca(0.0, 0.4, 0.12)
+    elemente = geo_k.platziere(profil, 250.0, 0.0, None, lage=(0.0, 500.0),
+                               punkte=120)
+    verlauf = aero_k.druckverteilung(elemente, alpha)[0]
+
+    frei = verlauf.x_rel >= aero_k.NASENAUSSCHLUSS
+    i = int(np.argmin(np.where(frei, verlauf.cp, np.inf)))
+    nachbarn = np.abs(verlauf.x_rel - verlauf.x_rel[i]) < 0.03
+    liegt_oben = verlauf.punkte[i, 1] > verlauf.punkte[nachbarn, 1].mean()
+
+    assert bool(liegt_oben) == oben
+
+
+def test_abtriebsprofil_saugt_unten():
+    """Die Gegenprobe mit einem echten Abtriebsprofil.
+
+    Ein gespiegeltes E423 bei negativem Anstellwinkel traegt Abtrieb, und
+    sein Unterdruck sitzt unten. Wer das umgekehrt sieht, liest jedes
+    cp-Diagramm verkehrt.
+    """
+    from aerostudio.aero import kaskade as aero_k
+    from aerostudio.geometrie import kaskade as geo_k
+
+    profil = Profil.aus_dat("profile/katalog/e423.dat").gespiegelt()
+    elemente = geo_k.platziere(profil, 250.0, -4.0, None, lage=(0.0, 90.0),
+                               punkte=120)
+    verlauf = aero_k.druckverteilung(elemente, -4.0)[0]
+
+    frei = verlauf.x_rel >= aero_k.NASENAUSSCHLUSS
+    i = int(np.argmin(np.where(frei, verlauf.cp, np.inf)))
+    nachbarn = np.abs(verlauf.x_rel - verlauf.x_rel[i]) < 0.03
+
+    assert verlauf.punkte[i, 1] < verlauf.punkte[nachbarn, 1].mean()

@@ -255,9 +255,15 @@ def rechne(elemente: list[geo.Elementlage], geschwindigkeit: float = 15.0,
             name=element.name, winkel=winkel,
             cl_allein=cl_allein, cl_verbund=cl_verbund, cl_zaeh=cl_zaeh,
             cd_zaeh=cd_zaeh, wirkungsgrad=wirkungsgrad,
-            saugspitze=saugspitze(verbund.cp[i], koerper[i].punkte),
+            # verbund.punkte_je_koerper[i] und NICHT koerper[i].punkte:
+            # `loese` dreht jede Eingabe auf den Uhrzeigersinn, und cp kommt
+            # in dieser Reihenfolge zurueck. Mit den Eingabepunkten war die
+            # Saugseite verkehrt bestimmt - siehe den Befund in panel.py.
+            saugspitze=saugspitze(verbund.cp[i],
+                                  verbund.punkte_je_koerper[i]),
             saugspitze_grenze=grenze_spitze,
-            rueckgewinn=rueckgewinn(verbund.cp[i], koerper[i].punkte),
+            rueckgewinn=rueckgewinn(verbund.cp[i],
+                                    verbund.punkte_je_koerper[i]),
             rueckgewinn_grenze=grenze_rueckgewinn,
             vertrauen=float(pol.vertrauen_bei(winkel))))
 
@@ -450,7 +456,9 @@ def _beim_abriss_roh(punkte_bytes, form, abrisswinkel) -> tuple[float, float]:
     p = np.frombuffer(punkte_bytes, dtype=float).reshape(form)
     loesung = panel.loese([panel.Koerper(punkte=p)], alpha_grad=abrisswinkel,
                           bezugssehne=1.0)
-    return (saugspitze(loesung.cp[0], p), rueckgewinn(loesung.cp[0], p))
+    benutzt = loesung.punkte_je_koerper[0]
+    return (saugspitze(loesung.cp[0], benutzt),
+            rueckgewinn(loesung.cp[0], benutzt))
 
 
 def _saugspitze_beim_abriss_roh(punkte_bytes, form, abrisswinkel) -> float:
@@ -505,3 +513,75 @@ def baue_und_rechne(haupt, sehne: float, winkel: float,
                              punkte=punkte)
     beiwert = rechne(elemente, geschwindigkeit, mit_boden=False)
     return elemente, beiwert
+
+
+# --------------------------------------------------------- Druckverteilung
+
+@dataclass
+class Druckverlauf:
+    """Der Druckbeiwert entlang eines Elements, fuer die Anzeige.
+
+    Warum hier und nicht in der Oberflaeche: Ein Dash-Callback ruft eine
+    Funktion aus `aerostudio.*` auf und stellt das Ergebnis dar. Das
+    Panelverfahren direkt aus einem Callback zu bedienen waere Fachlogik in
+    der Oberflaechenschicht - und damit nicht testbar, nicht von der
+    Kommandozeile erreichbar und nicht im Report verwendbar.
+    """
+
+    name: str
+    x_rel: np.ndarray        # Sehnenanteil des Elements, 0 Nase bis 1 Hinterkante
+    cp: np.ndarray           # Druckbeiwert je Panel
+    punkte: np.ndarray       # Panelmittelpunkte (x, z) in mm - fuer die Einfaerbung
+    saugseite: np.ndarray    # bool-Maske: liegt dieses Panel auf der Saugseite?
+
+    @property
+    def saugspitze(self) -> float:
+        """Kleinster Druckbeiwert, ohne die numerische Spitze an der Nase."""
+        frei = self.x_rel >= NASENAUSSCHLUSS
+        return float(self.cp[frei].min()) if frei.any() else float(self.cp.min())
+
+    @property
+    def saugspitze_bei(self) -> float:
+        """Wo die Saugspitze sitzt, als Sehnenanteil."""
+        frei = self.x_rel >= NASENAUSSCHLUSS
+        if not frei.any():
+            return float(self.x_rel[int(np.argmin(self.cp))])
+        i = int(np.argmin(np.where(frei, self.cp, np.inf)))
+        return float(self.x_rel[i])
+
+
+def druckverteilung(elemente, anstellwinkel: float = 0.0, *,
+                    mit_boden: bool = False,
+                    bodenhoehe: float = 0.0) -> list[Druckverlauf]:
+    """Die Druckverteilung aller Elemente einer Kaskade im Schnitt.
+
+    Reibungsfrei gerechnet, wie die ganze Kaskadenrechnung: Das
+    Panelverfahren kennt keine Grenzschicht. Fuer die Frage, WO die
+    Saugspitze sitzt und wie steil der Druckanstieg dahinter ist, ist das
+    genau richtig - fuer die Frage, ob die Stroemung dort noch anliegt,
+    nicht. Das Abrisskriterium in `rechne` beantwortet die zweite Frage.
+
+    Die Nasensingularitaet steckt auch hier in den Zahlen. Sie wird NICHT
+    herausgerechnet, sondern nur bei den abgeleiteten Groessen ausgeblendet
+    (`saugspitze`): Wer die Verteilung ansieht, soll sehen, was das Verfahren
+    liefert - eine geglaettete Kurve waere eine Behauptung ueber die Nase,
+    die wir nicht belegen koennen.
+    """
+    koerper = [panel.Koerper(punkte=e.punkte, name=e.name) for e in elemente]
+    loesung = panel.loese(koerper, alpha_grad=anstellwinkel,
+                          mit_boden=mit_boden, bodenhoehe=bodenhoehe,
+                          bezugssehne=geo.gesamtsehne(elemente))
+
+    verlaeufe = []
+    for i, element in enumerate(elemente):
+        # Die Punkte aus der LOESUNG, nicht die eigenen - siehe den Befund
+        # bei Panelloesung.punkte_je_koerper.
+        punkte = loesung.punkte_je_koerper[i]
+        mitte = 0.5 * (punkte[:-1] + punkte[1:])
+        x_rel = _x_relativ(punkte)
+        cp = np.asarray(loesung.cp[i], dtype=float)
+        verlaeufe.append(Druckverlauf(
+            name=element.name or f"Element {i + 1}",
+            x_rel=x_rel, cp=cp, punkte=mitte,
+            saugseite=_saugseite(cp, x_rel)))
+    return verlaeufe

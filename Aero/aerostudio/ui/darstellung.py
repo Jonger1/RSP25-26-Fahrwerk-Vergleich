@@ -652,3 +652,109 @@ def draufsicht(stapel, bezug, regelsatz) -> go.Figure:
     fig.update_yaxes(scaleanchor="x", scaleratio=1.0, title="y [mm]")
     fig.update_xaxes(title="x [mm] — 0 = Vorderachse, positiv nach hinten")
     return _achsen(fig)
+
+
+# ------------------------------------------------------- Druckverteilung
+
+# Blau = Unterdruck (Sog), Rot = Ueberdruck. Die Richtung ist Konvention in
+# jeder Aerodynamikveroeffentlichung; wer sie umdreht, verwirrt jeden, der
+# schon einmal ein cp-Diagramm gesehen hat.
+FARBSKALA_CP = [[0.0, "#1d4e8f"], [0.35, "#6b9bd2"], [0.5, "#f2f4f7"],
+                [0.7, "#e8894a"], [1.0, "#b32218"]]
+
+
+def druckverlauf(verlaeufe, y_schnitt: float = 0.0) -> go.Figure:
+    """Der Druckbeiwert ueber die Sehne, je Element.
+
+    **Die cp-Achse zeigt nach unten.** Das ist keine Willkuer: In dieser
+    Darstellung liegt die Saugseite oben, und die Flaeche zwischen den beiden
+    Aesten ist proportional zum Auftrieb - man sieht dem Bild an, wieviel
+    das Element traegt. Jede Aerodynamikveroeffentlichung zeichnet es so.
+
+    Bei einem Abtriebsfluegel ist die Saugseite die UNTERE. Oben im Bild
+    liegt also die Unterseite des Profils, und das ist richtig so.
+    """
+    fig = go.Figure()
+    farben = [FARBE_KONTUR, FARBE_AKZENT, "#ea7317", "#f4c20d"]
+
+    for i, v in enumerate(verlaeufe):
+        farbe = farben[i % len(farben)]
+        # Saug- und Druckseite getrennt zeichnen, sonst laeuft die Linie an
+        # der Nase quer durchs Bild zurueck.
+        for maske, strich in ((v.saugseite, "solid"), (~v.saugseite, "dot")):
+            if not maske.any():
+                continue
+            ordnung = np.argsort(v.x_rel[maske])
+            fig.add_trace(go.Scatter(
+                x=v.x_rel[maske][ordnung], y=v.cp[maske][ordnung],
+                mode="lines", line=dict(color=farbe, width=1.8, dash=strich),
+                name=f"{v.name} ({'Saug' if strich == 'solid' else 'Druck'}seite)",
+                hovertemplate="x/c %{x:.3f}<br>cp %{y:.2f}<extra></extra>"))
+
+        # Die Saugspitze markieren - sie ist die Zahl, an der das
+        # Abrisskriterium haengt.
+        fig.add_trace(go.Scatter(
+            x=[v.saugspitze_bei], y=[v.saugspitze], mode="markers",
+            marker=dict(color=farbe, size=8, symbol="circle-open",
+                        line=dict(width=2)),
+            name=f"{v.name}: cp_min {v.saugspitze:.2f}", hoverinfo="name"))
+
+    fig.add_hline(y=0.0, line=dict(color=FARBE_HILFE, width=1))
+
+    titel = "Druckverteilung"
+    if y_schnitt:
+        titel += f" bei y = {y_schnitt:.0f} mm"
+    titel += " — reibungsfrei, Saugseite oben"
+    fig.update_layout(**_grundlayout(titel, hoehe=340))
+    fig.update_layout(showlegend=True,
+                      legend=dict(font=dict(size=10), orientation="h",
+                                  yanchor="bottom", y=1.02))
+    # Invertiert: Unterdruck nach oben.
+    fig.update_yaxes(autorange="reversed", title="c_p")
+    fig.update_xaxes(title="x / c des jeweiligen Elements", range=[-0.02, 1.02])
+    return _achsen(fig)
+
+
+def druckbild(elemente, verlaeufe, bodenhoehe: float = 0.0) -> go.Figure:
+    """Die Kaskade im Schnitt, Kontur nach dem Druckbeiwert eingefaerbt.
+
+    Das Gegenstueck zum cp-Diagramm: Dort liest man Zahlen ab, hier sieht
+    man auf einen Blick, WO am Profil der Sog sitzt. Beides zusammen
+    beantwortet die Frage, die man beim Verschieben des Schnitts hat -
+    verlagert sich die Saugspitze nach aussen, oder bleibt sie, wo sie war?
+
+    Die Farbskala ist ueber alle Elemente GEMEINSAM: Sonst sahe ein Flap mit
+    cp_min = -1,5 genauso tiefblau aus wie ein Hauptelement mit -6,6, und der
+    Vergleich zwischen ihnen waere gerade das, was das Bild verhindert.
+    """
+    fig = go.Figure()
+
+    alle_cp = np.concatenate([v.cp for v in verlaeufe]) if verlaeufe else np.array([0.0])
+    # Symmetrisch um cp = 0, damit die Mitte der Skala wirklich der
+    # Umgebungsdruck ist und nicht irgendein Zwischenwert.
+    spanne = float(max(abs(alle_cp.min()), abs(alle_cp.max()), 1e-6))
+
+    alle_x = np.concatenate([e.punkte[:, 0] for e in elemente])
+    rand = 0.08 * (float(alle_x.max() - alle_x.min()) + 1e-9)
+
+    fig.add_trace(go.Scatter(
+        x=[float(alle_x.min()) - rand, float(alle_x.max()) + rand],
+        y=[0.0, 0.0], mode="lines",
+        line=dict(color=FARBE_KONTUR, width=2), name="Boden", hoverinfo="name"))
+
+    for i, (element, v) in enumerate(zip(elemente, verlaeufe)):
+        fig.add_trace(go.Scatter(
+            x=v.punkte[:, 0], y=v.punkte[:, 1], mode="markers",
+            marker=dict(color=v.cp, colorscale=FARBSKALA_CP,
+                        cmin=-spanne, cmax=spanne, size=5,
+                        colorbar=dict(title="c_p", thickness=12, len=0.8)
+                        if i == 0 else None),
+            name=v.name,
+            hovertemplate="%{text}<br>cp %{marker.color:.2f}<extra></extra>",
+            text=[v.name] * len(v.cp)))
+
+    fig.update_layout(**_grundlayout(
+        "Druck am Schnitt — blau ist Sog, rot Überdruck", hoehe=360))
+    fig.update_yaxes(scaleanchor="x", scaleratio=1.0, title="z [mm]")
+    fig.update_xaxes(title="x [mm]")
+    return _achsen(fig)

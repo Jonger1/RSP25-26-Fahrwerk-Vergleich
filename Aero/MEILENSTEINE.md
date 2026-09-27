@@ -171,8 +171,9 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M6 | Undo über die Spec-Historie, mit Bedienung im Reiter *Projekt* | `spec/projekt.py` |
 | M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
 | M6 | Fehlermeldungen in handlungsleitende Sätze übersetzt | `ui/meldungen.py` |
+| M3 | Druckverteilung am verschiebbaren Schnitt, cp-Diagramm und eingefärbte Kontur | `aero/kaskade.py`, Reiter *Kaskade* |
 
-Die Testabdeckung liegt bei **452 Tests**, die in knapp fünf Minuten
+Die Testabdeckung liegt bei **475 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
