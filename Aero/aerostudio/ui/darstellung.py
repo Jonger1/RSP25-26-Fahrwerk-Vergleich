@@ -758,3 +758,156 @@ def druckbild(elemente, verlaeufe, bodenhoehe: float = 0.0) -> go.Figure:
     fig.update_yaxes(scaleanchor="x", scaleratio=1.0, title="z [mm]")
     fig.update_xaxes(title="x [mm]")
     return _achsen(fig)
+
+
+# ------------------------------------------------------------ Unterboden
+
+def unterbodenschnitt(ergebnis, ub) -> go.Figure:
+    """Der Kanal von der Seite: Boden, Strasse, Kehle, Diffusor.
+
+    Ueberhoeht gezeichnet (z fuenffach), sonst ist ein 50-mm-Kanal unter
+    einem 1300 mm langen Boden ein Strich. Das steht im Titel, damit
+    niemand die Winkel im Bild nachmisst.
+    """
+    fig = go.Figure()
+    ueberhoehung = 5.0
+    x, h = ergebnis.x, ergebnis.hoehe
+
+    fig.add_trace(go.Scatter(x=[x[0] - 50, x[-1] + 50], y=[0, 0], mode="lines",
+                             line=dict(color=FARBE_KONTUR, width=2),
+                             name="Straße", hoverinfo="name"))
+
+    # Der Kanal als Flaeche zwischen Strasse und Boden, nach cp eingefaerbt
+    # waere schoen - aber Plotly kann keine Flaeche mit Farbverlauf. Also
+    # der Boden als Linie, gefaerbt nach Abschnitt.
+    diffusor_start = ub.x_start + ub.einlass_laenge + ub.kehle_laenge
+    for maske, farbe, name in (
+            (x <= ub.x_start + ub.einlass_laenge, FARBE_HILFE, "Einlass"),
+            ((x >= ub.x_start + ub.einlass_laenge) & (x <= diffusor_start),
+             FARBE_KONTUR, "Kehle"),
+            (x >= diffusor_start,
+             FARBE_AKZENT if ergebnis.abgeloest else "#2f6f4e",
+             "Diffusor, abgelöst" if ergebnis.abgeloest else "Diffusor")):
+        fig.add_trace(go.Scatter(
+            x=x[maske], y=h[maske] * ueberhoehung, mode="lines",
+            line=dict(color=farbe, width=3), name=name,
+            customdata=h[maske],
+            hovertemplate="x %{x:.0f} mm<br>Höhe %{customdata:.1f} mm<extra></extra>"))
+
+    fig.add_trace(go.Scatter(
+        x=[ergebnis.kehle_x], y=[ergebnis.kehle_hoehe * ueberhoehung],
+        mode="markers+text", marker=dict(color=FARBE_KONTUR, size=8),
+        text=[f"Kehle {ergebnis.kehle_hoehe:.0f} mm"], textposition="top center",
+        name="engste Stelle", hoverinfo="name"))
+
+    fig.update_layout(**_grundlayout(
+        f"Unterboden im Schnitt — Höhen fünffach überhöht, "
+        f"Diffusor wirksam {ergebnis.diffusor_winkel_wirksam:.1f}°", hoehe=300))
+    fig.update_layout(showlegend=True, legend=dict(orientation="h", y=1.1,
+                                                   font=dict(size=10)))
+    fig.update_xaxes(title="x [mm] — 0 = Vorderachse")
+    fig.update_yaxes(title="Höhe × 5 [mm]")
+    return _achsen(fig)
+
+
+def bodendruck(ergebnis) -> go.Figure:
+    """cp entlang des Bodens, Achse nach unten wie beim Profil.
+
+    Die Flaeche unter der Kurve ist der Abtrieb - man sieht, welcher
+    Abschnitt ihn liefert. Beim guten Unterboden ist es die Kehle; liefert
+    ihn der Einlass, ist der Kanal zu frueh zu eng.
+    """
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=ergebnis.x, y=ergebnis.cp, mode="lines", fill="tozeroy",
+        line=dict(color="#1d4e8f", width=2), fillcolor="rgba(29,78,143,0.15)",
+        name="c_p", hovertemplate="x %{x:.0f} mm<br>c_p %{y:.2f}<extra></extra>"))
+    fig.add_vline(x=ergebnis.druckpunkt_x, line=dict(color=FARBE_AKZENT, dash="dot"),
+                  annotation_text=f"Druckpunkt {ergebnis.druckpunkt_x:.0f} mm",
+                  annotation_position="bottom right")
+    fig.add_hline(y=0.0, line=dict(color=FARBE_HILFE, width=1))
+    fig.update_layout(**_grundlayout("Druck entlang des Bodens — Sog oben",
+                                     hoehe=280))
+    fig.update_yaxes(autorange="reversed", title="c_p")
+    fig.update_xaxes(title="x [mm]")
+    return _achsen(fig)
+
+
+def hoehenkennlinie(kennlinie) -> go.Figure:
+    """Abtrieb ueber dem Hub. Flach ist gut - steil heisst unruhiges Auto."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=kennlinie.hub, y=kennlinie.abtrieb, mode="lines+markers",
+        line=dict(color=FARBE_KONTUR, width=2), marker=dict(size=6),
+        name="Abtrieb", hovertemplate="Hub %{x:+.1f} mm<br>%{y:.1f} N<extra></extra>"))
+    fig.update_layout(**_grundlayout(
+        f"Abtrieb über den Federweg — Stabilität {kennlinie.stabilitaet:.2f}",
+        hoehe=260))
+    fig.update_xaxes(title="Hub [mm] — negativ = eingefedert")
+    fig.update_yaxes(title="Abtrieb [N]", rangemode="tozero")
+    return _achsen(fig)
+
+
+def paretobild(lauf) -> go.Figure:
+    """Die Pareto-Front: Abtrieb gegen Widerstand, Farbe = Stabilitaet.
+
+    Ungueltige Varianten stehen grau mit drin. Man soll sehen, wo die Grenze
+    verlaeuft - und dass der meiste Abtrieb oft genau jenseits davon liegt.
+    Anklicken eines Frontpunkts uebernimmt ihn.
+    """
+    fig = go.Figure()
+    front = set(lauf.front)
+
+    ungueltig = [i for i, e in enumerate(lauf.ergebnisse)
+                 if not e.get("gueltig") and e.get("widerstand") is not None]
+    if ungueltig:
+        fig.add_trace(go.Scatter(
+            x=[lauf.ergebnisse[i]["widerstand"] for i in ungueltig],
+            y=[lauf.ergebnisse[i]["abtrieb"] for i in ungueltig],
+            mode="markers", marker=dict(color=FARBE_HILFE, size=6, symbol="x"),
+            name="ungültig", customdata=ungueltig,
+            hovertemplate="%{y:.1f} N / %{x:.1f} N — ungültig<extra></extra>"))
+
+    for auswahl, name, groesse, linie in (
+            ([i for i, e in enumerate(lauf.ergebnisse)
+              if e.get("gueltig") and i not in front], "Variante", 6, 0),
+            (sorted(front), "Pareto-Front", 11, 1.5)):
+        if not auswahl:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[lauf.ergebnisse[i]["widerstand"] for i in auswahl],
+            y=[lauf.ergebnisse[i]["abtrieb"] for i in auswahl],
+            mode="markers", name=name, customdata=auswahl,
+            marker=dict(size=groesse,
+                        color=[lauf.ergebnisse[i]["stabilitaet"] for i in auswahl],
+                        colorscale="Viridis", cmin=0.0, cmax=1.0,
+                        line=dict(color=FARBE_KONTUR, width=linie),
+                        colorbar=dict(title="Stabilität", thickness=12)
+                        if name == "Pareto-Front" else None),
+            text=[f"{lauf.ergebnisse[i]['stabilitaet']:.2f}" for i in auswahl],
+            hovertemplate="Variante %{customdata}<br>%{y:.1f} N Abtrieb<br>"
+                          "%{x:.1f} N Widerstand<br>Stabilität %{text}"
+                          "<extra></extra>"))
+
+    # Die Front laeuft ueber DREI Ziele, das Bild zeigt zwei. Frontpunkte bei
+    # wenig Abtrieb und viel Widerstand sind deshalb kein Fehler - sie
+    # gewinnen bei der Stabilitaet. Ohne diesen Satz haelt man die Rechnung
+    # fuer kaputt, sobald man das Bild zum ersten Mal sieht.
+    fig.add_annotation(
+        text="Front über drei Ziele: Punkte, die hier dominiert wirken, "
+             "liegen bei der Stabilität (Farbe) vorn.",
+        xref="paper", yref="paper", x=0.0, y=-0.2, showarrow=False,
+        xanchor="left", font=dict(size=11, color="#6b7280"))
+
+    fig.update_layout(**_grundlayout(
+        f"{len(lauf.varianten)} Varianten, {len(lauf.front)} auf der Front — "
+        f"anklicken übernimmt", hoehe=440))
+    # Legende UNTER den Titel und Platz dafuer: Oben uebereinander gelegt
+    # schnitten sie sich gegenseitig ab.
+    fig.update_layout(showlegend=True, hovermode="closest",
+                      margin=dict(l=55, r=20, t=75, b=85),
+                      legend=dict(orientation="h", y=1.02, yanchor="bottom",
+                                  x=0.0, font=dict(size=10)))
+    fig.update_xaxes(title="Widerstand [N] — weniger ist besser")
+    fig.update_yaxes(title="Abtrieb [N] — mehr ist besser")
+    return _achsen(fig)

@@ -42,6 +42,8 @@ from ..aero import kaskade as aero_kaskade
 from ..aero import generator as aero_generator
 from ..aero import boden as aero_boden
 from ..aero import kaskade3d as aero_kaskade3d
+from ..aero import doe as aero_doe
+from ..aero import unterboden as aero_unterboden
 from ..geometrie import kaskade as geo_kaskade
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
@@ -49,9 +51,10 @@ from ..geometrie import endplatte as geo_endplatte
 from ..geometrie import spannweite, verwindung
 from ..geometrie.profil import (KATALOG, katalognotiz, katalogoptionen,
                                 katalogprofile, profil_fuer)
-from ..spec.modell import (Endplatte, Fertigung, Footplate, Kaskadenstufe,
-                           ProfilAusDatei, ProfilNaca, Spannweite,
-                           Stuetzstelle, Wirkrichtung, vorgaben_fuer)
+from ..spec.modell import (Endplatte, Fahrzeuglage, Fertigung, Footplate,
+                           Kaskadenstufe, ProfilAusDatei, ProfilNaca,
+                           Spannweite, Stuetzstelle, Unterboden, Wirkrichtung,
+                           vorgaben_fuer)
 from ..spec import projekt
 from ..spec.projekt import AeroSpec
 from . import darstellung, meldungen
@@ -828,6 +831,82 @@ def _ansicht_creo() -> html.Div:
     ])
 
 
+def _ansicht_unterboden() -> html.Div:
+    """Ansicht *Unterboden* — der größte aerodynamische Hebel (M8).
+
+    Oben die Konstruktion und die Fahrzeuglage, darunter was daraus wird,
+    ganz unten der DoE-Lauf mit seiner Pareto-Front. Ein Klick auf einen
+    Frontpunkt setzt dessen Werte in die Felder oben — damit bleibt das Spec
+    der einzige Zustand, und die Variante ist danach ein gewöhnlicher Entwurf.
+    """
+    return html.Div([
+        _leiste("Unterboden", [
+            _feld("", dcc.Checklist(
+                id="ub-aktiv", value=[],
+                options=[{"label": " Unterboden rechnen", "value": "ja"}],
+                style={"fontSize": "13px"}),
+                "Aus = kein Unterboden im Spec. Ältere Entwürfe behalten "
+                "damit ihren Hash."),
+            _feld("Vorderkante x [mm]", _zahlenfeld("ub-x", 250.0, 25.0, -500.0, 2000.0),
+                  "Ab der Vorderachse, positiv nach hinten."),
+            _feld("Kanalbreite [mm]", _zahlenfeld("ub-breite", 700.0, 25.0, 100.0, 1600.0),
+                  "Beide Seiten zusammen."),
+            _feld("Einlass: Länge [mm]", _zahlenfeld("ub-einlass-l", 150.0, 10.0, 10.0, 1000.0)),
+            _feld("Einlass: Höhe [mm]", _zahlenfeld("ub-einlass-h", 110.0, 5.0, 10.0, 400.0)),
+            _feld("Kehle: Länge [mm]", _zahlenfeld("ub-kehle-l", 750.0, 25.0, 10.0, 3000.0)),
+            _feld("Kehle vorne [mm]", _zahlenfeld("ub-kehle-v", 55.0, 2.5, 5.0, 300.0)),
+            _feld("Kehle hinten [mm]", _zahlenfeld("ub-kehle-h", 50.0, 2.5, 5.0, 300.0),
+                  "Kleiner als vorne: Die Kehle läuft zusammen."),
+            _feld("Diffusorwinkel [°]", _zahlenfeld("ub-diffusor-w", 10.0, 0.5, 0.0, 35.0),
+                  "Ohne Rake. Über etwa 15° löst die Strömung ab."),
+            _feld("Diffusorlänge [mm]", _zahlenfeld("ub-diffusor-l", 400.0, 25.0, 10.0, 1500.0)),
+            _feld("Abdichtung", _zahlenfeld("ub-abdichtung", 0.7, 0.05, 0.05, 1.0),
+                  "Seitliches Nachströmen, 1 = dicht. Geschätzt — der erste "
+                  "Wert für den CFD-Abgleich."),
+        ], spalten="190px"),
+
+        _leiste("Fahrzeuglage — gilt für alle Aeroteile", [
+            _feld("Rake [°]", _zahlenfeld("rake", 0.0, 0.1, -3.0, 5.0),
+                  "Positiv = hinten höher. Macht den Diffusor steiler."),
+            _feld("Drehpunkt x [mm]", _zahlenfeld("rake-x", 0.0, 50.0, -2000.0, 3000.0),
+                  "Wo der Rake die Höhe nicht ändert. Um die Vorderachse "
+                  "gedreht hebt sich die Kehle mit — der Gewinn schrumpft."),
+            _feld("Geschwindigkeit [m/s]", _zahlenfeld("ub-tempo", 20.0, 1.0, 1.0, 60.0),
+                  "Nur für die Rechnung, nicht Teil des Entwurfs."),
+        ], spalten="220px"),
+
+        html.Div(id="ub-ergebnis"),
+        _karte([dcc.Graph(id="fig-ub-schnitt", **_GRAPH)]),
+        html.Div([
+            html.Div(_karte([dcc.Graph(id="fig-ub-druck", **_GRAPH)]),
+                     style={"flex": "3 1 0", "minWidth": 0, "marginRight": "14px"}),
+            html.Div(_karte([dcc.Graph(id="fig-ub-kennlinie", **_GRAPH)]),
+                     style={"flex": "2 1 0", "minWidth": 0}),
+        ], className="as-zeile"),
+
+        _leiste("Versuchsplanung (DoE)", [
+            _feld("Varianten", _zahlenfeld("doe-n", 200.0, 50.0, 10.0, 2000.0),
+                  "Latin Hypercube über Einlass, Kehle, Diffusor und Rake. "
+                  "200 Varianten rechnen in etwa zwei Sekunden."),
+            _feld("Ergebnisdatei", dcc.Input(
+                id="doe-datei", type="text", value="export/doe_unterboden.yaml",
+                className="as-textfeld"),
+                "Relativ zum Projektordner. Große Läufe gehören auf die "
+                "Kommandozeile: python -m aerostudio.aero.doe"),
+            html.Div([
+                html.Button("DoE rechnen", id="btn-doe", n_clicks=0,
+                            className="as-knopf as-knopf-voll"),
+                html.Button("Datei anzeigen", id="btn-doe-laden", n_clicks=0,
+                            className="as-knopf as-knopf-leer"),
+                html.Div(id="doe-status", className="as-hinweis",
+                         style={"marginTop": "9px"}),
+            ]),
+        ], spalten="240px"),
+        _karte([dcc.Graph(id="fig-pareto", **_GRAPH),
+                html.Div(id="doe-uebernommen", className="as-hinweis")]),
+    ])
+
+
 def _ansicht_regeln() -> html.Div:
     """Ansicht *Fahrzeug & Regeln* — das „Fertig, wenn" von M2.
 
@@ -924,6 +1003,7 @@ def layout() -> html.Div:
             dcc.Tab(label="Profil", value="profil"),
             dcc.Tab(label="Flügel", value="fluegel"),
             dcc.Tab(label="Kaskade", value="kaskade"),
+            dcc.Tab(label="Unterboden", value="unterboden"),
             dcc.Tab(label="Fahrzeug & Regeln", value="regeln"),
             dcc.Tab(label="Creo", value="creo"),
             dcc.Tab(label="Projekt", value="projekt"),
@@ -936,6 +1016,7 @@ def layout() -> html.Div:
             html.Div(_fluegelgeometrie(), id="block-geometrie"),
             html.Div(_ansicht_fluegel(), id="view-fluegel"),
             html.Div(_ansicht_kaskade(), id="view-kaskade"),
+            html.Div(_ansicht_unterboden(), id="view-unterboden"),
             html.Div(_ansicht_regeln(), id="view-regeln"),
             html.Div(_ansicht_creo(), id="view-creo"),
             html.Div(_ansicht_projekt(), id="view-projekt"),
@@ -949,7 +1030,8 @@ app = Dash(__name__, title="Aero Studio")
 app.layout = layout
 
 
-ANSICHTEN = ("profil", "fluegel", "kaskade", "regeln", "creo", "projekt")
+ANSICHTEN = ("profil", "fluegel", "kaskade", "unterboden", "regeln", "creo",
+             "projekt")
 
 
 # Gemeinsame Bloecke und die Reiter, in denen sie erscheinen. Die Kaskade
@@ -1311,7 +1393,10 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
                kaskadenzeilen,
                endplattenart, ep_dicke, ep_vorne, ep_hinten, ep_oben,
                ep_unten, ep_fuss_breite, ep_fuss_hoehe,
-               endplattenhoehe) -> AeroSpec:
+               endplattenhoehe,
+               ub_aktiv, ub_x, ub_breite, ub_einlass_l, ub_einlass_h,
+               ub_kehle_l, ub_kehle_v, ub_kehle_h, ub_diffusor_w,
+               ub_diffusor_l, ub_abdichtung, rake, rake_x) -> AeroSpec:
     """Sammelt die Bedienelemente zu einem gueltigen Spec.
 
     Einzige Stelle, an der aus Bedienelementen Fachdaten werden - alles Weitere
@@ -1352,6 +1437,25 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
     element.endplattenhoehe = (
         float(endplattenhoehe or 0.0) if endplattenart == "hoehe" else 0.0)
 
+    # Unterboden nur, wenn angehakt. Sonst None - und damit behalten alle
+    # Entwuerfe ohne Unterboden ihren Hash (siehe AeroSpec.hash).
+    def zahl(wert, vorgabe):
+        return float(vorgabe if wert is None else wert)
+
+    if ub_aktiv:
+        spec.unterboden = Unterboden(
+            x_start=zahl(ub_x, 250.0), breite=zahl(ub_breite, 700.0),
+            einlass_laenge=zahl(ub_einlass_l, 150.0),
+            einlass_hoehe=zahl(ub_einlass_h, 110.0),
+            kehle_laenge=zahl(ub_kehle_l, 750.0),
+            kehle_hoehe_vorne=zahl(ub_kehle_v, 55.0),
+            kehle_hoehe_hinten=zahl(ub_kehle_h, 50.0),
+            diffusor_winkel=zahl(ub_diffusor_w, 10.0),
+            diffusor_laenge=zahl(ub_diffusor_l, 400.0),
+            abdichtung=zahl(ub_abdichtung, 0.7))
+    spec.lage = Fahrzeuglage(rake_grad=zahl(rake, 0.0),
+                             drehpunkt_x=zahl(rake_x, 0.0))
+
     spec.fertigung = Fertigung(
         verfahren=verfahren or "unbestimmt",
         wandstaerke=float(wandstaerke or 0.6),
@@ -1377,6 +1481,13 @@ _EINGABEN = [
     Input(wert("ep-unten"), "value"),
     Input(wert("ep-fuss-breite"), "value"), Input(wert("ep-fuss-hoehe"), "value"),
     Input(wert("endplatte"), "value"),
+    Input("ub-aktiv", "value"),
+    Input(wert("ub-x"), "value"), Input(wert("ub-breite"), "value"),
+    Input(wert("ub-einlass-l"), "value"), Input(wert("ub-einlass-h"), "value"),
+    Input(wert("ub-kehle-l"), "value"), Input(wert("ub-kehle-v"), "value"),
+    Input(wert("ub-kehle-h"), "value"), Input(wert("ub-diffusor-w"), "value"),
+    Input(wert("ub-diffusor-l"), "value"), Input(wert("ub-abdichtung"), "value"),
+    Input(wert("rake"), "value"), Input(wert("rake-x"), "value"),
 ]
 
 
@@ -2801,6 +2912,166 @@ def _regelzeile(b) -> html.Div:
     if b.hinweis and not b.ok:
         zeilen.append(html.Div(b.hinweis, className="as-befund-hinweis"))
     return html.Div(zeilen, className="as-befund")
+
+
+@app.callback(Output("ub-ergebnis", "children"),
+              Output("fig-ub-schnitt", "figure"),
+              Output("fig-ub-druck", "figure"),
+              Output("fig-ub-kennlinie", "figure"),
+              Input("spec", "data"), Input(wert("ub-tempo"), "value"))
+def _unterboden_rechnen(daten, tempo):
+    """Live, weil das Kanalmodell Millisekunden braucht - anders als die
+    Traglinie. Die Kennlinie rechnet sieben Zustaende, auch das ist schnell."""
+    leer = {"data": [], "layout": {"height": 280}}
+    if not daten:
+        return "", leer, leer, leer
+    try:
+        spec = AeroSpec.model_validate(daten)
+        if spec.unterboden is None:
+            return (html.Div("Kein Unterboden im Entwurf — oben \u201eUnterboden "
+                             "rechnen\u201c anhaken.", className="as-hinweis"),
+                    leer, leer, leer)
+        v = float(tempo or 20.0)
+        e = aero_unterboden.rechne(spec.unterboden, spec.lage, v)
+        k = aero_unterboden.kennlinie(spec.unterboden, spec.lage, v)
+        befunde = aero_unterboden.pruefe(spec.unterboden, spec.lage,
+                                         regeln.lade("2026"))
+        return (_unterbodenkarte(e, k, befunde),
+                darstellung.unterbodenschnitt(e, spec.unterboden),
+                darstellung.bodendruck(e),
+                darstellung.hoehenkennlinie(k))
+    except Exception as fehler:
+        return _fehlerkarte(fehler), leer, leer, leer
+
+
+def _unterbodenkarte(e, k, befunde) -> html.Div:
+    def zahl(wert, text):
+        return html.Div([html.Div(wert, className="as-grosszahl"),
+                         html.Div(text, className="as-hinweis")])
+
+    kinder = [
+        _ueberschrift(f"Bei {e.geschwindigkeit:.0f} m/s"),
+        html.Div([
+            zahl(f"{e.abtrieb:.0f} N", "Abtrieb"),
+            zahl(f"{e.widerstand:.1f} N", "Widerstand"),
+            zahl(f"{e.wirkungsgrad:.1f}", "Abtrieb je Widerstand"),
+            zahl(f"{e.druckpunkt_x:.0f} mm", "Druckpunkt ab Vorderachse"),
+            zahl(f"{e.diffusor_winkel_wirksam:.1f}°", "Diffusor wirksam, samt Rake"),
+            zahl(f"{k.stabilitaet:.2f}", "Stabilität über ±15 mm Hub"),
+        ], className="as-leiste",
+            style={"gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))"}),
+    ]
+    for h in e.hinweise:
+        kinder.append(html.Div(h, className="as-status-hinweis",
+                               style={"marginTop": "7px"}))
+    for b in befunde:
+        kinder.append(html.Div([
+            html.Span("✓" if b.ok else "✗",
+                      className=f"as-zeichen {'ok' if b.ok else 'fehler'}"),
+            html.Span(b.text, className="as-pruefung"),
+            html.Span(f"  {b.ist:.1f} mm", className="as-messwert"),
+            html.Span(f"  {b.regel}", className="as-regel"),
+        ], style={"marginTop": "5px"}))
+    kinder.append(html.Div(
+        "Kanalmodell: Die Richtung jeder Änderung ist belastbar, die Newton "
+        "sind es erst nach dem CFD-Abgleich — vor allem die Abdichtung ist "
+        "geschätzt. Räder, Seitenkästen und der Nachlauf des Frontflügels "
+        "fehlen.", className="as-hinweis", style={"marginTop": "9px"}))
+    return _karte(kinder)
+
+
+def _doe_pfad(datei: str | None) -> Path:
+    return PROJEKT / (datei or "export/doe_unterboden.yaml")
+
+
+@app.callback(Output("fig-pareto", "figure"), Output("doe-status", "children"),
+              Input("btn-doe", "n_clicks"), Input("btn-doe-laden", "n_clicks"),
+              State("spec", "data"), State(wert("doe-n"), "value"),
+              State(wert("ub-tempo"), "value"), State("doe-datei", "value"),
+              prevent_initial_call=True)
+def _doe(n_rechnen, n_laden, daten, n, tempo, datei):
+    """Rechnet einen Lauf oder zeigt eine vorhandene Ergebnisdatei.
+
+    Rechnen auf Knopfdruck und nur fuer ueberschaubare Laeufe - mit dem
+    Kanalmodell sind das Sekunden. Sobald CFD in der Schleife haengt,
+    dauert ein Lauf Stunden und gehoert auf die Kommandozeile.
+    """
+    leer = {"data": [], "layout": {"height": 400}}
+    ziel = _doe_pfad(datei)
+    try:
+        if _ausgeloest_von("btn-doe"):
+            spec = AeroSpec.model_validate(daten)
+            if spec.unterboden is None:
+                return leer, html.Div("Erst oben \u201eUnterboden rechnen\u201c "
+                                      "anhaken — das DoE variiert ihn.",
+                                      className="as-status-hinweis")
+            lauf = aero_doe.laufen(spec, n=int(n or 200),
+                                   geschwindigkeit=float(tempo or 20.0),
+                                   regelsatz=regeln.lade("2026"))
+            lauf.speichern(ziel)
+        else:
+            if not ziel.is_file():
+                return leer, html.Div(f"Keine Ergebnisdatei unter {ziel}.",
+                                      className="as-status-hinweis")
+            lauf = aero_doe.Lauf.laden(ziel)
+
+        status = [html.Div(f"{len(lauf.varianten)} Varianten, {lauf.gueltige} "
+                           f"gültig, {len(lauf.front)} auf der Pareto-Front. "
+                           f"Gespeichert in {ziel}.", className="as-status-ok")]
+        if daten and lauf.basis_hash != AeroSpec.model_validate(daten).hash():
+            status.append(html.Div(
+                "Der Lauf gehört zu einem anderen Entwurf als dem aktuellen "
+                "(Basis-Hash weicht ab). Übernommen werden nur die variierten "
+                "Werte — alles andere kommt aus dem aktuellen Entwurf.",
+                className="as-status-hinweis"))
+        return darstellung.paretobild(lauf), html.Div(status)
+    except Exception as fehler:
+        return leer, _fehlerkarte(fehler)
+
+
+# Welcher DoE-Pfad in welches Bedienfeld gehoert.
+_DOE_FELDER = {
+    "unterboden.einlass_hoehe": "ub-einlass-h",
+    "unterboden.kehle_hoehe_vorne": "ub-kehle-v",
+    "unterboden.kehle_hoehe_hinten": "ub-kehle-h",
+    "unterboden.diffusor_winkel": "ub-diffusor-w",
+    "unterboden.diffusor_laenge": "ub-diffusor-l",
+    "lage.rake_grad": "rake",
+}
+
+
+@app.callback(*[Output(wert(f), "value", allow_duplicate=True)
+                for f in _DOE_FELDER.values()],
+              Output("doe-uebernommen", "children"),
+              Input("fig-pareto", "clickData"), State("doe-datei", "value"),
+              prevent_initial_call=True)
+def _doe_uebernehmen(klick, datei):
+    """Ein Punkt der Front wird zum Entwurf - ueber die Bedienfelder.
+
+    Nicht direkt ins Spec: Das Spec entsteht aus den Feldern. Wer es hier
+    am Feld vorbei setzte, haette zwei Wahrheiten, und die naechste
+    Reglerbewegung wuerfe die Variante wieder weg.
+    """
+    leer = tuple(no_update for _ in _DOE_FELDER)
+    if not klick or not klick.get("points"):
+        return (*leer, no_update)
+    try:
+        nr = klick["points"][0].get("customdata")
+        if nr is None:
+            return (*leer, no_update)
+        lauf = aero_doe.Lauf.laden(_doe_pfad(datei))
+        werte = lauf.varianten[int(nr)]
+        ergebnis = lauf.ergebnisse[int(nr)]
+        aus = tuple(round(float(werte[p]), 2) if p in werte else no_update
+                    for p in _DOE_FELDER)
+        text = (f"Variante {nr} übernommen: {ergebnis.get('abtrieb', 0):.0f} N "
+                f"Abtrieb, {ergebnis.get('widerstand', 0) or 0:.1f} N "
+                f"Widerstand.")
+        if not ergebnis.get("gueltig"):
+            text += f" Achtung, ungültig: {ergebnis.get('grund', '')}"
+        return (*aus, text)
+    except Exception as fehler:
+        return (*leer, _fehlerkarte(fehler))
 
 
 @app.callback(Output("regelampel", "children"),

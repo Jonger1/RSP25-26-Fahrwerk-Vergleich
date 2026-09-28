@@ -493,6 +493,84 @@ class Endplatte(BaseModel):
         description="Fuss der Endplatte. None = keine Footplate.")
 
 
+class Unterboden(BaseModel):
+    """Der Unterboden als Kanal zwischen Fahrzeug und Strasse (M8).
+
+    Beschrieben ueber genau die Groessen, die im KTH-Ansatz per DoE optimiert
+    wurden und die der Meilensteinplan nennt: Einlasshoehe, Kehlenhoehe vorne
+    und hinten (und damit ihre Neigung), Diffusorwinkel und -laenge.
+
+    Alle Hoehen gelten in KONSTRUKTIONSLAGE mit Fahrer und OHNE Rake - der
+    Rake wird getrennt in `Fahrzeuglage` gefuehrt, weil er das ganze Auto
+    dreht und nicht nur den Boden. Stuende er hier mit drin, muesste man bei
+    jeder Rake-Aenderung vier Hoehen von Hand nachrechnen.
+
+    x zeigt nach hinten, 0 ist die Vorderachse - wie ueberall im Werkzeug.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    x_start: float = Field(
+        default=250.0, description="Vorderkante des Unterbodens in mm.")
+    breite: float = Field(
+        default=700.0, gt=0.0, le=1600.0,
+        description="Wirksame Kanalbreite in mm, beide Seiten zusammen.")
+
+    einlass_laenge: float = Field(default=150.0, gt=0.0, le=1000.0)
+    einlass_hoehe: float = Field(
+        default=110.0, gt=0.0, le=400.0,
+        description="Hoehe ueber Grund an der Vorderkante, in mm.")
+
+    kehle_laenge: float = Field(default=750.0, gt=0.0, le=3000.0)
+    kehle_hoehe_vorne: float = Field(default=55.0, gt=0.0, le=300.0)
+    kehle_hoehe_hinten: float = Field(
+        default=50.0, gt=0.0, le=300.0,
+        description="Kleiner als vorne heisst: die Kehle laeuft nach hinten "
+                    "zusammen und beschleunigt die Stroemung weiter.")
+
+    diffusor_winkel: float = Field(
+        default=10.0, ge=0.0, le=35.0,
+        description="Winkel gegen die Kehle in Grad, OHNE Rake. Der Rake "
+                    "kommt im Betrieb dazu - siehe aero/unterboden.py.")
+    diffusor_laenge: float = Field(default=400.0, gt=0.0, le=1500.0)
+
+    abdichtung: float = Field(
+        default=0.7, gt=0.0, le=1.0,
+        description="Wie dicht der Kanal seitlich ist, 1 = vollkommen dicht. "
+                    "Schleifschuerzen sind nach T 2.2.2 verboten; seitlich "
+                    "stroemt immer Luft nach. Das ist der erste Wert, der "
+                    "mit CFD abzugleichen ist.")
+
+    @property
+    def laenge(self) -> float:
+        return self.einlass_laenge + self.kehle_laenge + self.diffusor_laenge
+
+
+class Fahrzeuglage(BaseModel):
+    """Wie das Fahrzeug steht - gilt fuer ALLE Aeroteile gemeinsam.
+
+    Rake ist die Neigung des ganzen Autos, positiv heisst: hinten hoeher.
+    In der Cologne-Fallstudie brachte ein Grad rund 15 % mehr Abtrieb; das
+    ist ausdruecklich im eigenen Setup nachzurechnen und nicht zu
+    uebernehmen.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rake_grad: float = Field(
+        default=0.0, ge=-3.0, le=5.0,
+        description="Neigung des Fahrzeugs in Grad, positiv = hinten hoeher.")
+    drehpunkt_x: float = Field(
+        default=0.0,
+        description="Um welches x gedreht wird, in mm. 0 = Vorderachse: Dort "
+                    "aendert der Rake die Hoehe also nicht.")
+
+    def hoehe(self, x, z):
+        """Hoehe nach dem Rake. Kleine Winkel, also schlicht gekippt."""
+        import math
+        return z + (x - self.drehpunkt_x) * math.tan(math.radians(self.rake_grad))
+
+
 class Element(BaseModel):
     """Ein Fluegelelement: Profil, Sehne, Anstellwinkel.
 

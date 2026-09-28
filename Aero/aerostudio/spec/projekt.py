@@ -26,7 +26,8 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from .modell import Element, Fertigung, ProfilAusDatei
+from .modell import (Element, Fahrzeuglage, Fertigung, ProfilAusDatei,
+                     Unterboden)
 
 
 class Meta(BaseModel):
@@ -57,6 +58,9 @@ class AeroSpec(BaseModel):
     fertigung: Fertigung = Field(default_factory=Fertigung)
     elemente: list[Element] = Field(default_factory=list)
     export: ExportEinstellungen = Field(default_factory=ExportEinstellungen)
+    unterboden: Optional[Unterboden] = Field(
+        default=None, description="Der Unterboden, M8. None = keiner.")
+    lage: Fahrzeuglage = Field(default_factory=Fahrzeuglage)
 
     # ------------------------------------------------------------ Erzeugen
 
@@ -122,6 +126,15 @@ class AeroSpec(BaseModel):
         daten = self.model_dump(mode="json")
         daten["meta"].pop("geaendert", None)
         daten["meta"].pop("bearbeiter", None)
+        # Felder aus M8 nur dann in den Hash, wenn sie etwas sagen. Sonst
+        # bekaeme jedes aeltere Spec einen neuen Hash, ohne dass sich an
+        # seiner Geometrie etwas geaendert hat - und der Hash steht als
+        # AERO_SPEC_HASH in jeder schon exportierten IBL. Die Rueck-
+        # verfolgbarkeit ginge genau dort verloren, wo sie versprochen ist.
+        if daten.get("unterboden") is None:
+            daten.pop("unterboden", None)
+        if daten.get("lage") == Fahrzeuglage().model_dump(mode="json"):
+            daten.pop("lage", None)
         roh = yaml.safe_dump(daten, sort_keys=True).encode("utf-8")
         return hashlib.sha1(roh).hexdigest()[:12]
 

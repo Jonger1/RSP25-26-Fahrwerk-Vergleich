@@ -172,8 +172,12 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
 | M6 | Fehlermeldungen in handlungsleitende Sätze übersetzt | `ui/meldungen.py` |
 | M3 | Druckverteilung am verschiebbaren Schnitt, cp-Diagramm und eingefärbte Kontur | `aero/kaskade.py`, Reiter *Kaskade* |
+| M8 | Unterboden als Kanalmodell mit Diffusorablösung, Druckpunkt, Höhenkennlinie, T 2.2.1 | `aero/unterboden.py` |
+| M8 | Rake als Fahrzeuglage mit Drehpunkt, im Spec-Hash nur wenn gesetzt | `spec/modell.py` |
+| M8 | DoE: Latin Hypercube, Pareto-Front über Abtrieb/Widerstand/Stabilität, Ergebnisdatei, CLI | `aero/doe.py` |
+| M8 | Reiter *Unterboden*: Schnitt, Bodendruck, Kennlinie, DoE, Frontpunkt anklicken übernimmt Variante | `ui/app.py` |
 
-Die Testabdeckung liegt bei **475 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **529 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -430,6 +434,14 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 **UI dazu:** DoE-Konfiguration und Pareto-Front als eigene Ansicht; ein Punkt in der Front ist anklickbar und lädt die zugehörige Variante in den Kaskaden-Editor. Der Lauf selbst gehört auf die Kommandozeile, nicht in die Oberfläche — er dauert Stunden.
 
 **Fertig, wenn:** Ein DoE über mindestens 50 Varianten läuft ohne Handeingriff durch und liefert eine Pareto-Front.
+
+**Stand (28.09.):** Das Kriterium ist erfüllt und durch `tests/test_doe.py` abgesichert (200 Varianten in etwa 1,5 s).
+
+* Aufgabe 1 ist erledigt, aber **nicht** über die 2D-Pipeline gelöst, sondern mit einem 1D-Kanalmodell (`aero/unterboden.py`). Das Panelverfahren kennt keine Reibung, deshalb wächst der Sog im engen Kanal ohne Grenze. Nicht kalibriert sind der Abdichtungsfaktor (keine Schürzen nach T 2.2.2) und die Ablösegrenze von 15° bis 25°. Beide gehören als Erstes gegen CFD abgeglichen.
+* Aufgabe 2 ist erledigt. Nachgerechnet bringen 0,5° Rake um das Kehlenende etwa +17 %, um die Vorderachse gedreht weniger.
+* Aufgabe 3 ist erledigt, allerdings mit Latin Hypercube statt Optuna. Bei Millisekunden je Variante zeigt eine gleichmäßige Abdeckung den ganzen Raum. Optuna lohnt sich erst, wenn CFD in der Schleife hängt. Den Arbeitsbereich misst die Stabilität, also der kleinste durch den größten Abtrieb über ±15 mm Hub.
+* **Offen:** Aufgabe 4 (Batch über Creo/CFD; hängt an M5 und damit an der Lizenz) und Aufgabe 5 (DRS als Familientabelle).
+* Anders als geplant lädt ein Frontpunkt die Variante in den Reiter *Unterboden* statt in den Kaskaden-Editor, denn der DoE-Raum ist der Unterboden.
 
 ---
 
