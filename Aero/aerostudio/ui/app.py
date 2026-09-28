@@ -44,6 +44,7 @@ from ..aero import boden as aero_boden
 from ..aero import kaskade3d as aero_kaskade3d
 from ..aero import doe as aero_doe
 from ..aero import unterboden as aero_unterboden
+from ..aero import gesamt as aero_gesamt
 from ..geometrie import kaskade as geo_kaskade
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
@@ -907,6 +908,51 @@ def _ansicht_unterboden() -> html.Div:
     ])
 
 
+def _spec_dateien() -> list[dict]:
+    """Alle Specs unter specs/ als Auswahl - ohne die Historie."""
+    ordner = PROJEKT / "specs"
+    if not ordner.is_dir():
+        return []
+    return [{"label": str(p.relative_to(ordner)), "value": str(p.relative_to(PROJEKT))}
+            for p in sorted(ordner.rglob("*.yaml"))
+            if ".historie" not in p.parts]
+
+
+def _ansicht_balance() -> html.Div:
+    """Ansicht *Balance* — Frontflügel, Heckflügel und Unterboden zusammen.
+
+    Das Spec im Editor ist immer dabei. Weitere Specs kommen dazu, weil
+    Front- und Heckflügel meist in getrennten Dateien stehen. Rake und
+    Unterboden kommen aus dem Spec im Editor; hat es keinen Unterboden, der
+    erste aus den dazugenommenen.
+    """
+    return html.Div([
+        _leiste("Gesamtfahrzeug", [
+            _feld("Weitere Specs", dcc.Dropdown(
+                id="bal-specs", multi=True, options=_spec_dateien(), value=[],
+                placeholder="z. B. den Heckflügel dazunehmen"),
+                "Das Spec im Editor ist immer dabei."),
+            _feld("Geschwindigkeit [m/s]", _zahlenfeld("bal-tempo", 20.0, 1.0, 1.0, 60.0)),
+            _feld("Zielbalance vorn [%]", _zahlenfeld("bal-ziel", 45.0, 1.0, 0.0, 100.0),
+                  "Üblich ist die statische Achslastverteilung. Die steht "
+                  "noch nicht in vehicle_ref.yaml — hier von Hand."),
+            html.Div([
+                dcc.Checklist(id="bal-nicken", value=["ja"],
+                              options=[{"label": " Nickwanderung ±0,5°",
+                                        "value": "ja"}],
+                              style={"fontSize": "13px", "marginBottom": "8px"}),
+                html.Button("Balance rechnen", id="btn-balance", n_clicks=0,
+                            className="as-knopf as-knopf-voll"),
+                html.Div("Einige Sekunden je Fahrzustand — die Flügel laufen "
+                         "durch die Traglinie.", className="as-hinweis"),
+            ]),
+        ], spalten="260px"),
+        dcc.Loading(html.Div(id="bal-ergebnis"), type="dot"),
+        _karte([dcc.Graph(id="fig-balance", **_GRAPH)]),
+        _karte([dcc.Graph(id="fig-wanderung", **_GRAPH)]),
+    ])
+
+
 def _ansicht_regeln() -> html.Div:
     """Ansicht *Fahrzeug & Regeln* — das „Fertig, wenn" von M2.
 
@@ -1004,6 +1050,7 @@ def layout() -> html.Div:
             dcc.Tab(label="Flügel", value="fluegel"),
             dcc.Tab(label="Kaskade", value="kaskade"),
             dcc.Tab(label="Unterboden", value="unterboden"),
+            dcc.Tab(label="Balance", value="balance"),
             dcc.Tab(label="Fahrzeug & Regeln", value="regeln"),
             dcc.Tab(label="Creo", value="creo"),
             dcc.Tab(label="Projekt", value="projekt"),
@@ -1017,6 +1064,7 @@ def layout() -> html.Div:
             html.Div(_ansicht_fluegel(), id="view-fluegel"),
             html.Div(_ansicht_kaskade(), id="view-kaskade"),
             html.Div(_ansicht_unterboden(), id="view-unterboden"),
+            html.Div(_ansicht_balance(), id="view-balance"),
             html.Div(_ansicht_regeln(), id="view-regeln"),
             html.Div(_ansicht_creo(), id="view-creo"),
             html.Div(_ansicht_projekt(), id="view-projekt"),
@@ -1030,8 +1078,8 @@ app = Dash(__name__, title="Aero Studio")
 app.layout = layout
 
 
-ANSICHTEN = ("profil", "fluegel", "kaskade", "unterboden", "regeln", "creo",
-             "projekt")
+ANSICHTEN = ("profil", "fluegel", "kaskade", "unterboden", "balance", "regeln",
+             "creo", "projekt")
 
 
 # Gemeinsame Bloecke und die Reiter, in denen sie erscheinen. Die Kaskade
@@ -2977,6 +3025,144 @@ def _unterbodenkarte(e, k, befunde) -> html.Div:
         "sind es erst nach dem CFD-Abgleich — vor allem die Abdichtung ist "
         "geschätzt. Räder, Seitenkästen und der Nachlauf des Frontflügels "
         "fehlen.", className="as-hinweis", style={"marginTop": "9px"}))
+    return _karte(kinder)
+
+
+# Fluegelkraefte je Entwurf und Geschwindigkeit. Die Nickwanderung rechnet
+# denselben Fluegel in fuenf Lagen; wer danach nur die Zielbalance aendert,
+# soll nicht noch einmal warten.
+_FLUEGEL_ZWISCHENSPEICHER: dict[str, object] = {}
+
+
+def _fluegelkraefte(element, geschwindigkeit: float):
+    """Abtrieb eines Fluegels auf demselben Weg wie in den Reitern Flügel
+    und Kaskade - mit Kaskade die räumliche Kaskadenrechnung, sonst die
+    Traglinie mit Kanalwirkung."""
+    schluessel = json.dumps(element.model_dump(mode="json"), sort_keys=True) \
+        + f"|{geschwindigkeit:.3f}"
+    if schluessel in _FLUEGEL_ZWISCHENSPEICHER:
+        return _FLUEGEL_ZWISCHENSPEICHER[schluessel]
+    profil = profil_fuer(element)
+    if element.kaskade:
+        kraefte = aero_kaskade3d.rechne(
+            profil, element.spannweite, element.sehne, element.anstellwinkel,
+            _vorgaben(element.kaskade), geschwindigkeit, lage=_lage(element),
+            endplatte_mm=_endplattenhoehe(element)).kraefte
+    else:
+        stapel = spannweite.schnitte(profil, element.spannweite, element.sehne,
+                                     element.anstellwinkel, 60,
+                                     lage=_lage(element))
+        kraefte, _ = aero_boden.fluegel(stapel, profil, geschwindigkeit,
+                                        endplatte_mm=_endplattenhoehe(element))
+    if len(_FLUEGEL_ZWISCHENSPEICHER) > 128:
+        _FLUEGEL_ZWISCHENSPEICHER.clear()
+    _FLUEGEL_ZWISCHENSPEICHER[schluessel] = kraefte
+    return kraefte
+
+
+def _gesamtfahrzeug(spec: AeroSpec, weitere: list[str] | None):
+    """Fluegel und Unterboden aus dem Spec im Editor und den dazugenommenen."""
+    fluegel = [(element.name or element.id, element) for element in spec.elemente]
+    unterboden = spec.unterboden
+    for pfad in weitere or []:
+        anderes = AeroSpec.laden(PROJEKT / pfad)
+        fluegel += [(element.name or element.id, element)
+                    for element in anderes.elemente]
+        if unterboden is None:
+            unterboden = anderes.unterboden
+    return fluegel, unterboden
+
+
+@app.callback(Output("bal-ergebnis", "children"),
+              Output("fig-balance", "figure"),
+              Output("fig-wanderung", "figure"),
+              Input("btn-balance", "n_clicks"),
+              State("spec", "data"), State("bal-specs", "value"),
+              State(wert("bal-tempo"), "value"), State(wert("bal-ziel"), "value"),
+              State("bal-nicken", "value"), prevent_initial_call=True)
+def _balance_rechnen(n, daten, weitere, tempo, ziel, nicken):
+    leer = {"data": [], "layout": {"height": 280}}
+    if not daten:
+        return "", leer, leer
+    try:
+        if not aero_verfuegbar():
+            return (html.Div("Ohne NeuralFoil lässt sich kein Flügelabtrieb "
+                             "rechnen.", className="as-hinweis"), leer, leer)
+        spec = AeroSpec.model_validate(daten)
+        fluegel, unterboden = _gesamtfahrzeug(spec, weitere)
+        v = float(tempo or 20.0)
+        radstand = regeln.Bezugsgeometrie.aus_datei().radstand
+        ziel = float(ziel) if ziel not in (None, "") else None
+
+        if nicken:
+            reihe = aero_gesamt.wanderung(fluegel, unterboden, spec.lage,
+                                          _fluegelkraefte, v, radstand)
+            mitte = next(b for b in reihe if b.zustand.nick_grad == 0.0)
+        else:
+            mitte = aero_gesamt.bilanz(fluegel, unterboden, spec.lage,
+                                       _fluegelkraefte, v, radstand)
+            reihe = []
+        return (_balancekarte(mitte, reihe, ziel),
+                darstellung.balancebild(mitte, ziel),
+                darstellung.wanderungsbild(reihe, ziel) if reihe else leer)
+    except Exception as fehler:
+        return _fehlerkarte(fehler), leer, leer
+
+
+def _balancekarte(b, reihe, ziel) -> html.Div:
+    def zahl(wert, text):
+        return html.Div([html.Div(wert, className="as-grosszahl"),
+                         html.Div(text, className="as-hinweis")])
+
+    balance = 100.0 * b.balance_vorne
+    zahlen = [
+        zahl(f"{b.abtrieb:.0f} N", "Abtrieb gesamt"),
+        zahl(f"{b.widerstand:.1f} N", "Widerstand gesamt"),
+        zahl(f"{b.wirkungsgrad:.1f}", "Abtrieb je Widerstand"),
+        zahl(f"{balance:.1f} %" if math.isfinite(balance) else "—",
+             "Balance vorn"),
+        zahl(f"{b.last_vorne:.0f} / {b.last_hinten:.0f} N",
+             "Achslast vorn / hinten"),
+    ]
+    if reihe:
+        empf = aero_gesamt.empfindlichkeit(reihe)
+        zahlen.append(zahl(f"{empf:+.1f} %/°" if math.isfinite(empf) else "—",
+                           "Wanderung je Grad Nicken"))
+
+    kinder = [_ueberschrift(f"Bei {b.geschwindigkeit:.0f} m/s, "
+                            f"Rake und Konstruktionslage"),
+              html.Div(zahlen, className="as-leiste",
+                       style={"gridTemplateColumns":
+                              "repeat(auto-fit, minmax(150px, 1fr))"})]
+    if ziel is not None and math.isfinite(balance):
+        abweichung = balance - ziel
+        kinder.append(html.Div(
+            f"{abs(abweichung):.1f} Prozentpunkte "
+            f"{'zu weit vorn' if abweichung > 0 else 'zu weit hinten'} "
+            f"gegenüber dem Ziel von {ziel:.0f} %.",
+            className="as-status-hinweis" if abs(abweichung) > 3
+            else "as-hinweis", style={"marginTop": "7px"}))
+
+    zeilen = [html.Tr([html.Th(t) for t in (
+        "Teil", "Abtrieb [N]", "Widerstand [N]", "x [mm]", "Last vorn [N]", "")])]
+    for t in b.beitraege:
+        zeilen.append(html.Tr([
+            html.Td(t.name), html.Td(f"{t.abtrieb:.0f}"),
+            html.Td(f"{t.widerstand:.1f}" if math.isfinite(t.widerstand) else "—"),
+            html.Td(f"{t.x:.0f}"), html.Td(f"{t.last_vorne(b.radstand):.0f}"),
+            html.Td(t.hinweis, className="as-hinweis")]))
+    kinder.append(html.Table(zeilen, className="as-tabelle",
+                             style={"marginTop": "10px"}))
+    for h in b.hinweise:
+        kinder.append(html.Div(h, className="as-status-hinweis",
+                               style={"marginTop": "7px"}))
+    kinder.append(html.Div(
+        "Die Teile werden einzeln gerechnet und addiert. Es fehlen Räder, "
+        "Karosserie und jede Wechselwirkung, vor allem der Nachlauf des "
+        "Frontflügels auf dem Unterboden. Rake und Nicken wirken hier auch "
+        "auf die Flügel (Höhe und Anstellwinkel). Die Reiter Flügel und "
+        "Kaskade rechnen ohne Rake.", className="as-hinweis",
+        style={"marginTop": "9px"}))
     return _karte(kinder)
 
 

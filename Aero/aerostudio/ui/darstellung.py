@@ -9,6 +9,8 @@ Darstellung spaeter auch in einen Report schreiben, ohne Dash zu starten.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import plotly.graph_objects as go
 
@@ -24,6 +26,7 @@ FARBE = {
 }
 FARBE_KONTUR = "#16181c"
 FARBE_HILFE = "#c8ccd4"
+FARBE_ZIEL = "#2e7d32"
 FARBE_AKZENT = "#cf2027"
 
 
@@ -910,4 +913,74 @@ def paretobild(lauf) -> go.Figure:
                                   x=0.0, font=dict(size=10)))
     fig.update_xaxes(title="Widerstand [N] — weniger ist besser")
     fig.update_yaxes(title="Abtrieb [N] — mehr ist besser")
+    return _achsen(fig)
+
+
+def balancebild(bilanz, ziel: float | None = None) -> go.Figure:
+    """Seitenansicht mit den Abtriebskraeften als Pfeile nach unten.
+
+    Die Achsen als senkrechte Linien, dazwischen der Druckpunkt des ganzen
+    Autos. Ein Blick zeigt, welches Teil die Balance wohin zieht.
+    """
+    fig = go.Figure()
+    L = bilanz.radstand
+    groesster = max([abs(b.abtrieb) for b in bilanz.beitraege] + [1.0])
+    for x, name in ((0.0, "Vorderachse"), (L, "Hinterachse")):
+        fig.add_vline(x=x, line=dict(color=FARBE_HILFE, width=2),
+                      annotation_text=name, annotation_position="top")
+
+    for i, b in enumerate(bilanz.beitraege):
+        farbe = ELEMENTFARBEN[i % len(ELEMENTFARBEN)]
+        fig.add_trace(go.Bar(
+            x=[b.x], y=[-b.abtrieb], width=[max(60.0, L * 0.05)],
+            marker_color=farbe, name=b.name,
+            text=[f"{b.name}<br>{b.abtrieb:.0f} N"], textposition="outside",
+            cliponaxis=False, constraintext="none", textfont=dict(size=11),
+            hovertemplate=(f"{b.name}<br>{b.abtrieb:.0f} N bei x = {b.x:.0f} mm"
+                           f"<br>Widerstand {b.widerstand:.1f} N in "
+                           f"{b.z:.0f} mm Höhe<extra></extra>")))
+
+    if math.isfinite(bilanz.druckpunkt_x):
+        fig.add_vline(x=bilanz.druckpunkt_x,
+                      line=dict(color=FARBE_AKZENT, width=2, dash="dash"),
+                      annotation_text=f"Druckpunkt {bilanz.druckpunkt_x:.0f} mm",
+                      annotation_position="top right")
+    if ziel is not None:
+        # Wo der Druckpunkt fuer die Zielbalance liegen muesste.
+        x_ziel = L * (1.0 - float(ziel) / 100.0)
+        fig.add_vline(x=x_ziel, line=dict(color=FARBE_ZIEL, width=2, dash="dot"),
+                      annotation_text=f"Ziel {ziel:.0f} % vorn",
+                      annotation_position="bottom right")
+
+    titel = (f"Balance {100 * bilanz.balance_vorne:.1f} % vorn — "
+             f"{bilanz.abtrieb:.0f} N bei {bilanz.geschwindigkeit:.0f} m/s"
+             if math.isfinite(bilanz.balance_vorne) else "Kein Abtrieb")
+    fig.update_layout(**_grundlayout(titel, hoehe=340))
+    fig.update_layout(barmode="overlay", bargap=0,
+                      legend=dict(orientation="h", y=-0.2))
+    lagen = [b.x for b in bilanz.beitraege] + [0.0, L]
+    fig.update_xaxes(title="x ab Vorderachse [mm]",
+                     range=[min(lagen) - 250.0, max(lagen) + 250.0])
+    fig.update_yaxes(title="Abtrieb [N]", range=[-1.5 * groesster, 0.1 * groesster])
+    return _achsen(fig)
+
+
+def wanderungsbild(reihe, ziel: float | None = None) -> go.Figure:
+    """Balance ueber dem Nickwinkel - flach ist gut."""
+    fig = go.Figure()
+    x = [b.zustand.nick_grad for b in reihe]
+    y = [100.0 * b.balance_vorne for b in reihe]
+    fig.add_trace(go.Scatter(
+        x=x, y=y, mode="lines+markers", name="Balance vorn",
+        line=dict(color=FARBE_KONTUR, width=2), marker=dict(size=7),
+        text=[b.zustand.name for b in reihe],
+        customdata=[b.abtrieb for b in reihe],
+        hovertemplate="%{text}<br>%{y:.1f} % vorn, %{customdata:.0f} N"
+                      "<extra></extra>"))
+    if ziel is not None:
+        fig.add_hline(y=float(ziel), line=dict(color=FARBE_ZIEL, dash="dot"),
+                      annotation_text=f"Ziel {ziel:.0f} %")
+    fig.update_layout(**_grundlayout("Nickwanderung der Balance", hoehe=300))
+    fig.update_xaxes(title="Nicken [°] — positiv = Nase tiefer (Bremsen)")
+    fig.update_yaxes(title="Abtrieb auf der Vorderachse [%]")
     return _achsen(fig)

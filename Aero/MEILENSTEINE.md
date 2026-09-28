@@ -176,8 +176,9 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M8 | Rake als Fahrzeuglage mit Drehpunkt, im Spec-Hash nur wenn gesetzt | `spec/modell.py` |
 | M8 | DoE: Latin Hypercube, Pareto-Front über Abtrieb/Widerstand/Stabilität, Ergebnisdatei, CLI | `aero/doe.py` |
 | M8 | Reiter *Unterboden*: Schnitt, Bodendruck, Kennlinie, DoE, Frontpunkt anklicken übernimmt Variante | `ui/app.py` |
+| M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **529 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **553 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -442,6 +443,7 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 * Aufgabe 3 ist erledigt, allerdings mit Latin Hypercube statt Optuna. Bei Millisekunden je Variante zeigt eine gleichmäßige Abdeckung den ganzen Raum. Optuna lohnt sich erst, wenn CFD in der Schleife hängt. Den Arbeitsbereich misst die Stabilität, also der kleinste durch den größten Abtrieb über ±15 mm Hub.
 * **Offen:** Aufgabe 4 (Batch über Creo/CFD; hängt an M5 und damit an der Lizenz) und Aufgabe 5 (DRS als Familientabelle).
 * Anders als geplant lädt ein Frontpunkt die Variante in den Reiter *Unterboden* statt in den Kaskaden-Editor, denn der DoE-Raum ist der Unterboden.
+* Dazu gekommen ist die Kopplung im Reiter *Balance*. Frontflügel, Heckflügel und Unterboden werden je für sich gerechnet und addiert. Rake und Nicken wirken dabei auch auf die Flügel, also auf Höhe und Anstellwinkel. Das Ergebnis sind Balance, Achslasten (samt Nickmoment des Widerstands) und die Wanderung über ±0,5° Nicken. Wechselwirkungen fehlen, allen voran der Nachlauf des Frontflügels auf dem Unterboden. Die Zielbalance ist von Hand einzutragen, weil die statische Achslastverteilung noch nicht in `vehicle_ref.yaml` steht.
 
 ---
 
