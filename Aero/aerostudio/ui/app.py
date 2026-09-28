@@ -3327,8 +3327,8 @@ def _paketstatus(lauf, pfad, ziel, bewertung) -> html.Div:
             f"und wurden am Rand abgeschnitten.", className="as-status-hinweis"))
     zeilen.append(html.Div(
         "Kennfeld-Werte: Winkel und Höhe linear zwischen Stützstellen der "
-        "echten Rechnung. Der Widerstand wird mitgeführt, ist aber kein Ziel "
-        "— die Kaskadenrechnung liefert ihn noch nicht glatt genug.",
+        "echten Rechnung. Der Widerstand steht in der Ergebnisdatei, ist "
+        "aber kein Ziel — die Front über drei Ziele bleibt so überschaubar.",
         className="as-hinweis"))
     return html.Div(zeilen)
 
@@ -3476,9 +3476,8 @@ def _drskarte(v, tempo: float) -> html.Div:
         html.Table(zeilen, className="as-tabelle"),
         html.Div("Der offene Flap wird wie jeder Flap über Spalt und Überlappung "
                  "angeordnet, als säße er neu justiert. Ein echtes DRS dreht um "
-                 "ein Scharnier — dessen Kinematik gehört nach Creo. Die "
-                 "Widerstandszahl der Kaskadenrechnung ist noch nicht glatt "
-                 "(siehe MEILENSTEINE).", className="as-hinweis",
+                 "ein Scharnier — dessen Kinematik gehört nach Creo.",
+                 className="as-hinweis",
                  style={"marginTop": "6px"})])
 
 

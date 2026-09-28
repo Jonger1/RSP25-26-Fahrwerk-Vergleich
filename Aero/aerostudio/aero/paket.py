@@ -11,9 +11,9 @@ und der Rake - und nach dem bewertet, was am Ende faehrt:
 * **Nickwanderung**: wie weit die Balance je Grad Nicken wandert (Betrag),
   moeglichst klein.
 
-Den Widerstand fuehrt die Ergebnisdatei mit, er ist aber kein Ziel. Die
-Kaskadenrechnung liefert ihn derzeit nicht glatt genug, um darauf zu
-optimieren (siehe MEILENSTEINE).
+Den Widerstand fuehrt die Ergebnisdatei mit, er ist aber kein Ziel: Mit
+vier Zielen wuerde die Front so breit, dass sie nichts mehr aussondert.
+(Bis zum 28.09. war er zudem nicht glatt - behoben in traglinie.rechne.)
 
 **Das Paket.** Front- und Heckfluegel stehen meist in getrennten Specs. Ein
 Paket ist EIN AeroSpec mit allen Fluegeln als Elementen, dem Unterboden und

@@ -307,7 +307,7 @@ def streifen_aus_stapel(stapel, panels_je_seite: int = 20) -> list[Streifen]:
 def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
            panels_je_seite: int = 20, mit_boden: bool = True,
            polaren: list[Polare] | Polare | None = None,
-           schritte_max: int = 100, daempfung: float = 0.5,
+           schritte_max: int = 1000, daempfung: float = 0.5,
            genauigkeit: float = 1e-4, endplatte_mm: float = 0.0,
            beiwertfaktor: float = 1.0) -> Fluegelkraefte:
     """Rechnet Abtrieb und Widerstand eines Flügels.
@@ -367,10 +367,12 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
     pol = _polaren_zuordnen(polaren, profil, V, sehne, n)
 
     korrektur = np.zeros(n)
-    kraft_vorher = 0.0
-    schritt, konvergiert = 0, False
+    kraft_vorher, widerstand_vorher, rest_vorher = 0.0, 0.0, np.inf
+    schritt, konvergiert, ruhig = 0, False, 0
     zirkulation = np.zeros(n)
     alpha_ind = np.zeros(n)
+    flaeche_i = sehne * breite
+    daempfung_start = float(daempfung)
 
     for schritt in range(1, schritte_max + 1):
         # Randbedingung: Die Strömung muss der Sehne folgen.
@@ -378,7 +380,8 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
         rechte_seite = -V * np.tan(np.radians(winkel + korrektur))
         zirkulation = np.linalg.solve(A, rechte_seite)
 
-        alpha_ind = np.degrees(np.arctan2(A_nachlauf @ zirkulation, V))
+        w_nachlauf = A_nachlauf @ zirkulation
+        alpha_ind = np.degrees(np.arctan2(w_nachlauf, V))
         alpha_eff = winkel + alpha_ind
 
         cl_reibungsfrei = 2.0 * zirkulation / (V * sehne)
@@ -387,18 +390,50 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
 
         fehler = cl_wirklich - cl_reibungsfrei
 
-        # Gemessen wird an der GESAMTKRAFT, nicht am groessten oertlichen
-        # Fehler. Grund: Am aeussersten Streifen laeuft der induzierte Winkel
-        # in der Traglinientheorie gegen unendlich. Er landet dort ausserhalb
-        # des gerechneten Polarenbereichs, wird auf den Randwert geklemmt und
-        # kann den reibungsfreien Beiwert nie treffen - der oertliche Fehler
-        # bleibt dort stehen, egal wie lange man iteriert. Der Streifen ist
-        # aber hauchduenn. Die Kraft, auf die es ankommt, konvergiert sauber.
-        kraft = float(np.sum(cl_wirklich * sehne * breite))
-        if schritt > 1 and abs(kraft - kraft_vorher) <= genauigkeit * max(abs(kraft), 1e-9):
-            konvergiert = True
-            break
-        kraft_vorher = kraft
+        # Gemessen wird an der GESAMTKRAFT und am INDUZIERTEN WIDERSTAND,
+        # nicht am groessten oertlichen Fehler. Grund: Am aeussersten
+        # Streifen laeuft der induzierte Winkel in der Traglinientheorie
+        # gegen unendlich. Er landet dort ausserhalb des gerechneten
+        # Polarenbereichs, wird auf den Randwert geklemmt und kann den
+        # reibungsfreien Beiwert nie treffen - der oertliche Fehler bleibt
+        # dort stehen, egal wie lange man iteriert. Der Streifen ist aber
+        # hauchduenn.
+        #
+        # Bis zum 28.09. zaehlte NUR die Gesamtkraft, mit einem einzigen
+        # ruhigen Schritt. Hinter dem Abriss (fallende Polare) pendelt die
+        # Iteration aber - und hielt dann an einer zufaelligen Stelle der
+        # Schwingung an. Die Gesamtkraft sah glatt aus, die Verteilung und
+        # mit ihr der induzierte Widerstand nicht: beim Frontfluegel-Beispiel
+        # 45 statt 76 N je nach Stopp. Deshalb jetzt beide Groessen, drei
+        # Schritte in Folge, und eine Daempfung, die sich beim Pendeln
+        # selbst zuruecknimmt.
+        kraft = float(np.sum(cl_wirklich * flaeche_i))
+        widerstand = float(-np.sum(zirkulation * w_nachlauf * breite))
+        if schritt > 1:
+            # Durch die Daempfung geteilt: Mit kleiner Daempfung sind auch
+            # die Aenderungen klein, ohne dass die Loesung naeher waere. Ohne
+            # diese Teilung meldete das Kriterium Ruhe, waehrend die Loesung
+            # nur langsam kroch (72 statt 74 N im Beispiel).
+            massstab = genauigkeit * daempfung / daempfung_start
+            ruhig_jetzt = (
+                abs(kraft - kraft_vorher) <= massstab * max(abs(kraft), 1e-9)
+                and abs(widerstand - widerstand_vorher)
+                <= massstab * max(abs(widerstand), 1e-9))
+            ruhig = ruhig + 1 if ruhig_jetzt else 0
+            if ruhig >= 3:
+                konvergiert = True
+                break
+        kraft_vorher, widerstand_vorher = kraft, widerstand
+
+        # Pendelt es, waechst der flaechengewichtete Fehler von Schritt zu
+        # Schritt. Dann halb so grosse Schritte; laeuft es ruhig, wieder
+        # vorsichtig groessere, aber nie ueber den Startwert.
+        rest = float(np.sum(np.abs(fehler) * flaeche_i))
+        if rest > rest_vorher * 1.0001:
+            daempfung = max(0.5 * daempfung, 0.01)
+        else:
+            daempfung = min(1.05 * daempfung, daempfung_start)
+        rest_vorher = rest
 
         korrektur = korrektur + daempfung * fehler / CL_ALPHA_GRAD
 
@@ -408,7 +443,6 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
     vertrauen = np.array([pol[i].vertrauen_bei(alpha_eff[i]) for i in range(n)])
 
     staudruck = 0.5 * DICHTE * V * V
-    flaeche_i = sehne * breite
     flaeche = float(flaeche_i.sum())
 
     auftrieb_i = staudruck * cl * flaeche_i

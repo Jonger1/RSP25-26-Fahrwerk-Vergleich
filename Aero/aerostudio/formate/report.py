@@ -640,8 +640,9 @@ GRENZEN = [
                "absolute Newton erst nach dem Abgleich."),
     ("Kaskadenabriss", "Druckrückgewinn-Kriterium mit unkalibrierter "
                        "Grenzschichtreserve."),
-    ("Widerstand", "Der Profilwiderstand der Kaskadenrechnung springt bei "
-                   "kleinen Lageänderungen noch; L/D-Werte mit Vorsicht lesen."),
+    ("Widerstand", "Induziert aus der Traglinie, Profilwiderstand aus den "
+                   "Polaren. Räder und Karosserie fehlen - der Gesamtwiderstand "
+                   "des Autos liegt deutlich höher."),
     ("Unterboden", "1D-Kanalmodell. Abdichtung (keine Schürzen nach T 2.2.2) "
                    "und Ablösegrenze 15–25° geschätzt."),
     ("Gesamtfahrzeug", "Teile addiert, keine Wechselwirkung; Räder, Karosserie, "

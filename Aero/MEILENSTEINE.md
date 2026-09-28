@@ -177,15 +177,18 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M8 | DoE: Latin Hypercube, Pareto-Front über Abtrieb/Widerstand/Stabilität, Ergebnisdatei, CLI | `aero/doe.py` |
 | M8 | Reiter *Unterboden*: Schnitt, Bodendruck, Kennlinie, DoE, Frontpunkt anklicken übernimmt Variante | `ui/app.py` |
 | M8 | DRS: zweiter Flapwinkel je Kaskadenstufe, Kräftevergleich zu/offen, Regelprüfung und Balance mit offenem DRS, Familientabelle für Creo | `aero/drs.py`, `formate/familientabelle.py`, Reiter *Kaskade* |
+| M3 | Traglinie konvergiert auch hinter dem Abriss: adaptive Dämpfung, Abbruch an Kraft UND induziertem Widerstand. Vorher sprang der Widerstand um bis zu 25 % und lag deutlich zu niedrig (Heckflügel-Beispiel 12,5 statt 53,7 N) | `aero/traglinie.py` |
 | — | Zielbalance aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`), noch leer | `aero/gesamt.py` |
 | M9 | Report als PDF per Kommando oder Knopf: Regelkonformität mit Fahrzustand, Geometrie, Druckverteilung, Spannweitenlast, h/c, Unterboden, Balance, Grenzen | `formate/report.py`, Reiter *Projekt* |
 | M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
 | M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **594 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **596 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
+
+0. **Induzierter Widerstand gegen CFD prüfen.** Seit der Korrektur vom 28.09. konvergiert die Traglinie sauber. Beim Heckflügel-Beispiel liefert sie aber rund das Doppelte des ideal-elliptischen Werts mit Hoerner-Endplatten (52 statt etwa 27 N). Entweder ist die Lastverteilung wirklich so unelliptisch, etwa weil innen Stützstellen hinter dem Abriss liegen, oder die Endplattenwirkung ist zu schwach abgebildet. Das klärt erst ein Abgleich.
 
 1. **Kaskadenmodell kalibrieren.** Am 24.09. deutlich verbessert, aber
    nicht erledigt. Zwei Fehler im Abrisskriterium sind gefunden und behoben:
@@ -446,10 +449,10 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 * Aufgabe 2 ist erledigt. Nachgerechnet bringen 0,5° Rake um das Kehlenende etwa +17 %, um die Vorderachse gedreht weniger.
 * Aufgabe 3 ist erledigt, allerdings mit Latin Hypercube statt Optuna. Bei Millisekunden je Variante zeigt eine gleichmäßige Abdeckung den ganzen Raum. Optuna lohnt sich erst, wenn CFD in der Schleife hängt. Den Arbeitsbereich misst die Stabilität, also der kleinste durch den größten Abtrieb über ±15 mm Hub.
 * **Offen:** Aufgabe 4 (Batch über Creo/CFD; hängt an M5 und damit an der Lizenz).
-* Aufgabe 5 ist erledigt, bis auf den Test in Creo. `drs_winkel` an einer Kaskadenstufe ist der Winkel bei offenem DRS. Solange das Feld leer ist, bleibt der Hash älterer Specs unverändert. Beide Zustände werden gerechnet und gegen die Regeln geprüft, auch in Balance und Report. Die Familientabelle (`RW_E2_AOA`, Zeilen `RW_DRS_ZU`/`RW_DRS_AUF`) ist tabulatorgetrennt. **In Creo nicht geprüft.** Die Parameter müssen dort per Relation den Flap um sein Scharnier drehen, das kommt mit M5. Beispielrechnung am Heckflügel, offen −20° → −5°: −43 % Abtrieb, −39 % Widerstand. Die Balance wandert dabei um gut 8 Prozentpunkte.
+* Aufgabe 5 ist erledigt, bis auf den Test in Creo. `drs_winkel` an einer Kaskadenstufe ist der Winkel bei offenem DRS. Solange das Feld leer ist, bleibt der Hash älterer Specs unverändert. Beide Zustände werden gerechnet und gegen die Regeln geprüft, auch in Balance und Report. Die Familientabelle (`RW_E2_AOA`, Zeilen `RW_DRS_ZU`/`RW_DRS_AUF`) ist tabulatorgetrennt. **In Creo nicht geprüft.** Die Parameter müssen dort per Relation den Flap um sein Scharnier drehen, das kommt mit M5. Beispielrechnung am Heckflügel, offen −20° → −5°: −42 % Abtrieb, −64 % Widerstand (mit der korrigierten Traglinie). Front- und Heckflügel-Beispiel ohne Unterboden: Die Balance springt von 94 % auf 112 % vorn.
 * Anders als geplant lädt ein Frontpunkt die Variante in den Reiter *Unterboden* statt in den Kaskaden-Editor, denn der DoE-Raum ist der Unterboden.
-* Dazu gekommen ist die Kopplung im Reiter *Balance*. Frontflügel, Heckflügel und Unterboden werden je für sich gerechnet und addiert. Rake und Nicken wirken dabei auch auf die Flügel, also auf Höhe und Anstellwinkel. Das Ergebnis sind Balance, Achslasten (samt Nickmoment des Widerstands) und die Wanderung über ±0,5° Nicken. Wechselwirkungen fehlen, allen voran der Nachlauf des Frontflügels auf dem Unterboden. Die Zielbalance ist von Hand einzutragen, weil die statische Achslastverteilung noch nicht in `vehicle_ref.yaml` steht.
-* Der Paket-DoE (`aero/paket.py`, `python -m aerostudio.aero.paket`) variiert alle Flügelwinkel um ±3°, dazu Kehle, Diffusor und Rake. Er optimiert auf Abtrieb, Abstand zur Zielbalance und Nickwanderung. Jeder Flügel bekommt vorab ein Kennfeld (7 Winkel × 4 Höhen) aus der echten Rechnung. Das dauert einmal etwa eine Minute, danach laufen 200 Varianten in Sekunden. Gegenprobe: 589,2 N aus dem Kennfeld gegen 589,0 N echt. Der Widerstand ist kein Ziel, solange die Kaskadenrechnung ihn nicht glatt liefert. Ist die Zielbalance im Raum nicht erreichbar, sagt der Lauf das ausdrücklich.
+* Dazu gekommen ist die Kopplung im Reiter *Balance*. Frontflügel, Heckflügel und Unterboden werden je für sich gerechnet und addiert. Rake und Nicken wirken dabei auch auf die Flügel, also auf Höhe und Anstellwinkel. Das Ergebnis sind Balance, Achslasten (samt Nickmoment des Widerstands) und die Wanderung über ±0,5° Nicken. Wechselwirkungen fehlen, allen voran der Nachlauf des Frontflügels auf dem Unterboden. Die Zielbalance kommt aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`). Der Wert ist noch leer, bis eine Wägung vorliegt, und wird bis dahin von Hand eingetragen.
+* Der Paket-DoE (`aero/paket.py`, `python -m aerostudio.aero.paket`) variiert alle Flügelwinkel um ±3°, dazu Kehle, Diffusor und Rake. Er optimiert auf Abtrieb, Abstand zur Zielbalance und Nickwanderung. Jeder Flügel bekommt vorab ein Kennfeld (7 Winkel × 4 Höhen) aus der echten Rechnung. Das dauert einmal etwa eine Minute, danach laufen 200 Varianten in Sekunden. Gegenprobe: 589,2 N aus dem Kennfeld gegen 589,0 N echt. Der Widerstand steht in der Ergebnisdatei, ist aber kein Ziel. Ist die Zielbalance im Raum nicht erreichbar, sagt der Lauf das ausdrücklich.
 
 ---
 
