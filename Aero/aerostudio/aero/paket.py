@@ -299,14 +299,20 @@ def main(argv: list[str] | None = None) -> int:
     teil.add_argument("--spec", required=True, help="Haupt-Spec (YAML)")
     teil.add_argument("--dazu", nargs="*", default=[],
                       help="weitere Specs, etwa der Heckfluegel")
-    teil.add_argument("--ziel", type=float, required=True,
-                      help="Zielbalance vorn in Prozent")
+    teil.add_argument("--ziel", type=float, default=None,
+                      help="Zielbalance vorn in Prozent. Ohne Angabe die "
+                           "Achslast aus vehicle_ref.yaml")
     teil.add_argument("--n", type=int, default=200)
     teil.add_argument("--seed", type=int, default=0)
     teil.add_argument("--tempo", type=float, default=20.0)
     teil.add_argument("--aus", default="export/doe_paket.yaml")
     teil.add_argument("--regelstand", default="2026")
     arg = teil.parse_args(argv)
+    if arg.ziel is None:
+        arg.ziel = gesamt.zielbalance_aus_datei()
+        if arg.ziel is None:
+            teil.error("--ziel fehlt, und vehicle_ref.yaml nennt keine "
+                       "fahrdynamik.achslast_vorne_prozent.")
 
     from ..ui.app import _fluegelkraefte
 

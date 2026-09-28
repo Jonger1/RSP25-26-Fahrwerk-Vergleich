@@ -513,6 +513,7 @@ KASKADENSPALTEN = [
     {"id": "y_von", "name": "von y [mm]", "type": "numeric"},
     {"id": "y_bis", "name": "bis y [mm]", "type": "numeric"},
     {"id": "winkel_aussen", "name": "Winkel außen [°]", "type": "numeric"},
+    {"id": "drs_winkel", "name": "DRS offen [°]", "type": "numeric"},
 ]
 
 # Analytische Flapprofile zusaetzlich zum Katalog - dieselbe Quelle, die der
@@ -671,6 +672,21 @@ def _ansicht_kaskade() -> html.Div:
                        "repeat(auto-fit, minmax(220px, 1fr))",
                        "marginBottom": "14px"}),
             dcc.Loading(html.Div(id="kaskade3d-ergebnis"), type="dot"),
+        ]),
+
+        _karte([
+            _ueberschrift("DRS — verstellbarer Flap"),
+            html.Div("In der Tabelle oben die Spalte „DRS offen“ für den "
+                     "beweglichen Flap füllen: der Winkel gegen den Vorgänger "
+                     "bei offenem DRS. Die Spalte „Winkel“ ist der "
+                     "geschlossene Zustand.", className="as-hinweis",
+                     style={"marginBottom": "9px"}),
+            html.Button("DRS vergleichen", id="btn-drs", n_clicks=0,
+                        className="as-knopf as-knopf-voll"),
+            html.Button("Familientabelle für Creo schreiben", id="btn-familie",
+                        n_clicks=0, className="as-knopf as-knopf-leer"),
+            dcc.Loading(html.Div(id="drs-ergebnis", style={"marginTop": "9px"}),
+                        type="dot"),
         ]),
 
         _karte([
@@ -934,12 +950,19 @@ def _ansicht_balance() -> html.Div:
                 placeholder="z. B. den Heckflügel dazunehmen"),
                 "Das Spec im Editor ist immer dabei."),
             _feld("Geschwindigkeit [m/s]", _zahlenfeld("bal-tempo", 20.0, 1.0, 1.0, 60.0)),
-            _feld("Zielbalance vorn [%]", _zahlenfeld("bal-ziel", 45.0, 1.0, 0.0, 100.0),
-                  "Üblich ist die statische Achslastverteilung. Die steht "
-                  "noch nicht in vehicle_ref.yaml — hier von Hand."),
+            _feld("Zielbalance vorn [%]",
+                  _zahlenfeld("bal-ziel", aero_gesamt.zielbalance_aus_datei(),
+                              1.0, 0.0, 100.0),
+                  "Vorbelegt mit der statischen Achslast vorn aus "
+                  "vehicle_ref.yaml (fahrdynamik.achslast_vorne_prozent), "
+                  "sobald sie dort steht."),
             html.Div([
                 dcc.Checklist(id="bal-nicken", value=["ja"],
                               options=[{"label": " Nickwanderung ±0,5°",
+                                        "value": "ja"}],
+                              style={"fontSize": "13px"}),
+                dcc.Checklist(id="bal-drs", value=[],
+                              options=[{"label": " DRS offen (Gerade)",
                                         "value": "ja"}],
                               style={"fontSize": "13px", "marginBottom": "8px"}),
                 html.Button("Balance rechnen", id="btn-balance", n_clicks=0,
@@ -1283,7 +1306,8 @@ def kaskade_aus_tabelle(zeilen) -> list[Kaskadenstufe]:
             spalt=zahl("spalt", 0.015, 0.002, 0.2),
             ueberlappung=zahl("ueberlappung", 0.02, -0.2, 0.2),
             y_von=y_von, y_bis=y_bis,
-            winkel_aussen=wahlweise("winkel_aussen", -60.0, 60.0)))
+            winkel_aussen=wahlweise("winkel_aussen", -60.0, 60.0),
+            drs_winkel=wahlweise("drs_winkel", -60.0, 60.0)))
     return stufen
 
 
@@ -1292,7 +1316,8 @@ def _kaskadendaten(stufen) -> list[dict]:
              "winkel": round(k.winkel, 1), "spalt": round(k.spalt, 4),
              "ueberlappung": round(k.ueberlappung, 4),
              "y_von": k.y_von, "y_bis": k.y_bis,
-             "winkel_aussen": k.winkel_aussen} for k in stufen]
+             "winkel_aussen": k.winkel_aussen,
+             "drs_winkel": k.drs_winkel} for k in stufen]
 
 
 def _vorgaben(stufen) -> list:
@@ -3124,8 +3149,9 @@ def _gesamtfahrzeug(spec: AeroSpec, weitere: list[str] | None):
               Input("btn-balance", "n_clicks"),
               State("spec", "data"), State("bal-specs", "value"),
               State(wert("bal-tempo"), "value"), State(wert("bal-ziel"), "value"),
-              State("bal-nicken", "value"), prevent_initial_call=True)
-def _balance_rechnen(n, daten, weitere, tempo, ziel, nicken):
+              State("bal-nicken", "value"), State("bal-drs", "value"),
+              prevent_initial_call=True)
+def _balance_rechnen(n, daten, weitere, tempo, ziel, nicken, drs_offen=None):
     leer = {"data": [], "layout": {"height": 280}}
     if not daten:
         return "", leer, leer
@@ -3135,6 +3161,12 @@ def _balance_rechnen(n, daten, weitere, tempo, ziel, nicken):
                              "rechnen.", className="as-hinweis"), leer, leer)
         spec = AeroSpec.model_validate(daten)
         fluegel, unterboden = _gesamtfahrzeug(spec, weitere)
+        if drs_offen:
+            # Auf der Geraden: Die Balance springt beim Oeffnen nach vorn,
+            # weil der Heckfluegel Abtrieb verliert. Wie weit, ist die Frage,
+            # die sich beim Schliessen am Kurveneingang stellt.
+            from ..aero import drs
+            fluegel = [(n_, drs.element_offen(e)) for n_, e in fluegel]
         v = float(tempo or 20.0)
         radstand = regeln.Bezugsgeometrie.aus_datei().radstand
         ziel = float(ziel) if ziel not in (None, "") else None
@@ -3147,7 +3179,10 @@ def _balance_rechnen(n, daten, weitere, tempo, ziel, nicken):
             mitte = aero_gesamt.bilanz(fluegel, unterboden, spec.lage,
                                        _fluegelkraefte, v, radstand)
             reihe = []
-        return (_balancekarte(mitte, reihe, ziel),
+        karte = _balancekarte(mitte, reihe, ziel)
+        if drs_offen:
+            karte.children.insert(0, html.Div("DRS offen", className="as-status-hinweis"))
+        return (karte,
                 darstellung.balancebild(mitte, ziel),
                 darstellung.wanderungsbild(reihe, ziel) if reihe else leer)
     except Exception as fehler:
@@ -3382,6 +3417,69 @@ def _report(n, daten, weitere, tempo, ziel, aero):
         return dcc.send_file(str(pfad)), f"Geschrieben: {pfad}"
     except Exception as fehler:
         return no_update, _fehlerkarte(fehler)
+
+
+@app.callback(Output("drs-ergebnis", "children"),
+              Input("btn-drs", "n_clicks"), Input("btn-familie", "n_clicks"),
+              State("spec", "data"), State(wert("kaskadentempo"), "value"),
+              prevent_initial_call=True)
+def _drs(n_vergleich, n_familie, daten, tempo):
+    from ..aero import drs
+    from ..formate import familientabelle
+    if not daten:
+        return ""
+    try:
+        spec = AeroSpec.model_validate(daten)
+        element = spec.elemente[0]
+        if not drs.hat_drs(element):
+            return html.Div("Kein Flap mit DRS-Winkel — in der Tabelle die "
+                            "Spalte „DRS offen“ füllen.",
+                            className="as-status-hinweis")
+        if _ausgeloest_von("btn-familie"):
+            pfad = familientabelle.schreiben(
+                spec, PROJEKT / spec.export.ordner / f"familientabelle_drs_"
+                f"{familientabelle.praefix(element)}.txt")
+            kopf, zeilen = familientabelle.tabelle(spec)
+            return html.Div([
+                html.Div(f"Geschrieben: {pfad}", className="as-status-ok"),
+                html.Table([html.Tr([html.Th(k) for k in kopf])]
+                           + [html.Tr([html.Td(z[0])]
+                                      + [html.Td(f"{w:+.1f}") for w in z[1:]])
+                              for z in zeilen], className="as-tabelle"),
+                html.Div("Tabulatorgetrennt, zum Einfügen unter Familientabelle "
+                         "> Bearbeiten in Excel. In Creo noch nicht geprüft; "
+                         "die Parameter müssen dort per Relation den Flap drehen "
+                         "(M5).", className="as-hinweis")])
+        if element.spannweite is None:
+            return html.Div("Ohne Sektionstabelle gibt es keine Spannweite.",
+                            className="as-hinweis")
+        if not aero_verfuegbar():
+            return html.Div("Ohne NeuralFoil lässt sich kein Abtrieb rechnen.",
+                            className="as-hinweis")
+        v = drs.vergleich(element, _fluegelkraefte, float(tempo or 15.0))
+        return _drskarte(v, float(tempo or 15.0))
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
+
+
+def _drskarte(v, tempo: float) -> html.Div:
+    zeilen = [html.Tr([html.Th(""), html.Th("DRS zu"), html.Th("DRS offen"),
+                       html.Th("Änderung")]),
+              html.Tr([html.Td("Abtrieb [N]"), html.Td(f"{v.zu_abtrieb:.0f}"),
+                       html.Td(f"{v.auf_abtrieb:.0f}"),
+                       html.Td(f"−{100 * v.abtrieb_verlust:.0f} %")]),
+              html.Tr([html.Td("Widerstand [N]"), html.Td(f"{v.zu_widerstand:.1f}"),
+                       html.Td(f"{v.auf_widerstand:.1f}"),
+                       html.Td(f"−{100 * v.widerstand_gewinn:.0f} %")])]
+    return html.Div([
+        html.Div(f"{v.name} bei {tempo:.0f} m/s", className="as-untertitel-dunkel"),
+        html.Table(zeilen, className="as-tabelle"),
+        html.Div("Der offene Flap wird wie jeder Flap über Spalt und Überlappung "
+                 "angeordnet, als säße er neu justiert. Ein echtes DRS dreht um "
+                 "ein Scharnier — dessen Kinematik gehört nach Creo. Die "
+                 "Widerstandszahl der Kaskadenrechnung ist noch nicht glatt "
+                 "(siehe MEILENSTEINE).", className="as-hinweis",
+                 style={"marginTop": "6px"})])
 
 
 def _doe_pfad(datei: str | None) -> Path:

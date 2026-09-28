@@ -135,6 +135,10 @@ class AeroSpec(BaseModel):
             daten.pop("unterboden", None)
         if daten.get("lage") == Fahrzeuglage().model_dump(mode="json"):
             daten.pop("lage", None)
+        for element in daten.get("elemente", []):
+            for stufe in element.get("kaskade", []):
+                if stufe.get("drs_winkel") is None:
+                    stufe.pop("drs_winkel", None)
         roh = yaml.safe_dump(daten, sort_keys=True).encode("utf-8")
         return hashlib.sha1(roh).hexdigest()[:12]
 

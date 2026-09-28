@@ -273,3 +273,20 @@ def empfindlichkeit(reihe: list[Bilanz]) -> float:
         return float("nan")
     x, y = np.array(punkte).T
     return float(np.polyfit(x, y, 1)[0])
+
+
+def zielbalance_aus_datei(pfad=None) -> float | None:
+    """Die statische Achslast vorn aus vehicle_ref.yaml, in Prozent.
+
+    None, solange dort nichts eingetragen ist - dann gibt es keine Vorgabe,
+    und das Werkzeug fragt nach einer.
+    """
+    import yaml
+    from ..regeln.pruefung import VEHICLE_REF
+
+    try:
+        d = yaml.safe_load(open(pfad or VEHICLE_REF, encoding="utf-8")) or {}
+        wert = (d.get("fahrdynamik") or {}).get("achslast_vorne_prozent")
+        return None if wert is None else float(wert)
+    except (OSError, TypeError, ValueError):
+        return None

@@ -150,6 +150,11 @@ fahrdynamik:
   schwerpunkthoehe: 310          # mm ueber Boden
   schwerpunkthoehe_variabel: true
   verzoegerung_max: 2.0          # g
+  # Statische Achslast vorn in Prozent, mit Fahrer. Vorgabe fuer die
+  # Zielbalance im Reiter Balance, im Paket-DoE und im Report. Bewusst leer:
+  # Die Zahl kommt von der Waage, nicht aus einer Schaetzung. Solange sie
+  # fehlt, wird die Zielbalance von Hand eingetragen.
+  achslast_vorne_prozent: null
 
   # Aus den Kinematikexporten gelesen, Wert in Konstruktionslage:
   radrate_vorne: 64884.5         # N/m   (Bereich 56092 .. 66861)

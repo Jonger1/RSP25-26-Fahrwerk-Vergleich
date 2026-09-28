@@ -402,6 +402,17 @@ class Kaskadenstufe(BaseModel):
         description="Winkel gegen den Vorgaenger am aeusseren Ende, in Grad. "
                     "Dazwischen linear. None = ueberall wie `winkel`.")
 
+    # --- DRS -------------------------------------------------------------
+    # Das Konzept (Abschnitt 4.6): "Der bewegliche Flap wird als eigenes
+    # Element mit zwei aoa-Zustaenden modelliert." Hier als zweiter Winkel
+    # desselben Flaps: `winkel` ist DRS zu (Kurve), `drs_winkel` DRS offen
+    # (Gerade). Ein eigenes Element waere eine zweite Kopie von Profil, Sehne,
+    # Spalt und Teilfluegel-Bereich - und die laufen auseinander.
+    drs_winkel: Optional[float] = Field(
+        default=None, ge=-60.0, le=60.0,
+        description="Winkel gegen den Vorgaenger bei OFFENEM DRS, in Grad. "
+                    "None = dieser Flap ist nicht beweglich.")
+
     @model_validator(mode="after")
     def _pruefe_bereich(self) -> "Kaskadenstufe":
         if (self.y_von is not None and self.y_bis is not None

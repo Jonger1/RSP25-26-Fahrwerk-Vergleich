@@ -62,6 +62,7 @@ class Fluegelteil:
     grundriss: np.ndarray | None = None                      # Punkte x, y
     profile: list = field(default_factory=list)              # (name, punkte)
     hc: list[tuple[float, float]] = field(default_factory=list)
+    drs: object = None                                       # drs.Vergleich
     hinweise: list[str] = field(default_factory=list)
 
 
@@ -78,6 +79,8 @@ class Reportdaten:
     unterboden_kennlinie: object = None
     unterboden_befunde: list = field(default_factory=list)
     bilanz: object = None
+    bilanz_drs: object = None           # dieselbe Bilanz mit offenem DRS
+    familientabelle: tuple = ((), ())
     wanderung: list = field(default_factory=list)
     mit_aero: bool = True
     erstellt: str = field(
@@ -93,7 +96,8 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
     der Report darf keine Zahl zeigen, die man im Werkzeug anders sieht.
     """
     from .. import regeln
-    from ..aero import gesamt, kaskade as aero_kaskade, paket, unterboden
+    from ..aero import drs, gesamt, kaskade as aero_kaskade, paket, unterboden
+    from . import familientabelle
     from ..aero.profilpolare import verfuegbar
     from ..geometrie import endplatte as geo_endplatte
     from ..ui import app as ui
@@ -121,6 +125,18 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
         for satz in staende:
             teil.befunde[satz.version] = regeln.pruefe_fluegel(
                 stapel, satz, bezug, zustand)
+        if drs.hat_drs(element):
+            # Offen steht der Flap steiler oder flacher - Hoehe und Laenge
+            # aendern sich, also muss auch dieser Zustand die Regeln halten.
+            melden(f"Regeln mit offenem DRS: {name}")
+            offen = drs.element_offen(element)
+            je_offen = ui._elementstapel(offen)
+            stapel_offen = [s for t in je_offen for s in t]
+            if offen.endplatte is not None:
+                stapel_offen += geo_endplatte.schnitte(je_offen, offen.endplatte)
+            for satz in staende:
+                teil.befunde[f"{satz.version} DRS offen"] = regeln.pruefe_fluegel(
+                    stapel_offen, satz, bezug, zustand)
         teil.grundriss = _grundriss(stapel_je)
         teil.kaskade_wurzel = ui._schnittelemente(
             element, min(s.y for s in element.spannweite.stuetzstellen))
@@ -133,6 +149,9 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
             teil.druck = aero_kaskade.druckverteilung(teil.kaskade_wurzel,
                                                       element.anstellwinkel)
             teil.kraefte = ui._fluegelkraefte(element, geschwindigkeit)
+            if drs.hat_drs(element):
+                teil.drs = drs.vergleich(element, ui._fluegelkraefte,
+                                         geschwindigkeit, name)
             if element.pos_x < 0:
                 # Nur vor der Vorderachse: Dort arbeitet der Fluegel im
                 # Bodeneffekt. Ein Heckfluegel auf 900 mm hat keine
@@ -161,6 +180,12 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
             ui._fluegelkraefte, geschwindigkeit, bezug.radstand)
         daten.bilanz = next(b for b in daten.wanderung
                             if b.zustand.nick_grad == 0.0)
+        if any(t.drs is not None for t in teile):
+            daten.bilanz_drs = gesamt.bilanz(
+                [(n, drs.element_offen(e)) for n, e in paket.fluegel_des_pakets(p)],
+                p.unterboden, p.lage, ui._fluegelkraefte, geschwindigkeit,
+                bezug.radstand)
+    daten.familientabelle = familientabelle.tabelle(p)
     return daten
 
 
@@ -561,6 +586,53 @@ def _gesamtseite(pdf, daten: Reportdaten, nr: int):
     plt.close(fig)
 
 
+def _drsseite(pdf, daten: Reportdaten, nr: int):
+    import matplotlib.pyplot as plt
+
+    fig = _seite(pdf, "DRS — verstellbarer Flap",
+                 "Zwei Zustände desselben Entwurfs: zu (Kurve) und offen (Gerade)")
+    fig.text(0.07, 0.9, "Kräfte je Flügel", fontsize=11, fontweight="bold")
+    zeilen = [[t.drs.name, f"{t.drs.zu_abtrieb:.0f}", f"{t.drs.auf_abtrieb:.0f}",
+               f"−{100 * t.drs.abtrieb_verlust:.0f} %",
+               f"{t.drs.zu_widerstand:.1f}", f"{t.drs.auf_widerstand:.1f}",
+               f"−{100 * t.drs.widerstand_gewinn:.0f} %"]
+              for t in daten.fluegel if t.drs is not None]
+    _tabelle(fig.add_axes([0.07, 0.78, 0.86, 0.1]),
+             ["Flügel", "Abtrieb zu", "Abtrieb offen", "Δ", "Widerst. zu",
+              "Widerst. offen", "Δ"], zeilen,
+             [0.28, 0.12, 0.13, 0.09, 0.13, 0.15, 0.1], schrift=8)
+    if daten.bilanz is not None and daten.bilanz_drs is not None:
+        zu, auf = daten.bilanz, daten.bilanz_drs
+        fig.text(0.07, 0.72, "Gesamtfahrzeug", fontsize=11, fontweight="bold")
+        _tabelle(fig.add_axes([0.07, 0.62, 0.86, 0.08]),
+                 ["", "Abtrieb [N]", "Widerstand [N]", "Balance vorn"],
+                 [["DRS zu", f"{zu.abtrieb:.0f}", f"{zu.widerstand:.1f}",
+                   f"{100 * zu.balance_vorne:.1f} %"],
+                  ["DRS offen", f"{auf.abtrieb:.0f}", f"{auf.widerstand:.1f}",
+                   f"{100 * auf.balance_vorne:.1f} %"]],
+                 [0.25, 0.25, 0.25, 0.25], schrift=8.5)
+        sprung = 100 * (zu.balance_vorne - auf.balance_vorne)
+        fig.text(0.07, 0.585, f"Beim Schließen am Kurveneingang wandert die "
+                 f"Balance um {abs(sprung):.1f} Prozentpunkte nach "
+                 f"{'vorn' if sprung > 0 else 'hinten'}.", fontsize=9)
+    kopf, zeilen = daten.familientabelle
+    if zeilen:
+        fig.text(0.07, 0.52, "Familientabelle für Creo", fontsize=11,
+                 fontweight="bold")
+        _tabelle(fig.add_axes([0.07, 0.42, 0.86, 0.08]), list(kopf),
+                 [[z[0], *(f"{w:+.1f}" for w in z[1:])] for z in zeilen],
+                 schrift=8.5)
+    fig.text(0.07, 0.36, _umbruch(
+        "Der offene Flap ist wie jeder Flap über Spalt und Überlappung "
+        "angeordnet. Ein echtes DRS dreht um ein Scharnier; dessen Kinematik "
+        "und die Kollisionsprüfung gehören nach Creo. Die Regelprüfung des "
+        "offenen Zustands steht auf den Regelseiten (\u201eDRS offen\u201c).",
+        120), fontsize=8, color=GRAU, va="top")
+    _fuss(fig, daten, nr)
+    pdf.savefig(fig)
+    plt.close(fig)
+
+
 GRENZEN = [
     ("Kräfte", "Traglinie mit Profil- bzw. Kaskadenpolaren (NeuralFoil, "
                "Panelverfahren), Bodeneffekt über Spiegelung und Kanalfaktor. "
@@ -640,6 +712,9 @@ def schreiben(daten: Reportdaten, pfad: str | Path) -> Path:
         if daten.bilanz is not None:
             _gesamtseite(pdf, daten, nr)
             nr += 1
+        if any(t.drs is not None for t in daten.fluegel):
+            _drsseite(pdf, daten, nr)
+            nr += 1
         _grenzenseite(pdf, daten, nr)
         info = pdf.infodict()
         info["Title"] = f"Aerodynamik — {daten.spec.meta.name}"
@@ -670,12 +745,14 @@ def main(argv: list[str] | None = None) -> int:
                       help="nur Geometrie und Regeln, ohne Kräfte (schnell)")
     arg = teil.parse_args(argv)
 
+    from ..aero.gesamt import zielbalance_aus_datei
+
     spec = AeroSpec.laden(arg.spec)
     weitere = [AeroSpec.laden(p) for p in arg.dazu]
-    daten = sammeln(spec, weitere, [arg.spec, *arg.dazu], arg.tempo, arg.ziel,
+    ziel = arg.ziel if arg.ziel is not None else zielbalance_aus_datei()
+    daten = sammeln(spec, weitere, [arg.spec, *arg.dazu], arg.tempo, ziel,
                     not arg.ohne_aero, melden=lambda t: print(f"  {t}", flush=True))
-    ziel = arg.aus or f"export/report_{Path(arg.spec).stem}.pdf"
-    pfad = schreiben(daten, ziel)
+    pfad = schreiben(daten, arg.aus or f"export/report_{Path(arg.spec).stem}.pdf")
     print(f"  Geschrieben: {pfad}")
     return 0
 
