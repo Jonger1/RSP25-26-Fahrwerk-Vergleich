@@ -45,6 +45,7 @@ from ..aero import kaskade3d as aero_kaskade3d
 from ..aero import doe as aero_doe
 from ..aero import unterboden as aero_unterboden
 from ..aero import gesamt as aero_gesamt
+from ..aero import paket as aero_paket
 from ..geometrie import kaskade as geo_kaskade
 from ..aero.profilpolare import verfuegbar as aero_verfuegbar
 from ..aero import traglinie
@@ -950,6 +951,35 @@ def _ansicht_balance() -> html.Div:
         dcc.Loading(html.Div(id="bal-ergebnis"), type="dot"),
         _karte([dcc.Graph(id="fig-balance", **_GRAPH)]),
         _karte([dcc.Graph(id="fig-wanderung", **_GRAPH)]),
+
+        _leiste("Paket optimieren (DoE)", [
+            _feld("Varianten", _zahlenfeld("paket-n", 200.0, 50.0, 10.0, 5000.0),
+                  "Anstellwinkel aller Flügel ±3°, Kehle, Diffusor und Rake. "
+                  "Ziele: Abtrieb, Abstand zur Zielbalance, Nickwanderung."),
+            _feld("Ergebnisdatei", dcc.Input(
+                id="paket-datei", type="text", value="export/doe_paket.yaml",
+                className="as-textfeld"),
+                "Kommandozeile: python -m aerostudio.aero.paket"),
+            html.Div([
+                html.Button("Paket optimieren", id="btn-paket", n_clicks=0,
+                            className="as-knopf as-knopf-voll"),
+                html.Button("Datei anzeigen", id="btn-paket-laden", n_clicks=0,
+                            className="as-knopf as-knopf-leer"),
+                html.Div("Beim ersten Mal etwa eine Minute: Jeder Flügel "
+                         "bekommt ein Kennfeld aus der echten Rechnung. "
+                         "Danach dauern die Varianten Sekunden.",
+                         className="as-hinweis"),
+            ]),
+        ], spalten="260px"),
+        dcc.Loading(html.Div(id="paket-status"), type="dot"),
+        _karte([dcc.Graph(id="fig-paket", **_GRAPH),
+                html.Div(id="paket-variante"),
+                html.Button("Variante als Paket-Spec speichern",
+                            id="btn-paket-speichern", n_clicks=0,
+                            className="as-knopf as-knopf-leer",
+                            style={"marginTop": "8px"}),
+                html.Div(id="paket-gespeichert", className="as-hinweis")]),
+        dcc.Store(id="paket-wahl"),
     ])
 
 
@@ -3060,17 +3090,16 @@ def _fluegelkraefte(element, geschwindigkeit: float):
     return kraefte
 
 
+def _paket(spec: AeroSpec, weitere: list[str] | None) -> AeroSpec:
+    """Das Spec im Editor plus die dazugenommenen, als ein Paket-Spec."""
+    return aero_paket.bauen(spec, [AeroSpec.laden(PROJEKT / pfad)
+                                   for pfad in weitere or []])
+
+
 def _gesamtfahrzeug(spec: AeroSpec, weitere: list[str] | None):
     """Fluegel und Unterboden aus dem Spec im Editor und den dazugenommenen."""
-    fluegel = [(element.name or element.id, element) for element in spec.elemente]
-    unterboden = spec.unterboden
-    for pfad in weitere or []:
-        anderes = AeroSpec.laden(PROJEKT / pfad)
-        fluegel += [(element.name or element.id, element)
-                    for element in anderes.elemente]
-        if unterboden is None:
-            unterboden = anderes.unterboden
-    return fluegel, unterboden
+    p = _paket(spec, weitere)
+    return aero_paket.fluegel_des_pakets(p), p.unterboden
 
 
 @app.callback(Output("bal-ergebnis", "children"),
@@ -3164,6 +3193,155 @@ def _balancekarte(b, reihe, ziel) -> html.Div:
         "Kaskade rechnen ohne Rake.", className="as-hinweis",
         style={"marginTop": "9px"}))
     return _karte(kinder)
+
+
+# Kennfelder je Paket, Geschwindigkeit und Raum. Wer denselben Lauf mit mehr
+# Varianten wiederholt, soll die Minute fuer die Kennfelder nicht noch
+# einmal warten.
+_KENNFELD_ZWISCHENSPEICHER: dict[str, dict] = {}
+
+
+def _paket_datei(datei: str | None) -> Path:
+    return PROJEKT / (datei or "export/doe_paket.yaml")
+
+
+@app.callback(Output("fig-paket", "figure"), Output("paket-status", "children"),
+              Input("btn-paket", "n_clicks"), Input("btn-paket-laden", "n_clicks"),
+              State("spec", "data"), State("bal-specs", "value"),
+              State(wert("paket-n"), "value"), State(wert("bal-tempo"), "value"),
+              State(wert("bal-ziel"), "value"), State("paket-datei", "value"),
+              prevent_initial_call=True)
+def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
+    leer = {"data": [], "layout": {"height": 400}}
+    pfad = _paket_datei(datei)
+    try:
+        spec = AeroSpec.model_validate(daten) if daten else None
+        if _ausgeloest_von("btn-paket"):
+            if not aero_verfuegbar():
+                return leer, html.Div("Ohne NeuralFoil lassen sich keine "
+                                      "Flügelkennfelder rechnen.",
+                                      className="as-status-hinweis")
+            if ziel in (None, ""):
+                return leer, html.Div("Erst eine Zielbalance eintragen.",
+                                      className="as-status-hinweis")
+            p = _paket(spec, weitere)
+            v = float(tempo or 20.0)
+            radstand = regeln.Bezugsgeometrie.aus_datei().radstand
+            parameter = aero_paket.raum(p)
+            schluessel = f"{p.hash()}|{v:.3f}|" + "|".join(
+                f"{q.pfad}:{q.von}:{q.bis}" for q in parameter)
+            felder = _KENNFELD_ZWISCHENSPEICHER.get(schluessel)
+            if felder is None:
+                felder = aero_paket.kennfelder(p, parameter, _fluegelkraefte,
+                                               v, radstand)
+                if len(_KENNFELD_ZWISCHENSPEICHER) > 8:
+                    _KENNFELD_ZWISCHENSPEICHER.clear()
+                _KENNFELD_ZWISCHENSPEICHER[schluessel] = felder
+            lauf, bewertung = aero_paket.laufen(
+                p, _fluegelkraefte, float(ziel), int(n or 200),
+                parameter=parameter, geschwindigkeit=v, radstand=radstand,
+                regelsatz=regeln.lade("2026"), felder=felder)
+            lauf.speichern(pfad)
+        else:
+            if not pfad.is_file():
+                return leer, html.Div(f"Keine Ergebnisdatei unter {pfad}.",
+                                      className="as-status-hinweis")
+            lauf, bewertung = aero_doe.Lauf.laden(pfad), None
+        return darstellung.paketbild(lauf), _paketstatus(lauf, pfad, ziel,
+                                                         bewertung)
+    except Exception as fehler:
+        return leer, _fehlerkarte(fehler)
+
+
+def _paketstatus(lauf, pfad, ziel, bewertung) -> html.Div:
+    zeilen = [html.Div(f"{len(lauf.varianten)} Varianten, {lauf.gueltige} "
+                       f"gültig, {len(lauf.front)} auf der Pareto-Front. "
+                       f"Gespeichert in {pfad}.", className="as-status-ok")]
+    gueltig = [e for e in lauf.ergebnisse if e.get("gueltig")]
+    if gueltig:
+        bester = min(gueltig, key=lambda e: e["balancefehler"])
+        if bester["balancefehler"] > 3.0:
+            # Das ist die wichtigste Auskunft des ganzen Laufs, wenn sie
+            # zutrifft: Mit Winkeln allein ist die Balance nicht zu retten.
+            zeilen.append(html.Div(
+                f"Die Zielbalance ist in diesem Raum nicht erreichbar: Am "
+                f"nächsten kommt {bester['balance']:.1f} % vorn "
+                f"({bester['balancefehler']:.1f} Prozentpunkte daneben). Mit "
+                f"±3° Anstellwinkel allein geht es nicht — Flügelgröße, "
+                f"Lage oder Elementzahl müssen sich ändern.",
+                className="as-status-hinweis"))
+    if bewertung is not None and bewertung.ausserhalb:
+        zeilen.append(html.Div(
+            f"{bewertung.ausserhalb} Abfragen lagen außerhalb eines Kennfelds "
+            f"und wurden am Rand abgeschnitten.", className="as-status-hinweis"))
+    zeilen.append(html.Div(
+        "Kennfeld-Werte: Winkel und Höhe linear zwischen Stützstellen der "
+        "echten Rechnung. Der Widerstand wird mitgeführt, ist aber kein Ziel "
+        "— die Kaskadenrechnung liefert ihn noch nicht glatt genug.",
+        className="as-hinweis"))
+    return html.Div(zeilen)
+
+
+@app.callback(Output("paket-variante", "children"), Output("paket-wahl", "data"),
+              Input("fig-paket", "clickData"), State("paket-datei", "value"),
+              prevent_initial_call=True)
+def _paket_zeigen(klick, datei):
+    """Ein Frontpunkt zeigt seine Werte gegen den Ausgangsentwurf.
+
+    Anders als beim Unterboden werden sie NICHT in die Felder gesetzt: Die
+    Fluegel stehen meist in anderen Specs als dem im Editor. Wer die
+    Variante will, speichert sie als Paket-Spec.
+    """
+    if not klick or not klick.get("points"):
+        return no_update, no_update
+    try:
+        nr = klick["points"][0].get("customdata")
+        if nr is None:
+            return no_update, no_update
+        lauf = aero_doe.Lauf.laden(_paket_datei(datei))
+        werte, e = lauf.varianten[int(nr)], lauf.ergebnisse[int(nr)]
+        namen = {q.pfad: q.name for q in lauf.raum}
+        zeilen = [html.Tr([html.Th("Größe"), html.Th("Variante")])]
+        zeilen += [html.Tr([html.Td(namen.get(pfad, pfad)),
+                            html.Td(f"{wert_:.2f}")])
+                   for pfad, wert_ in werte.items()]
+        kopf = (f"Variante {nr}: {e.get('abtrieb') or 0:.0f} N, Balance "
+                f"{e.get('balance') or 0:.1f} % vorn, Wanderung "
+                f"{e.get('wanderung') or 0:.2f} %/°")
+        kinder = [html.Div(kopf, className="as-untertitel-dunkel",
+                           style={"marginTop": "8px"}),
+                  html.Table(zeilen, className="as-tabelle")]
+        if not e.get("gueltig"):
+            kinder.append(html.Div(f"Ungültig: {e.get('grund', '')}",
+                                   className="as-status-hinweis"))
+        return html.Div(kinder), int(nr)
+    except Exception as fehler:
+        return _fehlerkarte(fehler), no_update
+
+
+@app.callback(Output("paket-gespeichert", "children"),
+              Input("btn-paket-speichern", "n_clicks"),
+              State("paket-wahl", "data"), State("paket-datei", "value"),
+              State("spec", "data"), State("bal-specs", "value"),
+              prevent_initial_call=True)
+def _paket_speichern(n, nr, datei, daten, weitere):
+    if nr is None:
+        return "Erst einen Punkt der Front anklicken."
+    try:
+        lauf = aero_doe.Lauf.laden(_paket_datei(datei))
+        p = _paket(AeroSpec.model_validate(daten), weitere)
+        if p.hash() != lauf.basis_hash:
+            return ("Das Paket aus Editor und gewählten Specs ist nicht mehr "
+                    "das, über das der Lauf ging (Basis-Hash weicht ab). "
+                    "Erst neu optimieren.")
+        variante = aero_doe.variante(p, lauf.varianten[int(nr)])
+        variante.meta.name = f"{p.meta.name} — Paketvariante {nr}"
+        ziel = PROJEKT / "specs" / "pakete" / f"paket_variante_{nr}.yaml"
+        variante.speichern(ziel, historie=False)
+        return (f"Gespeichert als {ziel.relative_to(PROJEKT)} — alle Flügel, "
+                f"Unterboden und Rake in einer Datei.")
+    except Exception as fehler:
+        return _fehlerkarte(fehler)
 
 
 def _doe_pfad(datei: str | None) -> Path:

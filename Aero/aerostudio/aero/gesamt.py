@@ -168,6 +168,9 @@ def angriffspunkt(kraefte, rueckfall: float) -> float:
     Bei gepfeilten oder nach hinten versetzten Aussenschnitten wandert der
     Angriffspunkt mit - das kaeme mit der Wurzelsehne allein nicht heraus.
     """
+    fest = getattr(kraefte, "x_angriff", None)
+    if fest is not None and math.isfinite(fest):
+        return float(fest)          # schon ausgewertet, etwa aus einem Kennfeld
     streifen = getattr(kraefte, "streifen", None) or []
     last = np.asarray(getattr(kraefte, "auftrieb_lokal", []), dtype=float)
     if not streifen or len(last) != len(streifen):

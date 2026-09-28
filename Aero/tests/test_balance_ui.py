@@ -107,3 +107,98 @@ def test_echte_rechnung_front_und_heck():
 
     nochmal = gesamt.bilanz(fluegel, ub, spec.lage, UI._fluegelkraefte, 20.0, 1535.0)
     assert nochmal.abtrieb == b.abtrieb
+
+
+# ------------------------------------------------------ Paket optimieren
+
+def _klick(fn, ausloeser, *args):
+    from dash import callback_context
+    original = type(callback_context).triggered_id
+    try:
+        type(callback_context).triggered_id = property(lambda self: ausloeser)
+        return fn(*args)
+    finally:
+        type(callback_context).triggered_id = original
+
+
+@pytest.fixture
+def projekt(tmp_path, monkeypatch, schnell):
+    """Ein Projektordner mit dem Heckfluegel-Beispiel, damit auch das
+    Speichern der Variante nicht im echten Repo landet."""
+    (tmp_path / "specs" / "beispiele").mkdir(parents=True)
+    (tmp_path / "specs" / "beispiele" / "heckfluegel.yaml").write_text(
+        (UI.PROJEKT / HECK).read_text(encoding="utf-8"), encoding="utf-8")
+    daten = _front()
+    monkeypatch.setattr(UI, "PROJEKT", tmp_path)
+    UI._KENNFELD_ZWISCHENSPEICHER.clear()
+    return tmp_path, daten
+
+
+def test_paket_optimieren_bild_und_datei(projekt):
+    ordner, daten = projekt
+    bild, status = _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK],
+                          60, 20.0, 45.0, "export/p.yaml")
+    assert (ordner / "export" / "p.yaml").is_file()
+    assert len(bild["data"]) >= 1
+    assert "60 Varianten" in _text(status)
+
+
+def test_paket_ohne_ziel_sagt_was_fehlt(projekt):
+    _, daten = projekt
+    _, status = _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK],
+                       20, 20.0, None, "export/p.yaml")
+    assert "Zielbalance" in _text(status)
+
+
+def test_unerreichbares_ziel_wird_gesagt(projekt):
+    """Mit dem Ziel 0 % vorn kommt keine Variante auch nur in die Naehe."""
+    _, daten = projekt
+    _, status = _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK],
+                       20, 20.0, 0.0, "export/p.yaml")
+    assert "nicht erreichbar" in _text(status)
+
+
+def test_kennfelder_werden_zwischengespeichert(projekt, monkeypatch):
+    _, daten = projekt
+    _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK], 10, 20.0, 45.0, "export/p.yaml")
+    aufrufe = []
+    monkeypatch.setattr(UI, "_fluegelkraefte",
+                        lambda e, v: aufrufe.append(1) or attrappe(e, v))
+    _klick(UI._paket_doe, "btn-paket", 2, 0, daten, [HECK], 30, 20.0, 45.0, "export/p.yaml")
+    assert aufrufe == []
+
+
+def test_frontpunkt_zeigen_und_als_spec_speichern(projekt):
+    ordner, daten = projekt
+    _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK], 30, 20.0, 45.0, "export/p.yaml")
+    from aerostudio.aero import doe
+    lauf = doe.Lauf.laden(ordner / "export" / "p.yaml")
+    nr = lauf.front[0]
+
+    anzeige, wahl = UI._paket_zeigen({"points": [{"customdata": nr}]}, "export/p.yaml")
+    assert wahl == nr
+    assert "Anstellwinkel" in _text(anzeige)
+
+    meldung = UI._paket_speichern(1, wahl, "export/p.yaml", daten, [HECK])
+    datei = ordner / "specs" / "pakete" / f"paket_variante_{nr}.yaml"
+    assert datei.is_file(), meldung
+    gespeichert = AeroSpec.laden(datei)
+    assert len(gespeichert.elemente) == 2
+    for pfad, wert in lauf.varianten[nr].items():
+        teile = pfad.split(".")
+        ist = gespeichert
+        for t in teile:
+            ist = ist[int(t)] if t.isdigit() else getattr(ist, t)
+        assert ist == pytest.approx(wert)
+
+
+def test_speichern_bei_geaendertem_paket_verweigert(projekt):
+    ordner, daten = projekt
+    _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK], 10, 20.0, 45.0, "export/p.yaml")
+    meldung = UI._paket_speichern(1, 0, "export/p.yaml", daten, [])   # ohne Heck
+    assert "Basis-Hash" in meldung
+    assert not (ordner / "specs" / "pakete").exists()
+
+
+def test_speichern_ohne_wahl():
+    assert "anklicken" in UI._paket_speichern(1, None, "x.yaml", {}, [])

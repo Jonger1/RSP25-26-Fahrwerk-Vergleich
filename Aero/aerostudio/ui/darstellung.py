@@ -899,7 +899,7 @@ def paretobild(lauf) -> go.Figure:
     fig.add_annotation(
         text="Front über drei Ziele: Punkte, die hier dominiert wirken, "
              "liegen bei der Stabilität (Farbe) vorn.",
-        xref="paper", yref="paper", x=0.0, y=-0.2, showarrow=False,
+        xref="paper", yref="paper", x=0.0, y=-0.3, showarrow=False,
         xanchor="left", font=dict(size=11, color="#6b7280"))
 
     fig.update_layout(**_grundlayout(
@@ -908,7 +908,7 @@ def paretobild(lauf) -> go.Figure:
     # Legende UNTER den Titel und Platz dafuer: Oben uebereinander gelegt
     # schnitten sie sich gegenseitig ab.
     fig.update_layout(showlegend=True, hovermode="closest",
-                      margin=dict(l=55, r=20, t=75, b=85),
+                      margin=dict(l=55, r=20, t=75, b=105),
                       legend=dict(orientation="h", y=1.02, yanchor="bottom",
                                   x=0.0, font=dict(size=10)))
     fig.update_xaxes(title="Widerstand [N] — weniger ist besser")
@@ -983,4 +983,62 @@ def wanderungsbild(reihe, ziel: float | None = None) -> go.Figure:
     fig.update_layout(**_grundlayout("Nickwanderung der Balance", hoehe=300))
     fig.update_xaxes(title="Nicken [°] — positiv = Nase tiefer (Bremsen)")
     fig.update_yaxes(title="Abtrieb auf der Vorderachse [%]")
+    return _achsen(fig)
+
+
+def paketbild(lauf) -> go.Figure:
+    """Pareto-Front des Paket-DoE: Abtrieb ueber dem Balancefehler, Farbe =
+    Nickwanderung. Links oben ist gut: viel Abtrieb, Balance am Ziel."""
+    fig = go.Figure()
+    front = set(lauf.front)
+    alle = [i for i, e in enumerate(lauf.ergebnisse)
+            if e.get("balancefehler") is not None and e.get("abtrieb") is not None]
+    ungueltig = [i for i in alle if not lauf.ergebnisse[i].get("gueltig")]
+    if ungueltig:
+        fig.add_trace(go.Scatter(
+            x=[lauf.ergebnisse[i]["balancefehler"] for i in ungueltig],
+            y=[lauf.ergebnisse[i]["abtrieb"] for i in ungueltig],
+            mode="markers", marker=dict(color=FARBE_HILFE, size=6, symbol="x"),
+            name="ungültig", customdata=ungueltig,
+            hovertemplate="Variante %{customdata} — ungültig<extra></extra>"))
+
+    wanderungen = [lauf.ergebnisse[i]["wanderung"] for i in alle
+                   if lauf.ergebnisse[i].get("gueltig")
+                   and lauf.ergebnisse[i].get("wanderung") is not None]
+    obergrenze = max(wanderungen + [0.1])
+    for auswahl, name, groesse, linie in (
+            ([i for i in alle if lauf.ergebnisse[i].get("gueltig")
+              and i not in front], "Variante", 6, 0),
+            (sorted(front), "Pareto-Front", 11, 1.5)):
+        if not auswahl:
+            continue
+        e = [lauf.ergebnisse[i] for i in auswahl]
+        fig.add_trace(go.Scatter(
+            x=[r["balancefehler"] for r in e], y=[r["abtrieb"] for r in e],
+            mode="markers", name=name, customdata=auswahl,
+            marker=dict(size=groesse, color=[r.get("wanderung") or 0.0 for r in e],
+                        colorscale="Viridis_r", cmin=0.0, cmax=obergrenze,
+                        line=dict(color=FARBE_KONTUR, width=linie),
+                        colorbar=dict(title="Wanderung<br>[%/°]", thickness=12)
+                        if name == "Pareto-Front" else None),
+            text=[f"{r['balance']:.1f} % vorn, Wanderung "
+                  f"{r.get('wanderung') or 0.0:.2f} %/°" for r in e],
+            hovertemplate="Variante %{customdata}<br>%{y:.0f} N<br>%{text}"
+                          "<extra></extra>"))
+
+    fig.add_annotation(
+        text="Front über drei Ziele: Punkte, die hier dominiert wirken, "
+             "wandern beim Nicken weniger (Farbe).",
+        xref="paper", yref="paper", x=0.0, y=-0.3, showarrow=False,
+        xanchor="left", font=dict(size=11, color="#6b7280"))
+    fig.update_layout(**_grundlayout(
+        f"{len(lauf.varianten)} Varianten, {len(lauf.front)} auf der Front — "
+        f"anklicken zeigt die Werte", hoehe=440))
+    fig.update_layout(showlegend=True, hovermode="closest",
+                      margin=dict(l=55, r=20, t=75, b=105),
+                      legend=dict(orientation="h", y=1.02, yanchor="bottom",
+                                  x=0.0, font=dict(size=10)))
+    fig.update_xaxes(title="Abstand zur Zielbalance [Prozentpunkte] — weniger ist besser",
+                     rangemode="tozero")
+    fig.update_yaxes(title="Abtrieb [N]")
     return _achsen(fig)
