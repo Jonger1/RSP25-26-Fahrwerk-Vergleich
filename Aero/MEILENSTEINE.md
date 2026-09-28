@@ -176,10 +176,11 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M8 | Rake als Fahrzeuglage mit Drehpunkt, im Spec-Hash nur wenn gesetzt | `spec/modell.py` |
 | M8 | DoE: Latin Hypercube, Pareto-Front über Abtrieb/Widerstand/Stabilität, Ergebnisdatei, CLI | `aero/doe.py` |
 | M8 | Reiter *Unterboden*: Schnitt, Bodendruck, Kennlinie, DoE, Frontpunkt anklicken übernimmt Variante | `ui/app.py` |
+| M9 | Report als PDF per Kommando oder Knopf: Regelkonformität mit Fahrzustand, Geometrie, Druckverteilung, Spannweitenlast, h/c, Unterboden, Balance, Grenzen | `formate/report.py`, Reiter *Projekt* |
 | M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
 | M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **570 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **578 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
@@ -461,6 +462,13 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 5. Fertigungsableitungen: Rippen- und Schablonen-DXF, Formtrennebenen.
 
 **Fertig, wenn:** Für ein Design entsteht per Kommando ein PDF, das man ohne Nacharbeit in den Design Report übernehmen kann.
+
+**Stand (28.09.):** `python -m aerostudio.formate.report --spec … [--dazu …] [--ziel 45]` schreibt das PDF, alternativ der Knopf im Reiter *Projekt*. Für Front- und Heckflügel dauert es etwa 15 s.
+
+* Aufgabe 1 ist erledigt. Jeder Befund nennt jetzt den Fahrzustand, in dem er geprüft wurde (`Regelbefund.fahrzustand`).
+* Aufgabe 4 ist erledigt: Kaskade im Wurzelschnitt, Profilvergleich, Grundriss, Druckverteilung, Abtrieb über die Spannweite und h/c-Kurve (nur Frontflügel), dazu Unterboden und Balance. Die Grafiken kommen aus matplotlib, weil kaleido für den Plotly-PDF-Export auf Teamrechnern unzuverlässig ist.
+* **Offen:** Aufgaben 2 und 3 (T 3.20.2/T 3.19.4, T 8.3). Sie brauchen Struktur- und Laminatdaten, die das Spec nicht kennt. Der Report weist sie ausdrücklich als nicht nachgewiesen aus. Formtrennebenen (Aufgabe 5) fehlen ebenfalls, die DXF-Vorlagen gibt es.
+* Ob das PDF „ohne Nacharbeit“ in den Design Report passt, muss das Team am echten Entwurf beurteilen.
 
 ---
 

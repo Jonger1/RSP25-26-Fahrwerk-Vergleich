@@ -240,6 +240,7 @@ class Regelbefund:
     stand: str = ""
     ort: str = ""                   # wo im Flügel, in Klartext
     neu: bool = False               # Grenze stammt aus dem 2027-Entwurf
+    fahrzustand: str = ""           # in welcher Lage geprueft, fuer den Report
 
     @property
     def blockiert(self) -> bool:
@@ -320,13 +321,22 @@ def pruefe_fluegel(stapel, regelsatz: Regelsatz,
     tief = roh.copy()
     tief[:, 2] -= zustand.tief          # tiefste Lage - für die Bodenfreiheit
 
+    # Jede Pruefung laeuft in der Lage, in der sie kritisch wird - und der
+    # Befund sagt, welche das war. Der Report nennt sie als "kritischster
+    # Fahrzustand" (M9).
+    konstruktion = "Konstruktionslage"
+    ausgefedert = f"ausgefedert +{zustand.hoch:.1f} mm"
+    eingefedert = f"eingefedert \u2212{zustand.tief:.1f} mm"
     befunde: list[Regelbefund] = []
-    befunde += _laenge(roh, regelsatz, bezug)
-    befunde += _hoehe(hoch, regelsatz, bezug, zustand)
-    befunde += _breite(hoch, regelsatz, bezug)
-    befunde += _bodenfreiheit(tief, regelsatz, bezug, zustand)
-    befunde += _keepout(roh, regelsatz, bezug)
-    befunde += _quader(roh, regelsatz, bezug)
+    for gruppe, lage in ((_laenge(roh, regelsatz, bezug), konstruktion),
+                         (_hoehe(hoch, regelsatz, bezug, zustand), ausgefedert),
+                         (_breite(hoch, regelsatz, bezug), ausgefedert),
+                         (_bodenfreiheit(tief, regelsatz, bezug, zustand), eingefedert),
+                         (_keepout(roh, regelsatz, bezug), konstruktion),
+                         (_quader(roh, regelsatz, bezug), konstruktion)):
+        for b in gruppe:
+            b.fahrzustand = lage
+        befunde += gruppe
 
     for b in befunde:
         b.stand = regelsatz.version

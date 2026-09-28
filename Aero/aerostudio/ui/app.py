@@ -1035,6 +1035,22 @@ def _ansicht_projekt() -> html.Div:
                      style={"marginTop": "9px"}),
         ]),
         _karte([
+            _ueberschrift("Report für Design-Jury und Technical Inspection"),
+            html.Div("Ein PDF mit Regelkonformität, Geometrie, Aerodynamik, "
+                     "Unterboden und Balance. Die im Reiter Balance gewählten "
+                     "Specs, Geschwindigkeit und Zielbalance gehen mit ein. "
+                     "Dauert mit Aerodynamik etwa eine Viertelminute je Flügel.",
+                     className="as-hinweis", style={"marginBottom": "9px"}),
+            dcc.Checklist(id="report-aero", value=["ja"],
+                          options=[{"label": " mit Aerodynamik", "value": "ja"}],
+                          style={"fontSize": "13px", "marginBottom": "8px"}),
+            html.Button("Report als PDF", id="btn-report", n_clicks=0,
+                        className="as-knopf as-knopf-voll"),
+            dcc.Loading(html.Div(id="report-status", className="as-hinweis",
+                                 style={"marginTop": "9px"}), type="dot"),
+            dcc.Download(id="report-download"),
+        ]),
+        _karte([
             _ueberschrift("AeroSpec"),
             html.Div("Das hier ist der gesamte Zustand des Programms. Genau diese "
                      "Datei wird gespeichert und liegt im Git.",
@@ -3342,6 +3358,30 @@ def _paket_speichern(n, nr, datei, daten, weitere):
                 f"Unterboden und Rake in einer Datei.")
     except Exception as fehler:
         return _fehlerkarte(fehler)
+
+
+@app.callback(Output("report-download", "data"), Output("report-status", "children"),
+              Input("btn-report", "n_clicks"),
+              State("spec", "data"), State("bal-specs", "value"),
+              State(wert("bal-tempo"), "value"), State(wert("bal-ziel"), "value"),
+              State("report-aero", "value"), prevent_initial_call=True)
+def _report(n, daten, weitere, tempo, ziel, aero):
+    """Der M9-Report aus der Oberflaeche - dieselbe Funktion wie die
+    Kommandozeile, nur mit den Einstellungen aus dem Reiter Balance."""
+    from ..formate import report
+    if not daten:
+        return no_update, ""
+    try:
+        spec = AeroSpec.model_validate(daten)
+        daten_ = report.sammeln(
+            spec, [AeroSpec.laden(PROJEKT / p) for p in weitere or []],
+            ["Editor", *(weitere or [])], float(tempo or 20.0),
+            float(ziel) if ziel not in (None, "") else None, bool(aero))
+        name = "".join(z if z.isalnum() else "_" for z in spec.meta.name)[:60]
+        pfad = report.schreiben(daten_, PROJEKT / "export" / f"report_{name}.pdf")
+        return dcc.send_file(str(pfad)), f"Geschrieben: {pfad}"
+    except Exception as fehler:
+        return no_update, _fehlerkarte(fehler)
 
 
 def _doe_pfad(datei: str | None) -> Path:
