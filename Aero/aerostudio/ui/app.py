@@ -500,6 +500,10 @@ def _ansicht_fluegel() -> html.Div:
                 style={"gridTemplateColumns": "repeat(auto-fit, minmax(210px, 1fr))",
                        "marginBottom": "14px"}),
             dcc.Loading(html.Div(id="vorschlag-ergebnis"), type="dot"),
+            # Fest im Layout und nicht in der Vorschlagsliste: Stand es dort,
+            # gab es die Kennung erst nach dem ersten Vorschlag, und Dash
+            # meldete bei jedem Seitenaufruf "ID not found in layout".
+            html.Div(id="uebernommen", style={"marginTop": "8px"}),
         ]),
     ])
 
@@ -2035,6 +2039,7 @@ def _abtrieb_rechnen(n, daten, tempo):
 
 @app.callback(Output("vorschlag-ergebnis", "children"),
               Output("vorschlag", "data"),
+              Output("uebernommen", "children", allow_duplicate=True),
               Input("btn-vorschlag", "n_clicks"),
               State("spec", "data"), State(wert("tempo"), "value"),
               State(wert("zielabtrieb"), "value"),
@@ -2045,7 +2050,7 @@ def _abtrieb_rechnen(n, daten, tempo):
 def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
                        weite_min, weite_max, winkel_min):
     if not daten:
-        return "", None
+        return "", None, ""
     try:
         spec = AeroSpec.model_validate(daten)
         element = spec.elemente[0]
@@ -2079,9 +2084,10 @@ def _vorschlag_rechnen(n, daten, tempo, ziel, sehne_min, sehne_max,
         gemerkt = [{"sehne": k.sehne, "halbspannweite": k.halbspannweite,
                     "anstellwinkel": k.anstellwinkel, "hoehe": k.hoehe}
                    for k in ([v.treffer] + v.alternativen) if k is not None]
-        return _vorschlagskarte(v), gemerkt
+        # Eine alte "uebernommen"-Meldung gehoert zur alten Liste.
+        return _vorschlagskarte(v), gemerkt, ""
     except Exception as fehler:
-        return _fehlerkarte(fehler), None
+        return _fehlerkarte(fehler), None, ""
 
 
 def _vorschlagskarte(v) -> html.Div:
@@ -2165,7 +2171,6 @@ def _vorschlagskarte(v) -> html.Div:
         "Verwindung aus der Sektionstabelle bleibt erhalten und wird nur auf "
         "die neue Spannweite gestreckt. Danach im Reiter Creo exportieren.",
         className="as-hinweis", style={"marginTop": "12px"}))
-    teile.append(html.Div(id="uebernommen", style={"marginTop": "8px"}))
     return html.Div(teile)
 
 
