@@ -57,8 +57,11 @@ class Beitrag:
     hinweis: str = ""
 
     def last_vorne(self, radstand: float) -> float:
+        # Ein aufsetzendes Teil hat keinen Widerstand (NaN) - es darf die
+        # Balance des ganzen Autos nicht mit in NaN ziehen.
+        widerstand = self.widerstand if math.isfinite(self.widerstand) else 0.0
         return (self.abtrieb * (radstand - self.x)
-                - self.widerstand * self.z) / radstand
+                - widerstand * self.z) / radstand
 
 
 @dataclass
@@ -147,6 +150,19 @@ class Bilanz:
     @property
     def last_vorne(self) -> float:
         return float(sum(b.last_vorne(self.radstand) for b in self.beitraege))
+
+    def druckpunkt_fuer(self, ziel_prozent: float) -> float:
+        """Wo der Druckpunkt liegen muesste, damit die Balance das Ziel
+        trifft - SAMT dem Nickmoment des Widerstands, das in die Balance
+        eingeht, in den Druckpunkt aber nicht. Ohne diesen Term stuende die
+        Ziellinie im Bild neben dem Druckpunkt, obwohl die Zahl genau passt.
+        """
+        if abs(self.abtrieb) < 1e-9:
+            return float("nan")
+        moment = sum(b.widerstand * b.z for b in self.beitraege
+                     if math.isfinite(b.widerstand))
+        return (self.radstand * (1.0 - float(ziel_prozent) / 100.0)
+                - moment / self.abtrieb)
 
     @property
     def last_hinten(self) -> float:

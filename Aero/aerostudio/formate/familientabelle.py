@@ -33,25 +33,34 @@ def praefix(element) -> str:
 
 
 def tabelle(spec) -> tuple[list[str], list[list]]:
-    """Kopf und Zeilen - alle Elemente mit DRS in einer Tabelle."""
+    """Kopf und Zeilen - alle Elemente mit DRS in einer Tabelle.
+
+    Der offene Zustand kommt aus `drs.element_offen` - derselben Funktion,
+    die gerechnet und gegen die Regeln geprueft wird. Eine eigene Rechnung
+    hier liefe auseinander, sobald sich die DRS-Kinematik aendert.
+    """
+    from ..aero import drs
+
     kopf = ["Instanz"]
     zu, auf = [], []
     namen = []
     for element in spec.elemente:
+        if not drs.hat_drs(element):
+            continue
         p = praefix(element)
-        for i, k in enumerate(element.kaskade, start=2):
+        offen = drs.element_offen(element)
+        for i, (k, ko) in enumerate(zip(element.kaskade, offen.kaskade), start=2):
             if k.drs_winkel is None:
                 continue
-            delta = k.drs_winkel - k.winkel
             kopf.append(f"{p}_E{i}_AOA")
             zu.append(k.winkel)
-            auf.append(k.drs_winkel)
+            auf.append(ko.winkel)
             if k.winkel_aussen is not None:
                 kopf.append(f"{p}_E{i}_AOA_AUSSEN")
                 zu.append(k.winkel_aussen)
-                auf.append(k.winkel_aussen + delta)
-            if p not in namen:
-                namen.append(p)
+                auf.append(ko.winkel_aussen)
+        if p not in namen:
+            namen.append(p)
     if not namen:
         return kopf, []
     name = "_".join(namen)

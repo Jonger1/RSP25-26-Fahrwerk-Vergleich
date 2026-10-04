@@ -202,3 +202,22 @@ def test_speichern_bei_geaendertem_paket_verweigert(projekt):
 
 def test_speichern_ohne_wahl():
     assert "anklicken" in UI._paket_speichern(1, None, "x.yaml", {}, [])
+
+
+def test_spec_auswahl_ohne_editor_und_pakete(tmp_path, monkeypatch):
+    """Review 29.09.: aktuell.yaml oder eine Paketvariante dazugenommen
+    zaehlten die Fluegel doppelt."""
+    for name in ("aktuell.yaml", "pakete/paket_variante_3.yaml", "heck.yaml"):
+        (tmp_path / "specs" / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "specs" / name).write_text("x")
+    monkeypatch.setattr(UI, "PROJEKT", tmp_path)
+    assert [o["label"] for o in UI._spec_dateien()] == ["heck.yaml"]
+
+
+def test_ziellinie_beruecksichtigt_das_widerstandsmoment():
+    from aerostudio.aero import gesamt as g
+    b = g.Bilanz([g.Beitrag("a", "fluegel", 100.0, 20.0, -500.0, 900.0),
+                  g.Beitrag("b", "fluegel", 100.0, 10.0, 1600.0, 900.0)], 1535.0, 20.0)
+    ziel = 100.0 * b.balance_vorne
+    # Genau am Ziel: Die Linie liegt auf dem Druckpunkt.
+    assert b.druckpunkt_fuer(ziel) == pytest.approx(b.druckpunkt_x)

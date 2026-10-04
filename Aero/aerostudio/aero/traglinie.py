@@ -374,11 +374,16 @@ def rechne(stapel, profil=None, geschwindigkeit: float = 15.0,
     flaeche_i = sehne * breite
     daempfung_start = float(daempfung)
 
+    # A aendert sich in der Iteration nicht - einmal zerlegen statt in
+    # jedem der bis zu tausend Schritte neu loesen.
+    from scipy.linalg import lu_factor, lu_solve
+    zerlegt = lu_factor(A)
+
     for schritt in range(1, schritte_max + 1):
         # Randbedingung: Die Strömung muss der Sehne folgen.
         #   V sin(a) + w cos(a) = 0   ->   w = -V tan(a)
         rechte_seite = -V * np.tan(np.radians(winkel + korrektur))
-        zirkulation = np.linalg.solve(A, rechte_seite)
+        zirkulation = lu_solve(zerlegt, rechte_seite)
 
         w_nachlauf = A_nachlauf @ zirkulation
         alpha_ind = np.degrees(np.arctan2(w_nachlauf, V))

@@ -947,7 +947,7 @@ def balancebild(bilanz, ziel: float | None = None) -> go.Figure:
                       annotation_position="top right")
     if ziel is not None:
         # Wo der Druckpunkt fuer die Zielbalance liegen muesste.
-        x_ziel = L * (1.0 - float(ziel) / 100.0)
+        x_ziel = bilanz.druckpunkt_fuer(ziel)
         fig.add_vline(x=x_ziel, line=dict(color=FARBE_ZIEL, width=2, dash="dot"),
                       annotation_text=f"Ziel {ziel:.0f} % vorn",
                       annotation_position="bottom right")

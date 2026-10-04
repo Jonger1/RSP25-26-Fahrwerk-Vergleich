@@ -146,3 +146,10 @@ def test_kommandozeile(tmp_path, monkeypatch, capsys):
     ausgabe = capsys.readouterr().out
     assert "55 Varianten" in ausgabe and "Kennfeld" in ausgabe
     assert len(doe.Lauf.laden(ziel).front) >= 1
+
+
+def test_zielbalance_steht_in_der_ergebnisdatei(tmp_path):
+    """Review 29.09.: Ohne sie liesse sich eine geladene Front nicht lesen."""
+    lauf, _ = paket.laufen(_paket(), attrappe, 47.0, n=8, radstand=L)
+    geladen = doe.Lauf.laden(lauf.speichern(tmp_path / "p.yaml"))
+    assert geladen.zusatz["zielbalance"] == 47.0

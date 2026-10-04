@@ -83,6 +83,7 @@ class Reportdaten:
     familientabelle: tuple = ((), ())
     wanderung: list = field(default_factory=list)
     mit_aero: bool = True
+    hinweise: list[str] = field(default_factory=list)
     erstellt: str = field(
         default_factory=lambda: datetime.now().strftime("%d.%m.%Y %H:%M"))
 
@@ -167,11 +168,17 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
 
     if p.unterboden is not None:
         melden("Unterboden")
-        daten.unterboden = unterboden.rechne(p.unterboden, p.lage, geschwindigkeit)
-        daten.unterboden_kennlinie = unterboden.kennlinie(p.unterboden, p.lage,
-                                                          geschwindigkeit)
-        daten.unterboden_befunde = unterboden.pruefe(p.unterboden, p.lage,
-                                                     regeln.lade("2026"))
+        # Die Pruefung zuerst und immer: Gerade ein aufsetzender Boden muss
+        # als Verstoss im Report stehen, statt ihn ganz zu verhindern.
+        daten.unterboden_befunde = unterboden.pruefe(
+            p.unterboden, p.lage, regeln.lade("2026"), zustand.tief)
+        try:
+            daten.unterboden = unterboden.rechne(p.unterboden, p.lage,
+                                                 geschwindigkeit)
+            daten.unterboden_kennlinie = unterboden.kennlinie(
+                p.unterboden, p.lage, geschwindigkeit)
+        except ValueError as fehler:
+            daten.hinweise.append(f"Unterboden nicht gerechnet: {fehler}")
 
     if mit_aero and (teile or p.unterboden is not None):
         melden("Gesamtfahrzeug und Nickwanderung")
@@ -558,7 +565,7 @@ def _gesamtseite(pdf, daten: Reportdaten, nr: int):
         ax.axvline(b.druckpunkt_x, color="#cf2027", linestyle="--",
                    label=f"Druckpunkt {b.druckpunkt_x:.0f} mm")
     if daten.ziel is not None:
-        ax.axvline(b.radstand * (1 - daten.ziel / 100.0), color="#2e7d32",
+        ax.axvline(b.druckpunkt_fuer(daten.ziel), color="#2e7d32",
                    linestyle=":", label=f"Ziel {daten.ziel:.0f} % vorn")
     ax.set_title("Abtrieb je Teil an seinem Angriffspunkt", fontsize=9, loc="left")
     ax.set_xlabel("x ab Vorderachse [mm]", fontsize=8)
@@ -674,9 +681,13 @@ def _grenzenseite(pdf, daten: Reportdaten, nr: int):
     _tabelle(fig.add_axes([0.07, 0.3, 0.86, 0.18]), ["Regel", "Stand"],
              [[a, _umbruch(b, 95)] for a, b in OFFEN], [0.2, 0.8], schrift=7.5,
              farben=["#fff4e0"] * len(OFFEN))
-    for teil in daten.fluegel:
-        for h in teil.hinweise:
-            fig.text(0.07, 0.24, f"{teil.name}: {h}", fontsize=8, color=GRAU)
+    zeilen = [f"{t.name}: {h}" for t in daten.fluegel for h in t.hinweise]
+    zeilen += daten.hinweise
+    if zeilen:
+        fig.text(0.07, 0.25, "Hinweise zu diesem Entwurf", fontsize=11,
+                 fontweight="bold")
+        fig.text(0.07, 0.23, "\n".join(_umbruch(z, 120) for z in zeilen),
+                 fontsize=8, color=GRAU, va="top", linespacing=1.5)
     _fuss(fig, daten, nr)
     pdf.savefig(fig)
     plt.close(fig)

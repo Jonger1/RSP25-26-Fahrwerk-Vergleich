@@ -186,3 +186,11 @@ def test_hinweise_ohne_heckfluegel():
     text = " ".join(b.hinweise)
     assert "hinter der Fahrzeugmitte" in text
     assert "Ohne Unterboden" in text
+
+
+def test_aufsetzendes_teil_macht_die_balance_nicht_nan():
+    """Review 29.09.: widerstand=NaN mal z ergab NaN fuer das ganze Auto."""
+    b = gesamt.Bilanz([beitrag(100.0, -500.0),
+                       beitrag(0.0, 800.0, widerstand=float("nan"), z=0.0),
+                       beitrag(80.0, L + 100.0, widerstand=10.0, z=900.0)], L, 20.0)
+    assert math.isfinite(b.balance_vorne)

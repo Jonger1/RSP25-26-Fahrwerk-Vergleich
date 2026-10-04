@@ -142,7 +142,13 @@ def hoehenverlauf(ub, lage=None, hub: float = 0.0,
     # Boden liegt die tiefste Stelle immer an einem Knick; ein gleichmaessiges
     # Raster trifft ihn nur zufaellig und ueberschaetzt dann die
     # Bodenfreiheit - bei T 2.2.1 die falsche Richtung.
-    x = np.union1d(np.linspace(x0, x3, n), [x0, x1, x2, x3])
+    #
+    # Auf den Nanometer gerundet, bevor vereinigt wird: Liegt ein Knick
+    # zufaellig auf einem Rasterpunkt, ergaeben linspace und Knickliste zwei
+    # Werte im Abstand 1e-13, und np.gradient lieferte dort eine riesige
+    # Steigung - der Diffusor galt dann als abgeloest (Review 29.09.).
+    x = np.union1d(np.round(np.linspace(x0, x3, n), 6),
+                   np.round([x0, x1, x2, x3], 6))
 
     h = np.empty_like(x)
     m = x <= x1
@@ -297,7 +303,8 @@ class Bodenbefund:
     grenze: float
 
 
-def pruefe(ub, lage=None, regelsatz=None, einfedern: float = 24.35) -> list[Bodenbefund]:
+def pruefe(ub, lage=None, regelsatz=None,
+           einfedern: float | None = None) -> list[Bodenbefund]:
     """T 2.2.1 und das Aufsetzen im tiefsten Fahrzustand.
 
     T 2.2.1 verlangt 30 mm STATISCHE Bodenfreiheit mit Fahrer - geprueft in
@@ -305,6 +312,11 @@ def pruefe(ub, lage=None, regelsatz=None, einfedern: float = 24.35) -> list[Bode
     nichts aufsetzen; das ist keine Zahl aus dem Reglement, sondern die
     Bedingung dafuer, dass die Rechnung ueberhaupt gilt.
     """
+    if einfedern is None:
+        # Derselbe Fahrzustand wie bei der Fluegelpruefung - nicht eine
+        # eigene Zahl, die auseinanderlaufen kann.
+        from ..regeln import Fahrzustand
+        einfedern = Fahrzustand().tief
     grenze = 30.0
     if regelsatz is not None:
         try:

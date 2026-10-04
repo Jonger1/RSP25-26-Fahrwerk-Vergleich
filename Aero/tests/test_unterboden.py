@@ -197,3 +197,17 @@ def test_unterboden_ueberlebt_speichern(tmp_path):
     assert geladen.unterboden.diffusor_winkel == 12.5
     assert geladen.lage.rake_grad == 0.8
     assert geladen.hash() == spec.hash()
+
+
+def test_knick_auf_rasterpunkt_erzeugt_keine_scheinsteigung():
+    """Review 29.09.: Liegt ein Knick genau auf einem Rasterpunkt, lieferte
+    union1d zwei Werte im Abstand 1e-13 und np.gradient eine riesige
+    Steigung - der Diffusor galt als abgeloest (285 -> 246 N)."""
+    from aerostudio.spec.modell import Unterboden
+    a = ub.rechne(Unterboden(einlass_laenge=100, kehle_laenge=980,
+                             diffusor_laenge=540, diffusor_winkel=14.9))
+    b = ub.rechne(Unterboden(einlass_laenge=100, kehle_laenge=981,
+                             diffusor_laenge=540, diffusor_winkel=14.9))
+    assert a.diffusor_winkel_wirksam == pytest.approx(14.9, abs=0.05)
+    assert not a.abgeloest
+    assert a.abtrieb == pytest.approx(b.abtrieb, rel=0.01)

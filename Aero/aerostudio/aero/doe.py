@@ -225,6 +225,9 @@ class Lauf:
     seed: int
     zeitpunkt: str = field(
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M"))
+    # Was ein Lauf sonst noch wissen muss, um sich lesen zu lassen - etwa
+    # die Zielbalance, gegen die der Paket-DoE den Balancefehler misst.
+    zusatz: dict = field(default_factory=dict)
 
     @property
     def gueltige(self) -> int:
@@ -236,7 +239,8 @@ class Lauf:
         daten = {
             "meta": {"basis_hash": self.basis_hash, "zeitpunkt": self.zeitpunkt,
                      "geschwindigkeit": self.geschwindigkeit, "seed": self.seed,
-                     "varianten": len(self.varianten), "gueltig": self.gueltige},
+                     "varianten": len(self.varianten), "gueltig": self.gueltige,
+                     "zusatz": dict(self.zusatz)},
             "raum": [{"pfad": p.pfad, "von": p.von, "bis": p.bis, "name": p.name}
                      for p in self.raum],
             "ziele": [{"name": z.name, "maximieren": z.maximieren,
@@ -261,7 +265,8 @@ class Lauf:
             front=list(d["front"]),
             geschwindigkeit=float(d["meta"]["geschwindigkeit"]),
             seed=int(d["meta"]["seed"]),
-            zeitpunkt=str(d["meta"]["zeitpunkt"]))
+            zeitpunkt=str(d["meta"]["zeitpunkt"]),
+            zusatz=dict(d["meta"].get("zusatz") or {}))
 
 
 def _sauber(ergebnis: dict) -> dict:

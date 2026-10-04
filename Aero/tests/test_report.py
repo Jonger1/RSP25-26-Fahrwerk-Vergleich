@@ -108,3 +108,16 @@ def test_report_aus_der_oberflaeche(tmp_path, monkeypatch, schnell):
     download, status = UI._report(1, daten, [], 20.0, 45.0, [])
     assert "Geschrieben" in status
     assert download["filename"].endswith(".pdf")
+
+
+def test_aufsetzender_unterboden_verhindert_den_report_nicht(tmp_path):
+    """Review 29.09.: Der ValueError brach den ganzen Report ab."""
+    from aerostudio.spec.modell import Fahrzeuglage
+    spec = AeroSpec.laden(FRONT)
+    spec.unterboden = Unterboden(kehle_hoehe_hinten=20.0)
+    spec.lage = Fahrzeuglage(rake_grad=-2.0)
+    d = report.sammeln(spec, mit_aero=False)
+    assert d.unterboden is None
+    assert any("setzt auf" in h for h in d.hinweise)
+    assert any(not b.ok for b in d.unterboden_befunde)
+    assert report.schreiben(d, tmp_path / "r.pdf").is_file()

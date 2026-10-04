@@ -930,13 +930,19 @@ def _ansicht_unterboden() -> html.Div:
 
 
 def _spec_dateien() -> list[dict]:
-    """Alle Specs unter specs/ als Auswahl - ohne die Historie."""
+    """Specs unter specs/ zum Dazunehmen.
+
+    Ohne die Historie, ohne das Spec im Editor selbst (aktuell.yaml) und
+    ohne gespeicherte Paketvarianten - die enthalten schon alle Fluegel,
+    dazugenommen zaehlten Front- und Heckfluegel doppelt.
+    """
     ordner = PROJEKT / "specs"
     if not ordner.is_dir():
         return []
     return [{"label": str(p.relative_to(ordner)), "value": str(p.relative_to(PROJEKT))}
             for p in sorted(ordner.rglob("*.yaml"))
-            if ".historie" not in p.parts]
+            if ".historie" not in p.parts and "pakete" not in p.parts
+            and p.name != SPEC_VORGABE.name]
 
 
 def _ansicht_balance() -> html.Div:
@@ -3310,9 +3316,18 @@ def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
 
 
 def _paketstatus(lauf, pfad, ziel, bewertung) -> html.Div:
+    gespeichert = lauf.zusatz.get("zielbalance")
     zeilen = [html.Div(f"{len(lauf.varianten)} Varianten, {lauf.gueltige} "
-                       f"gültig, {len(lauf.front)} auf der Pareto-Front. "
-                       f"Gespeichert in {pfad}.", className="as-status-ok")]
+                       f"gültig, {len(lauf.front)} auf der Pareto-Front"
+                       + (f", Zielbalance {gespeichert:.0f} % vorn"
+                          if gespeichert is not None else "")
+                       + f". Gespeichert in {pfad}.", className="as-status-ok")]
+    if (gespeichert is not None and ziel not in (None, "")
+            and abs(float(ziel) - gespeichert) > 1e-9):
+        zeilen.append(html.Div(
+            f"Der Lauf wurde auf {gespeichert:.0f} % optimiert, im Feld steht "
+            f"{float(ziel):.0f} %. Balancefehler und Front beziehen sich auf "
+            f"{gespeichert:.0f} %.", className="as-status-hinweis"))
     gueltig = [e for e in lauf.ergebnisse if e.get("gueltig")]
     if gueltig:
         bester = min(gueltig, key=lambda e: e["balancefehler"])

@@ -280,6 +280,7 @@ def laufen(paket, rechnen: Callable, ziel: float, n: int = 200, *,
     lauf = doe.laufen(paket, parameter, n, seed=seed,
                       geschwindigkeit=geschwindigkeit, bewerten=bewertung,
                       ziele=PAKET_ZIELE, regelsatz=regelsatz)
+    lauf.zusatz["zielbalance"] = float(ziel)
     return lauf, bewertung
 
 
