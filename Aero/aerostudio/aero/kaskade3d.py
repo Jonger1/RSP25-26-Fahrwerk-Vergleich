@@ -122,12 +122,70 @@ def kaskadenpolare(elemente: list[geo.Elementlage],
             cl[k] = cl[grenze] * (1.0 - 0.05 * (grenze - k))
             vertrauen[k] = min(vertrauen[k], 0.5)
 
+    alpha, cl, cd, vertrauen = _anliegend_fortsetzen(alpha, cl, cd, vertrauen)
+
     polare = Polare(alpha=alpha, cl=cl, cd=cd, cm=np.zeros_like(cl),
                     vertrauen=vertrauen,
                     reynolds=reynolds(geschwindigkeit,
                                       geo.gesamtsehne(elemente)),
                     name=" + ".join(e.name for e in elemente))
     return polare, bool(abgerissen_null)
+
+
+# Unterhalb dieser wirksamen Streckung ist die Traglinie nur eine Naeherung.
+STRECKUNG_MIN = 3.0
+
+# Wie weit die Kaskadenpolare auf der ANLIEGENDEN Seite linear fortgesetzt
+# wird, und in welchen Schritten.
+FORTSETZUNG_GRAD = 30.0
+FORTSETZUNG_SCHRITT = 5.0
+
+
+def _anliegend_fortsetzen(alpha, cl, cd, vertrauen):
+    """Setzt die Polare auf der anliegenden Seite linear fort.
+
+    Gerechnet wird nur +-6 Grad um den Entwurfswinkel. Bei kleiner Streckung
+    - ein Heckfluegel mit 560 mm Spannweite hat AR um 1,4 - kippt der
+    induzierte Winkel die Anstroemung aber um 10 Grad und mehr. Bis zum
+    07.10.2026 wurde jenseits des Rands auf den Randbeiwert geklemmt: Jeder
+    Streifen hing dann am selben Beiwert, die Last war ueber die Spannweite
+    exakt konstant bis in die Spitze, und der induzierte Widerstand lag beim
+    Heckfluegel-Beispiel beim Doppelten des ideal-elliptischen Werts.
+
+    Auf der anliegenden Seite - dort, wo der Beiwertbetrag Richtung null
+    faellt - ist die Polare linear, und die Fortsetzung ist die Physik.
+    Welche Seite das ist, sagt das Vorzeichen: Ein Abtriebsprofil (cl < 0)
+    liegt zu groesseren Winkeln hin an, ein Auftriebsprofil zu kleineren.
+    Die Abrissseite bleibt geklemmt, dort waere Extrapolation geraten. Der
+    Widerstand wird gehalten, das Vertrauen halbiert.
+    """
+    if len(alpha) < 2:
+        return alpha, cl, cd, vertrauen
+    abtrieb = float(np.mean(cl)) < 0.0
+    if abtrieb:
+        a0, a1, c0, c1 = alpha[-2], alpha[-1], cl[-2], cl[-1]
+        rand, cd_rand, v_rand = a1, cd[-1], vertrauen[-1]
+        richtung = 1.0
+    else:
+        a0, a1, c0, c1 = alpha[1], alpha[0], cl[1], cl[0]
+        rand, cd_rand, v_rand = a1, cd[0], vertrauen[0]
+        richtung = -1.0
+    steigung = (c1 - c0) / (a1 - a0)
+    # Nur fortsetzen, wenn der Beiwertbetrag dort wirklich faellt - sonst ist
+    # der Rand nicht die anliegende Seite, und Raten waere schlimmer.
+    if (c1 - c0) * (1.0 if abtrieb else -1.0) <= 0.0 and not np.isclose(c1, c0):
+        return alpha, cl, cd, vertrauen
+    neu_a = rand + richtung * np.arange(FORTSETZUNG_SCHRITT,
+                                        FORTSETZUNG_GRAD + 1e-9,
+                                        FORTSETZUNG_SCHRITT)
+    neu_cl = c1 + steigung * (neu_a - a1)
+    neu_cd = np.full_like(neu_a, cd_rand)
+    neu_v = np.full_like(neu_a, min(float(v_rand), 0.5))
+    alpha = np.concatenate([alpha, neu_a])
+    ordnung = np.argsort(alpha)
+    return (alpha[ordnung], np.concatenate([cl, neu_cl])[ordnung],
+            np.concatenate([cd, neu_cd])[ordnung],
+            np.concatenate([vertrauen, neu_v])[ordnung])
 
 
 def _skaliert(polare: Polare, faktor: float) -> Polare:
@@ -239,6 +297,17 @@ def rechne(haupt, spannweite, sehne: float, winkel: float, vorgaben: list,
         if s.abgerissen:
             hinweise.append(f"Bei y = {s.y:.0f} mm reißt die Kaskade "
                             f"({', '.join(s.namen)}) schon im Schnitt ab.")
+    # Die Traglinie setzt eine grosse Streckung voraus. Unter etwa 3 - auch
+    # mit der Endplattenwirkung gerechnet - ist sie eine Naeherung: Die
+    # Stroemung um die Fluegelspitze ist dann dreidimensional, und das
+    # Wirbelmodell aus einer einzigen Linie bildet sie nicht ab.
+    wirksam = kraefte.streckung * kraefte.endplattenfaktor
+    if 0.0 < wirksam < STRECKUNG_MIN:
+        hinweise.append(
+            f"Kleine Streckung ({kraefte.streckung:.1f}, mit Endplatten "
+            f"wirksam {wirksam:.1f}): Die Traglinie ist hier nur eine "
+            f"Näherung. Abtrieb und induzierter Widerstand vor dem Einsatz "
+            f"mit CFD abgleichen.")
     wirkungen = [s.bodenwirkung for s in stuetzwerte if s.bodenwirkung]
     if wirkungen:
         tiefste = min(wirkungen, key=lambda w: w.hoehe_sehnen)
