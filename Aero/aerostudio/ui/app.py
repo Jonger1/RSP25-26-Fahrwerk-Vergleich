@@ -1038,11 +1038,10 @@ def _ansicht_regeln() -> html.Div:
                   "Beim Bremsen kommt das Nicken dazu."),
             _feld("Regelstand", dcc.Dropdown(
                 id="regelstand", clearable=False,
-                options=[{"label": "2026 (gültig)", "value": "2026"},
-                         {"label": "2027 (Entwurf)", "value": "2027"}],
-                value="2026"),
-                "Der Entwurf 2027 bringt T 2.1.4 neu und lockert T 8.2.2. "
-                "Was es nur im Entwurf gibt, warnt — es blockiert nicht."),
+                options=[{"label": "FS Rules 2027 v1.0", "value": "2027"}],
+                value=regeln.AKTUELL),
+                "Der einzige Regelstand im Werkzeug. Original: "
+                "Aero/FS_Rules_2027_v1.0.pdf."),
         ], spalten="240px"),
 
         html.Div(id="regelampel"),
@@ -3065,7 +3064,7 @@ def _unterboden_rechnen(daten, tempo):
         e = aero_unterboden.rechne(spec.unterboden, spec.lage, v)
         k = aero_unterboden.kennlinie(spec.unterboden, spec.lage, v)
         befunde = aero_unterboden.pruefe(spec.unterboden, spec.lage,
-                                         regeln.lade("2026"))
+                                         regeln.lade())
         return (_unterbodenkarte(e, k, befunde),
                 darstellung.unterbodenschnitt(e, spec.unterboden),
                 darstellung.bodendruck(e),
@@ -3302,7 +3301,7 @@ def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
             lauf, bewertung = aero_paket.laufen(
                 p, _fluegelkraefte, float(ziel), int(n or 200),
                 parameter=parameter, geschwindigkeit=v, radstand=radstand,
-                regelsatz=regeln.lade("2026"), felder=felder)
+                regelsatz=regeln.lade(), felder=felder)
             lauf.speichern(pfad)
         else:
             if not pfad.is_file():
@@ -3528,7 +3527,7 @@ def _doe(n_rechnen, n_laden, daten, n, tempo, datei):
                                       className="as-status-hinweis")
             lauf = aero_doe.laufen(spec, n=int(n or 200),
                                    geschwindigkeit=float(tempo or 20.0),
-                                   regelsatz=regeln.lade("2026"))
+                                   regelsatz=regeln.lade())
             lauf.speichern(ziel)
         else:
             if not ziel.is_file():
@@ -3637,7 +3636,7 @@ def _regelansicht(daten, stand, hoch, tief):
             hoch=float(0.0 if hoch is None else hoch),
             tief=float(0.0 if tief is None else tief),
             quelle="im Reiter Fahrzeug & Regeln eingestellt")
-        satz = regeln.lade(stand or "2026")
+        satz = regeln.lade(stand or regeln.AKTUELL)
 
         befunde = regeln.pruefe_fluegel(stapel, satz, bezug, zustand)
         return (_ampelkarte(befunde, satz, zustand, element),

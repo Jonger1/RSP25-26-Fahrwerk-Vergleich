@@ -1,0 +1,136 @@
+# FS Rules 2027 v1.0 - der EINZIGE Regelstand im Werkzeug
+#
+# Quelle: Formula Student Rules 2027, Version 1.0
+#         Original im Repo: Aero/FS_Rules_2027_v1.0.pdf
+#         https://www.formulastudent.de/fileadmin/user_upload/all/2027/rules/FS_Rules_2027_v1.0.pdf
+#
+# Alle Werte hier sind aus dem Originaltext abgeschrieben, mit Seitenangabe.
+# Wer eine Zahl aendert, schaut zuerst in das PDF. Die frueheren Staende
+# (FS Rules 2026 v1.1 und der Academy-Entwurf 2027 vom 25.10.2025) sind
+# seit dem 06.10.2026 entfernt - sie stehen nur noch in der Git-Historie.
+#
+# Alle Laengen in mm. Bezugsebene z = 0 ist der Boden.
+
+meta:
+  version: "2027-v1.0"
+  quelle: "FS Rules 2027 v1.0 (Aero/FS_Rules_2027_v1.0.pdf)"
+  status: gueltig
+  verbindlich: true
+  eingearbeitet_am: "2026-10-06"
+
+# ------------------------------------------------ T 2.1 Offene Raeder (S. 20/21)
+t2_1_3:
+  wortlaut: >
+    No part of the vehicle may enter a keep-out-zone defined by two lines
+    extending vertically from positions 75mm in front of and 75mm behind the
+    outer diameter of the front and rear tires in the side view of the
+    vehicle, with steering system straight ahead. This keep-out zone extends
+    laterally outward from the inboard plane of the wheel/tire assembly
+    indefinitely. The keep-out-zone at the rear tires extends up to 700mm
+    above the ground.
+  abstand_vor_reifen: 75
+  abstand_hinter_reifen: 75
+  # Seitlich: von der INNENebene des Rads nach aussen, unbegrenzt.
+  seitlich_nach_aussen_unbegrenzt: true
+  # Vorderrad: die Linien laufen senkrecht ohne Hoehenangabe -> unbegrenzt.
+  # Hinterrad: bis 700 mm ueber Grund.
+  hoehe_hinterreifen: 700
+
+  zusatzzone_hinterrad:
+    wortlaut: >
+      An additional keep-out-zone extends from the top of the rear tire to
+      700mm above the ground and 150mm inboard from the inboard plane of the
+      rear tire. It is bounded longitudinally by the 75mm keep-out-zone of the
+      rear tire.
+    bis_hoehe: 700
+    nach_innen: 150
+
+t2_1_4:
+  wortlaut: >
+    No part of the vehicle forward of the vertical plane through the leading
+    edge of the front tires must enter the variable keep-out zone. It is
+    defined by two independent, non-intersecting, cuboids of 75mm x 250mm x
+    infinite length. One infinite-length face must rest on the ground, and the
+    infinite-length edges must be parallel to the vehicle longitudinal axis.
+    The cuboids must not extend outboard of the front tires.
+  quader_breite: 75
+  quader_hoehe: 250
+
+# ------------------------------------------- T 8.2 Aerodynamische Anbauteile (S. 44/45)
+t8_2_1:
+  beschreibung: Hoehenbeschraenkungen
+  vor_vorderreifen:
+    wortlaut: >
+      All aerodynamic devices forward of a vertical plane through the leading
+      edge of the front tires must be lower than 350mm from the ground.
+    bezug: "Vertikalebene durch die Vorderkante der Vorderreifen"
+    max_hoehe: 350
+  hinter_kopfstuetze:
+    wortlaut: >
+      All aerodynamic devices rearward of a vertical plane through the
+      rearmost portion of the front face of the driver head restraint support,
+      excluding any padding, set to its most rearward position must be lower
+      than 1100mm from the ground.
+    max_hoehe: 1100
+    # Der Academy-Entwurf hatte hier eine Untergrenze von 700 mm. Im
+    # endgueltigen Text steht sie NICHT - der Heckfluegel darf tiefer.
+  alle_uebrigen:
+    wortlaut: >
+      All other aerodynamic devices must be lower than the virtual horizontal
+      plane defined by the topmost points of the two tires on the left or right
+      side of the vehicle, whichever side is closer to the device.
+    bezug: "Ebene durch die obersten Punkte der Reifen"
+
+t8_2_2:
+  beschreibung: Breitenbeschraenkungen
+  unterhalb_reifenoberkante:
+    wortlaut: >
+      All aerodynamic devices lower than the topmost points of the tires and
+      further rearward than a vertical plane through the leading edge of the
+      front tire, must not be wider than a vertical plane touching the most
+      outboard point of the front and rear wheel/tire.
+    grenze: "aeusserster Punkt von Vorder- und Hinterrad"
+  reifenoberkante_bis_700:
+    wortlaut: >
+      All aerodynamic devices between the top edge of the rear tires and 700mm
+      above the ground, must not be wider than 150mm inboard of the most
+      inboard point of each rear tire.
+    bis_hoehe: 700
+    nach_innen: 150
+    grenze: "150 mm innerhalb des innersten Punkts des Hinterreifens"
+  von_700_bis_1100:
+    wortlaut: >
+      All aerodynamic devices between 700mm and 1100mm above the ground, must
+      not extend outboard of the most outboard point of the rear wheel/tire.
+    von_hoehe: 700
+    bis_hoehe: 1100
+    grenze: "aeusserster Punkt des Hinterrads"
+
+t8_2_3:
+  beschreibung: Laengenbeschraenkungen
+  wortlaut: >
+    All aerodynamic devices must not extend further rearward than 250mm from
+    the rearmost part of the rear tires. All aerodynamic devices must not
+    extend further forward than 700mm from the fronts of the front tires.
+  max_hinter_hinterreifen: 250
+  max_vor_vorderreifen: 700
+
+t8_2_4:
+  wortlaut: >
+    All restrictions must be fulfilled with the wheels pointing straight and
+    with any suspension setup with or without a driver seated in the vehicle.
+  ueber_envelope: true
+
+# ------------------------------------------------------- Weitere Regeln (S. 21/22, 45)
+allgemein:
+  t2_2_1_bodenfreiheit_min: 30          # statisch, mit Fahrer
+  t2_2_2_schleifschuerzen_verboten: true
+  t2_4_1_radius_vorwaerts: 3            # mm, nach vorn weisende Kanten
+  t2_4_1_radius_uebrige: 1
+  t2_5_1_federweg_min: 50               # mm nutzbarer Federweg
+  t2_5_1_einfedern_min: 25              # mm Einfedern mit Fahrer
+  t8_3_1_last: 200                      # N, verteilt auf min. 225 cm2
+  t8_3_1_flaeche_min: 225               # cm2
+  t8_3_1_verformung_max: 10             # mm, in Lastrichtung
+  t8_3_2_last: 50                       # N, beliebige Richtung, beliebiger Punkt
+  t8_3_2_verformung_max: 25             # mm

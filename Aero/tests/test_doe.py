@@ -28,7 +28,7 @@ def basis():
 # ------------------------------------------------ Das Kriterium von M8
 
 def test_fuenfzig_varianten_ohne_handeingriff(basis):
-    lauf = doe.laufen(basis, n=60, regelsatz=lade("2026"))
+    lauf = doe.laufen(basis, n=60, regelsatz=lade())
 
     assert len(lauf.varianten) == len(lauf.ergebnisse) == 60
     assert lauf.gueltige >= 50
@@ -164,7 +164,7 @@ def test_ohne_unterboden_klare_meldung():
 def test_zu_tiefer_boden_wird_ungueltig(basis):
     tief = doe.variante(basis, {"unterboden.kehle_hoehe_vorne": 25.0,
                                 "unterboden.kehle_hoehe_hinten": 22.0})
-    e = doe.unterboden_bewerten(tief, regelsatz=lade("2026"))
+    e = doe.unterboden_bewerten(tief, regelsatz=lade())
     assert not e["gueltig"]
     assert "T 2.2.1" in e["grund"]
 

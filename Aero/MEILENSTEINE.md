@@ -146,8 +146,8 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M0 | Creo-Spline nachgebaut und gegen Creo verifiziert (210.184 zu 210.1857 mm) | `geometrie/spline.py` |
 | M1 | Profilkern, Katalog mit 11 Profilen und Notizen, Fertigungsprüfung, IBL-Export | `geometrie/profil.py`, `formate/` |
 | M1 | Oberfläche mit Profil-, Creo- und Projektansicht | `ui/app.py` |
-| M2 | `rules_2026.yaml`, `rules_2027_draft.yaml`, `vehicle_ref.yaml` | `regeln/`, `spec/` |
-| M2 | Validator über den Fahrzustands-Envelope, beide Regelstände nebeneinander | `regeln/pruefung.py` |
+| M2 | `rules_2027.yaml` (FS Rules 2027 v1.0, seit 06.10.2026 einziger Stand), `vehicle_ref.yaml` | `regeln/`, `spec/` |
+| M2 | Validator über den Fahrzustands-Envelope gegen FS Rules 2027 v1.0 | `regeln/pruefung.py` |
 | M4 | Spannweitenverteilungen mit PCHIP, Sektionsstapel-Export mit identischem Aufbau | `geometrie/spannweite.py` |
 | M4 | Sektionseditor: Verwindung je Sektion, Sektionen hinzufügen und löschen | Reiter *Flügel* |
 | M3 | Profilpolare über NeuralFoil, Reynoldszahl aus Geschwindigkeit und Sehne | `aero/profilpolare.py` |
@@ -183,8 +183,15 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
 | M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **596 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **602 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
+
+**Regelstand seit 06.10.2026: FS Rules 2027 v1.0, und nur dieser.** Das Original liegt als `Aero/FS_Rules_2027_v1.0.pdf` im Repo. `regeln/rules_2027.yaml` enthält die Werte samt Wortlaut. FS Rules 2026 v1.1 und der Academy-Entwurf sind entfernt. Gegenüber dem Entwurf hat der endgültige Text drei Abweichungen:
+* Die 700-mm-**Untergrenze** für den Heckflügel gibt es nicht.
+* T 8.2.2 hat drei Höhenbänder. Zwischen Reifenoberkante und 700 mm gilt |y| ≤ innerster Hinterradpunkt − 150 mm, und zwar über die ganze Fahrzeuglänge. Zwischen 700 und 1100 mm gilt der äußerste Hinterradpunkt.
+* T 2.1.3 bekommt eine Zusatzzone über dem Hinterrad (Reifenoberkante bis 700 mm, 150 mm nach innen). Außerdem reicht die Keep-out-Zone seitlich von der Radinnenebene unbegrenzt nach außen.
+
+T 2.1.4 (Quaderkanal) ist jetzt eine harte Regel, kein Hinweis mehr. Die Reifenoberkante zählt bei ungleichen Reifen konservativ mit dem kleineren Durchmesser.
 
 Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
 
@@ -504,7 +511,7 @@ Die UI wächst quer durch M1 bis M5 mit und wird in M6 ausgeliefert. Sie ist dam
 - Ein Meilenstein pro Sitzung, am Ende Commit und Push.
 - Jeder Meilenstein endet mit einem **Nachweis in Creo**, nicht mit "Code läuft durch".
 - Wenn ein "Fertig, wenn"-Kriterium nicht erfüllt ist, wird der Meilenstein nicht abgehakt, sondern der Plan angepasst.
-- Regelstand wird bei jedem Meilenstein mitgeführt: Sobald die FS Rules 2027 erscheinen, kommt eine `rules_2027.yaml` dazu und alle Designs laufen erneut durch den Validator.
+- Regelstand: **FS Rules 2027 v1.0** (Original `Aero/FS_Rules_2027_v1.0.pdf`, Werte in `regeln/rules_2027.yaml`). Ein neuer Stand kommt als eigene YAML-Datei, `regeln.AKTUELL` wird umgestellt, alle Designs laufen erneut durch den Validator.
 - **Zwei Dinge sind in diesem Projekt versioniert und dürfen nie hartcodiert werden: das Reglement und die Creo-Version.** Beides sind Konfigurationsdaten, kein Code. Wer das durchhält, übersteht sowohl die Rules 2027 als auch das nächste Creo-Upgrade ohne Umbau.
 
 ### Was ein späteres Creo-Upgrade konkret kostet

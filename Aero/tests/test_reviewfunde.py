@@ -148,39 +148,33 @@ def _stapel(beispiel):
     return [s for teil in UI._elementstapel(element) for s in teil]
 
 
-def test_draufsicht_folgt_dem_regelstand(beispiel):
-    """2026 gilt oberhalb der Schwelle der INNERSTE Radpunkt (494,75 mm),
-    2027 der aeusserste (695,25). Die Zeichnung las den Satz gar nicht."""
+def test_draufsicht_zeigt_alle_drei_breitengrenzen(beispiel):
+    """T 8.2.2 (2027 v1.0) hat drei Hoehenbaender mit eigener Grenze. Die
+    Zeichnung muss sie aus dem Regelsatz lesen, nicht fest verdrahten - so
+    stand es bis zum 26.09.2026, und das Bild wich von der Ampel ab."""
     from aerostudio.regeln import Bezugsgeometrie
 
     bezug = Bezugsgeometrie.aus_datei()
-    stapel = _stapel(beispiel)
-
-    def grenzen(stand):
-        fig = darstellung.draufsicht(stapel, bezug, lade(stand))
-        return {s.name for s in fig.data if s.name and "T 8.2.2" in s.name}
-
-    assert grenzen("2026") != grenzen("2027")
-    assert any(f"{bezug.rad_innen_hinten:.0f}" in n for n in grenzen("2026"))
-    assert any(f"{bezug.rad_aussen_hinten:.0f}" in n for n in grenzen("2027"))
+    fig = darstellung.draufsicht(_stapel(beispiel), bezug, lade())
+    namen = {s.name for s in fig.data if s.name and "T 8.2.2" in s.name}
+    assert len(namen) == 3
+    assert any(f"{bezug.rad_aussen:.0f}" in n for n in namen)
+    assert any(f"{bezug.rad_innen_hinten - 150:.0f}" in n for n in namen)
+    assert any(f"{bezug.rad_aussen_hinten:.0f}" in n for n in namen)
 
 
-def test_seitenansicht_folgt_dem_regelstand(beispiel):
-    """2027 ersetzt die 500-mm-Kopfstuetzenebene durch die Reifenoberkante.
-    Fest verdrahtet war das Bild grosszuegiger als die Ampel daneben."""
+def test_seitenansicht_zeigt_die_hoehenbereiche(beispiel):
+    """350 vor der Reifenvorderkante, Reifenoberkante bis zur Kopfstuetze,
+    1100 dahinter - wie die Ampel daneben."""
     from aerostudio.regeln import Bezugsgeometrie, Fahrzustand
 
     bezug = Bezugsgeometrie.aus_datei()
-    stapel = _stapel(beispiel)
-
-    def texte(stand):
-        fig = darstellung.seitenansicht(stapel, bezug, lade(stand),
-                                        Fahrzustand())
-        return " ".join(str(s.name) for s in fig.data if s.name)
-
-    assert "500" in texte("2026")
-    assert f"{bezug.reifenoberkante_z:.0f}" in texte("2027")
-    assert "500 mm" not in texte("2027")
+    fig = darstellung.seitenansicht(_stapel(beispiel), bezug, lade(),
+                                    Fahrzustand())
+    texte = " ".join(str(s.name) for s in fig.data if s.name)
+    assert "350" in texte and "1100" in texte
+    assert f"{bezug.reifenoberkante_z:.0f}" in texte
+    assert "500 mm" not in texte
 
 
 # --- Fund 6: Port-Meldung griff auf Windows nicht ----------------------

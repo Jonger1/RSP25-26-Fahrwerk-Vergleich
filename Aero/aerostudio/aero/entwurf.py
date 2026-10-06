@@ -114,7 +114,7 @@ class Kandidat:
     kraefte: Fluegelkraefte
     regelkonform: bool = True
     verstoesse: list[str] = field(default_factory=list)   # harte, geltendes Recht
-    hinweise: list[str] = field(default_factory=list)     # nur der 2027-Entwurf
+    hinweise: list[str] = field(default_factory=list)     # nicht blockierende Befunde
 
     @property
     def abtrieb(self) -> float:
@@ -471,8 +471,7 @@ def _begruenden_maximum(kandidaten, grenzen) -> list[str]:
             f"{bester.wirkungsgrad:.1f}.")
 
     if bester.hinweise:
-        texte.append(f"Nach geltendem Reglement zulässig, aber der "
-                     f"2027-Entwurf stört sich daran: {bester.hinweise[0]}.")
+        texte.append(f"Regelkonform, aber mit Hinweis: {bester.hinweise[0]}.")
     texte.append("Ein einzelnes Element ist damit ausgereizt. Mehr Abtrieb "
                  "geht nur über eine Kaskade — ein zweites und drittes "
                  "Element im Schlepp des ersten.")
@@ -516,9 +515,9 @@ def _regeln_pruefen(kandidaten, profil, spannweite, lage, regelsaetze, bezug,
                 if befund.ok:
                     continue
                 text = f"{satz.version}: {befund.regel} {befund.pruefung}"
-                # Was nur im 2027-Entwurf steht, blockiert keinen Entwurf -
-                # sonst faende die Suche nichts mehr, sobald eine noch nicht
-                # verabschiedete Regel greift. Es wird getrennt gemeldet.
+                # Nicht blockierende Befunde (Stufe "hinweis") halten die
+                # Suche nicht auf - sie werden getrennt gemeldet. Seit nur
+                # noch FS Rules 2027 v1.0 gilt, gibt es davon keine.
                 (verstoesse if befund.blockiert else hinweise).append(text)
         k.verstoesse, k.hinweise = verstoesse, hinweise
         k.regelkonform = not verstoesse
@@ -582,17 +581,16 @@ def _begruenden(kandidaten, ziel, maximum, maximalfall, grenzen) -> list[str]:
 
     if bester.hinweise:
         ohne_hinweis = [k for k in regelkonform if not k.hinweise]
-        texte.append(f"Nach geltendem Reglement zulässig, aber der 2027-Entwurf "
-                     f"stört sich daran: {bester.hinweise[0]}.")
+        texte.append(f"Regelkonform, aber mit Hinweis: {bester.hinweise[0]}.")
         if ohne_hinweis:
             alt = ohne_hinweis[0]
-            texte.append(f"Auch nach dem Entwurf zulässig wäre {alt.sehne:.0f} mm "
+            texte.append(f"Ohne Hinweis wäre {alt.sehne:.0f} mm "
                          f"Sehne bei {alt.halbspannweite:.0f} mm Halbspannweite "
                          f"und {alt.anstellwinkel:+.1f} Grad — Wirkungsgrad "
                          f"{alt.wirkungsgrad:.1f} statt {bester.wirkungsgrad:.1f}.")
         else:
-            texte.append("Keine der gefundenen Kombinationen besteht auch den "
-                         "2027-Entwurf.")
+            texte.append("Keine der gefundenen Kombinationen kommt ohne "
+                         "Hinweis aus.")
 
     # Der Hinweis, der am häufigsten gebraucht wird: flacher und größer
     # schlägt steiler und kleiner. Nur zeigen, wenn der Unterschied auch

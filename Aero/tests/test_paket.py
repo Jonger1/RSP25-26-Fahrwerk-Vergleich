@@ -88,7 +88,7 @@ def test_kennfeld_ergebnis_gleich_der_direkten_bilanz():
 
 def test_fuenfzig_varianten_mit_front():
     lauf, _ = paket.laufen(_paket(), attrappe, 45.0, n=60, radstand=L,
-                           regelsatz=lade("2026"))
+                           regelsatz=lade())
     assert lauf.gueltige >= 50
     assert len(lauf.front) >= 2
     assert [z.name for z in lauf.ziele] == ["abtrieb", "balancefehler", "wanderung"]
@@ -103,7 +103,7 @@ def test_zu_tiefer_unterboden_macht_die_variante_ungueltig():
     parameter = [doe.Parameter("unterboden.kehle_hoehe_vorne", 20.0, 25.0),
                  doe.Parameter("unterboden.kehle_hoehe_hinten", 20.0, 25.0)]
     lauf, _ = paket.laufen(p, attrappe, 45.0, n=5, parameter=parameter, radstand=L,
-                           regelsatz=lade("2026"))
+                           regelsatz=lade())
     assert all(not e["gueltig"] and "T 2.2.1" in e["grund"] for e in lauf.ergebnisse)
     assert lauf.front == []
 

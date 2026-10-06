@@ -613,8 +613,9 @@ def test_regelkarte_erscheint_nur_beim_fluegel(tmp_path):
     mit = UI._export(spec, 0.005, str(tmp_path), "fluegel", "", 0, 0)[4]
     assert _text(ohne) == ""
     assert "Regelprüfung" in _text(mit)
-    # Beide Regelstaende stehen nebeneinander.
-    assert "2026-v1.1" in _text(mit) and "2027-draft" in _text(mit)
+    # Gegen den einzigen Regelstand.
+    assert "2027-v1.0" in _text(mit)
+    assert "2026" not in _text(mit) and "draft" not in _text(mit)
 
 
 def test_zu_tiefer_fluegel_wird_in_der_oberflaeche_rot(tmp_path):

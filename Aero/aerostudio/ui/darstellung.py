@@ -534,36 +534,32 @@ def seitenansicht(stapel, bezug, regelsatz, zustand=None) -> go.Figure:
 
     r = regelsatz["t8_2_1"] or {}
     vor = r.get("vor_vorderreifen") or {}
-    grenze_vorn = float(vor.get("max_hoehe", 250))
+    grenze_vorn = float(vor.get("max_hoehe", 350))
+    grenze_mitte = bezug.reifenoberkante_z
+    grenze_hinten = float((r.get("hinter_kopfstuetze") or {}).get("max_hoehe", 1100))
 
-    # Der Mittelbereich: 2026 die Kopfstuetzenebene mit 500 mm, 2027 die
-    # REIFENOBERKANTE mit 406 mm. Bis zum 26.09.2026 stand hier fest 500 -
-    # das Bild war damit grosszuegiger als die Ampel daneben, und
-    # ausgerechnet im Entwurfsstand, wo man genauer hinsieht.
-    kopf = r.get("vor_kopfstuetze") or {}
-    if kopf:
-        grenze_mitte = float(kopf["max_hoehe"])
-        bis_x = bezug.kopfstuetze_x
-        text_mitte = f"T 8.2.1: max {grenze_mitte:.0f} mm"
-    else:
-        grenze_mitte = bezug.reifenoberkante_z
-        bis_x = bezug.kopfstuetze_x
-        text_mitte = f"T 8.2.1: unter Reifenoberkante ({grenze_mitte:.0f} mm)"
+    # Die drei Hoehenbereiche aus T 8.2.1, zuerst, damit der Fluegel
+    # darueber liegt.
+    _zone(fig, x_min, bezug.vorderreifen_vorderkante_x, 0.0, grenze_vorn,
+          FARBE_AKZENT, f"T 8.2.1: max {grenze_vorn:.0f} mm")
+    _zone(fig, bezug.vorderreifen_vorderkante_x, bezug.kopfstuetze_x, 0.0,
+          grenze_mitte, "#2f6f4e",
+          f"T 8.2.1: unter Reifenoberkante ({grenze_mitte:.0f} mm)")
+    _zone(fig, bezug.kopfstuetze_x, x_max, 0.0, grenze_hinten, "#3d6fa5",
+          f"T 8.2.1: max {grenze_hinten:.0f} mm")
 
-    # Die Grenzflaechen zuerst, damit der Fluegel darueber liegt.
-    bezugsebene = (0.0 if "zusatzbedingung" in vor
-                   else bezug.vorderreifen_vorderkante_x)
-    _zone(fig, x_min, bezugsebene, 0.0, grenze_vorn, FARBE_AKZENT,
-          f"T 8.2.1: max {grenze_vorn:.0f} mm")
-    _zone(fig, bezugsebene, bis_x, 0.0, grenze_mitte, "#2f6f4e", text_mitte)
-
-    # Keep-out T 2.1.3, in der Seitenansicht der auffaelligste Bereich.
+    # Keep-out T 2.1.3: am Vorderrad ohne Hoehengrenze (gezeichnet bis zur
+    # Bildoberkante), am Hinterrad bis 700 mm.
     r213 = regelsatz["t2_1_3"] or {}
     vorn = float(r213.get("abstand_vor_reifen", 75))
     hint = float(r213.get("abstand_hinter_reifen", 75))
     _zone(fig, -bezug.radius_vorne - vorn, bezug.radius_vorne + hint,
-          0.0, bezug.reifen_durchmesser_vorne, "#9333ea",
+          0.0, max(grenze_hinten, bezug.reifen_durchmesser_vorne), "#9333ea",
           "T 2.1.3: Keep-out Vorderrad")
+    _zone(fig, bezug.radstand - bezug.radius_hinten - vorn,
+          bezug.radstand + bezug.radius_hinten + hint, 0.0,
+          float(r213.get("hoehe_hinterreifen") or bezug.reifen_durchmesser_hinten),
+          "#9333ea", "T 2.1.3: Keep-out Hinterrad")
 
     _rad(fig, 0.0, bezug.radius_vorne, name="Vorderrad")
     _rad(fig, bezug.radstand, bezug.radius_hinten, name="Hinterrad")
@@ -608,21 +604,24 @@ def draufsicht(stapel, bezug, regelsatz) -> go.Figure:
     x_min = min(float(punkte[:, 0].min()), bezug.vorderreifen_vorderkante_x) - 150
     x_max = max(float(punkte[:, 0].max()), bezug.hinterreifen_hinterkante_x) + 150
 
-    # Zwei Grenzen, nicht eine. Unterhalb der Schwelle gilt der aeusserste
-    # Radpunkt, oberhalb 2026 der INNERSTE des Hinterrads (494,75 statt
-    # 695,25 mm) und erst 2027 wieder der aeusserste. Bis zum 26.09.2026
-    # zeichnete die Draufsicht immer nur rad_aussen und las ihren
-    # Regelsatz gar nicht - die Auswahl im Dropdown aenderte am Bild nichts.
+    # Drei Hoehenbaender, drei Breitengrenzen (T 8.2.2): unter der
+    # Reifenoberkante der aeusserste Radpunkt, bis 700 mm 150 mm innerhalb
+    # des Hinterrads, von 700 bis 1100 mm wieder der aeusserste Punkt des
+    # Hinterrads. Welche Linie fuer welchen Fluegelteil gilt, haengt an
+    # seiner Hoehe - das sagt die Regelampel daneben.
     r = regelsatz["t8_2_2"] or {}
-    oben = r.get("oberhalb_reifenoberkante") or {}
-    grenze_oben = (bezug.rad_innen_hinten if oben.get("schwelle_hoehe")
-                   is not None else bezug.rad_aussen_hinten)
+    mitte = r.get("reifenoberkante_bis_700") or {}
+    grenzen = [(bezug.rad_aussen, "T 8.2.2 unter Reifenoberkante: |y| ≤ "
+                f"{bezug.rad_aussen:.0f} mm", FARBE_AKZENT)]
+    if mitte:
+        g = bezug.rad_innen_hinten - float(mitte.get("nach_innen", 150))
+        grenzen.append((g, f"T 8.2.2 Reifenoberkante bis 700 mm: |y| ≤ {g:.0f} mm",
+                        "#ea7317"))
+    if r.get("von_700_bis_1100"):
+        grenzen.append((bezug.rad_aussen_hinten, "T 8.2.2 700 bis 1100 mm: |y| ≤ "
+                        f"{bezug.rad_aussen_hinten:.0f} mm", "#9333ea"))
 
-    for grenze, beschriftung, farbe in (
-            (bezug.rad_aussen, "T 8.2.2 unten: |y| ≤ "
-             f"{bezug.rad_aussen:.0f} mm", FARBE_AKZENT),
-            (grenze_oben, f"T 8.2.2 oben: |y| ≤ {grenze_oben:.0f} mm",
-             "#9333ea")):
+    for grenze, beschriftung, farbe in grenzen:
         for s in (+1, -1):
             fig.add_trace(go.Scatter(
                 x=[x_min, x_max], y=[s * grenze, s * grenze], mode="lines",

@@ -171,7 +171,7 @@ def sammeln(spec, weitere=(), quellen=(), geschwindigkeit: float = 20.0,
         # Die Pruefung zuerst und immer: Gerade ein aufsetzender Boden muss
         # als Verstoss im Report stehen, statt ihn ganz zu verhindern.
         daten.unterboden_befunde = unterboden.pruefe(
-            p.unterboden, p.lage, regeln.lade("2026"), zustand.tief)
+            p.unterboden, p.lage, regeln.lade(), zustand.tief)
         try:
             daten.unterboden = unterboden.rechne(p.unterboden, p.lage,
                                                  geschwindigkeit)
@@ -286,6 +286,7 @@ def _deckblatt(pdf, daten: Reportdaten, nr: int):
             ["Entwurf (Spec-Hash)", s.hash()],
             ["Quellen", ", ".join(daten.quellen) or "—"],
             ["Bearbeiter", s.meta.bearbeiter or "—"],
+            ["Regelwerk", daten.staende[0].quelle],
             ["Erstellt", daten.erstellt],
             ["Fahrzustand der Regelprüfung",
              f"+{daten.zustand.hoch:.1f} / −{daten.zustand.tief:.1f} mm "
@@ -306,7 +307,7 @@ def _deckblatt(pdf, daten: Reportdaten, nr: int):
                            f"{min(mass):+.1f} mm" if mass else "—"])
             farben.append("#fde8e8" if "Verstoß" in u else None)
     for b in daten.unterboden_befunde:
-        zeilen.append(["Unterboden", "2026",
+        zeilen.append(["Unterboden", daten.staende[0].version,
                        ("ok: " if b.ok else "VERSTOSS: ") + b.text,
                        f"{b.ist - b.grenze:+.1f} mm"])
         farben.append(None if b.ok else "#fde8e8")

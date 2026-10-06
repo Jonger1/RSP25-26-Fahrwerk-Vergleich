@@ -14,11 +14,11 @@ Zwei Dinge machen die Prüfung unbequem, und beide sind hier eingebaut:
    deshalb über einen Fahrzustands-Envelope: höchste Lage für die
    Höhengrenzen nach oben, tiefste Lage beim Bremsen für die Bodenfreiheit.
 
-2. Es gibt zwei Regelstände, die sich widersprechen. 2026 gilt, 2027 ist
-   Entwurf. Der Prüfer läuft über beide und meldet getrennt - so wird
-   sichtbar, welcher Entwurf heute zulässig wäre, nächste Saison aber nicht
-   mehr. Genau das ist der Punkt, an dem ein Flügel sonst ein Jahr später im
-   Müll landet.
+2. Es gibt genau EINEN Regelstand: FS Rules 2027 v1.0, Original im Repo
+   unter Aero/FS_Rules_2027_v1.0.pdf, Werte in rules_2027.yaml. Die
+   Stände 2026 und der Academy-Entwurf 2027 sind seit dem 06.10.2026
+   entfernt. Ein neuer Regelstand kommt als eigene YAML-Datei dazu und
+   ersetzt AKTUELL - nicht als Sonderfall im Prüfcode.
 
 Koordinatensystem durchgehend: Ursprung Vorderachsmitte auf der Bodenebene,
 x nach hinten, y nach rechts, z nach oben. z = 0 ist der Boden, damit sind
@@ -58,13 +58,16 @@ class Regelsatz:
 
 
 _DATEIEN = {
-    "2026": "rules_2026.yaml",
-    "2027": "rules_2027_draft.yaml",
+    "2027": "rules_2027.yaml",
 }
 
+# Der Regelstand, gegen den das ganze Werkzeug prueft. Genau eine Stelle.
+AKTUELL = "2027"
+ORIGINAL = ORDNER.parents[1] / "FS_Rules_2027_v1.0.pdf"
 
-def lade(stand: str = "2026") -> Regelsatz:
-    """Lädt einen Regelstand. `stand` ist "2026" oder "2027"."""
+
+def lade(stand: str = AKTUELL) -> Regelsatz:
+    """Lädt einen Regelstand. Bekannt ist nur noch "2027" (v1.0)."""
     if stand not in _DATEIEN:
         raise ValueError(f"Unbekannter Regelstand {stand!r}. "
                          f"Bekannt: {', '.join(sorted(_DATEIEN))}")
@@ -77,8 +80,8 @@ def lade(stand: str = "2026") -> Regelsatz:
 
 
 def alle_staende() -> list[Regelsatz]:
-    """Beide Stände, der geltende zuerst."""
-    return [lade("2026"), lade("2027")]
+    """Alle Stände, gegen die geprüft wird - seit 06.10.2026 nur einer."""
+    return [lade(AKTUELL)]
 
 
 # --------------------------------------------------------- Bezugsgeometrie
@@ -129,7 +132,12 @@ class Bezugsgeometrie:
         etwas tiefer. Für eine Obergrenze heißt das: dieser Wert ist etwas zu
         großzügig - Rand lassen.
         """
-        return max(self.reifen_durchmesser_vorne, self.reifen_durchmesser_hinten)
+        # T 8.2.1 (2027): "the virtual horizontal plane defined by the topmost
+        # points of the two tires on the left or right side". Bei
+        # unterschiedlichen Durchmessern vorn und hinten ist eine waagrechte
+        # Ebene durch zwei verschieden hohe Punkte nicht eindeutig - es zaehlt
+        # der NIEDRIGERE, damit die Pruefung auf der sicheren Seite liegt.
+        return min(self.reifen_durchmesser_vorne, self.reifen_durchmesser_hinten)
 
     @property
     def rad_aussen_vorne(self) -> float:
@@ -239,7 +247,7 @@ class Regelbefund:
     hinweis: str = ""
     stand: str = ""
     ort: str = ""                   # wo im Flügel, in Klartext
-    neu: bool = False               # Grenze stammt aus dem 2027-Entwurf
+    neu: bool = False               # Grenze aus einem Entwurfsstand (derzeit keiner)
     fahrzustand: str = ""           # in welcher Lage geprueft, fuer den Report
 
     @property
@@ -382,45 +390,26 @@ def _laenge(p, rs, bz) -> list[Regelbefund]:
 
 
 def _hoehe(p, rs, bz, zustand) -> list[Regelbefund]:
-    """Höhengrenzen. Hier liegt der größte Unterschied zwischen 2026 und 2027."""
+    """T 8.2.1: drei Hoehenbereiche entlang des Fahrzeugs."""
     r = rs["t8_2_1"] or {}
     befunde: list[Regelbefund] = []
     anmerkung = (f"Geprüft in der höchsten Lage: {zustand.hoch:.1f} mm über "
                  f"Konstruktionslage ({zustand.quelle}).")
 
     vor = r.get("vor_vorderreifen") or {}
-    grenze = float(vor.get("max_hoehe", 250))
-    if "zusatzbedingung" in vor:
-        # Regelstand 2026: vor der VORDERACHSE und weiter außen als der
-        # innerste Radpunkt. Innen zwischen den Rädern gelten stattdessen 500.
-        maske = (p[:, 0] < 0.0) & (np.abs(p[:, 1]) > bz.rad_innen_vorne)
-        text = f"Höhe vor der Vorderachse, außerhalb Radinnenkante (max {grenze:.0f})"
-    else:
-        # Regelstand 2027: schlicht vor der Reifenvorderkante.
-        maske = p[:, 0] < bz.vorderreifen_vorderkante_x
-        text = f"Höhe vor der Reifenvorderkante (max {grenze:.0f})"
+    grenze = float(vor.get("max_hoehe", 350))
+    maske = p[:, 0] < bz.vorderreifen_vorderkante_x
     if maske.any():
         ist, ort = _hoechster(p, maske)
         befunde.append(Regelbefund(
-            "T 8.2.1", text, ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze,
-            ort=ort, neu=bool(vor.get("geaendert_2027")),
+            "T 8.2.1", f"Höhe vor der Reifenvorderkante (max {grenze:.0f})",
+            ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
             hinweis=anmerkung + " Flügel tiefer setzen oder den Anstellwinkel "
                                 "zurücknehmen."))
 
-    vor_kopf = r.get("vor_kopfstuetze")
-    if vor_kopf:
-        grenze = float(vor_kopf["max_hoehe"])
-        maske = p[:, 0] < bz.kopfstuetze_x
-        if maske.any():
-            ist, ort = _hoechster(p, maske)
-            befunde.append(Regelbefund(
-                "T 8.2.1", f"Höhe vor der Kopfstützenebene (max {grenze:.0f})",
-                ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
-                hinweis=anmerkung))
-
     if r.get("alle_uebrigen"):
-        # Regelstand 2027: alles zwischen Reifenvorderkante und
-        # Kopfstützenebene muss unter die Reifenoberkante.
+        # Zwischen Reifenvorderkante und Kopfstützenebene: unter der Ebene
+        # durch die obersten Reifenpunkte.
         grenze = bz.reifenoberkante_z
         maske = ((p[:, 0] >= bz.vorderreifen_vorderkante_x)
                  & (p[:, 0] < bz.kopfstuetze_x))
@@ -429,10 +418,9 @@ def _hoehe(p, rs, bz, zustand) -> list[Regelbefund]:
             befunde.append(Regelbefund(
                 "T 8.2.1", f"Höhe unter Reifenoberkante (max {grenze:.0f})",
                 ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
-                neu=True,
-                hinweis=anmerkung + " Neu 2027: zwischen Reifenvorderkante und "
-                                    "Kopfstütze zählt die Reifenoberkante, "
-                                    "nicht mehr die feste 500-mm-Ebene."))
+                hinweis=anmerkung + " Zwischen Reifenvorderkante und "
+                                    "Kopfstützenebene zählt die Ebene durch "
+                                    "die obersten Reifenpunkte."))
 
     hinter = r.get("hinter_kopfstuetze") or {}
     maske = p[:, 0] >= bz.kopfstuetze_x
@@ -443,72 +431,62 @@ def _hoehe(p, rs, bz, zustand) -> list[Regelbefund]:
             "T 8.2.1", f"Höhe hinter der Kopfstützenebene (max {grenze:.0f})",
             ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
             hinweis=anmerkung))
-
-        unten = hinter.get("min_hoehe")
-        if unten is not None:
-            unten = float(unten)
-            i = int(np.argmin(np.where(maske, p[:, 2], np.inf)))
-            tiefster = float(p[i, 2])
-            befunde.append(Regelbefund(
-                "T 8.2.1", f"Heckflügel nicht unter {unten:.0f}",
-                ok=bool(tiefster >= unten - 1e-9), ist=tiefster, grenze=unten,
-                richtung="min", ort=_ort(p, i),
-                neu=bool(hinter.get("min_hoehe_neu_2027")),
-                hinweis="Neu 2027: erstmals eine UNTERGRENZE. Ein tief "
-                        "angesetzter Heckflügel, der 2026 zulässig war, fällt "
-                        "damit aus."))
     return befunde
 
 
 def _breite(p, rs, bz) -> list[Regelbefund]:
+    """T 8.2.2: drei Hoehenbaender mit eigener Breitengrenze.
+
+    Die Baender 2 und 3 nennen keinen Laengsbereich - sie gelten ueber die
+    ganze Fahrzeuglaenge. Bezugshoehe ist die Oberkante der HINTERreifen.
+    """
     r = rs["t8_2_2"] or {}
     befunde: list[Regelbefund] = []
+    oberkante_hinten = bz.reifen_durchmesser_hinten
 
-    unten = r.get("unterhalb_reifenoberkante") or {}
-    schwelle = unten.get("schwelle_hoehe")
-    if schwelle is not None:
-        # 2026: feste Höhenschwelle, Längsbezug Vorderachse.
-        schwelle = float(schwelle)
-        maske = (p[:, 2] < schwelle) & (p[:, 0] > 0.0)
-        text = f"Breite unter {schwelle:.0f} mm, hinter der Vorderachse"
-    else:
-        # 2027: Schwelle ist die Reifenoberkante, Bezug die Reifenvorderkante.
+    if r.get("unterhalb_reifenoberkante") is not None:
         schwelle = bz.reifenoberkante_z
         maske = (p[:, 2] < schwelle) & (p[:, 0] > bz.vorderreifen_vorderkante_x)
-        text = f"Breite unter Reifenoberkante ({schwelle:.0f} mm)"
-    if maske.any():
-        ist, ort = _breitester(p, maske)
-        befunde.append(Regelbefund(
-            "T 8.2.2", text, ok=bool(ist <= bz.rad_aussen + 1e-9), ist=ist,
-            grenze=bz.rad_aussen, ort=ort,
-            neu=bool(unten.get("geaendert_2027")),
-            hinweis="Grenze ist der äußerste Punkt von Vorder- und Hinterrad."))
+        if maske.any():
+            ist, ort = _breitester(p, maske)
+            befunde.append(Regelbefund(
+                "T 8.2.2", f"Breite unter Reifenoberkante ({schwelle:.0f} mm)",
+                ok=bool(ist <= bz.rad_aussen + 1e-9), ist=ist,
+                grenze=bz.rad_aussen, ort=ort,
+                hinweis="Grenze ist der äußerste Punkt von Vorder- und Hinterrad."))
 
-    oben = r.get("oberhalb_reifenoberkante") or {}
-    schwelle_o = oben.get("schwelle_hoehe")
-    if schwelle_o is not None:
-        schwelle_o = float(schwelle_o)
-        grenze = bz.rad_innen_hinten          # 2026: INNERSTER Punkt
-        zusatz = "2026 ist die Grenze der INNERSTE Punkt des Hinterrads."
-    else:
-        schwelle_o = bz.reifenoberkante_z
-        grenze = bz.rad_aussen_hinten         # 2027: äußerster Punkt
-        zusatz = ("Lockerung 2027: statt des innersten zählt jetzt der "
-                  "ÄUSSERSTE Punkt des Hinterrads - der Heckflügel darf "
-                  f"{bz.rad_aussen_hinten - bz.rad_innen_hinten:.0f} mm je "
-                  "Seite breiter werden.")
-    maske = p[:, 2] >= schwelle_o
-    if maske.any():
-        ist, ort = _breitester(p, maske)
-        befunde.append(Regelbefund(
-            "T 8.2.2", f"Breite über {schwelle_o:.0f} mm",
-            ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
-            neu=bool(oben.get("geaendert_2027")), hinweis=zusatz))
+    mitte = r.get("reifenoberkante_bis_700") or {}
+    if mitte:
+        bis = float(mitte.get("bis_hoehe", 700))
+        grenze = bz.rad_innen_hinten - float(mitte.get("nach_innen", 150))
+        maske = (p[:, 2] >= oberkante_hinten) & (p[:, 2] < bis)
+        if maske.any():
+            ist, ort = _breitester(p, maske)
+            befunde.append(Regelbefund(
+                "T 8.2.2", f"Breite zwischen Reifenoberkante und {bis:.0f} mm",
+                ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
+                hinweis=f"Grenze: 150 mm innerhalb des innersten Punkts des "
+                        f"Hinterreifens, |y| ≤ {grenze:.0f} mm. Gilt über die "
+                        f"ganze Fahrzeuglänge - auch für Heckflügel-Endplatten, "
+                        f"die unter 700 mm herunterreichen."))
+
+    oben = r.get("von_700_bis_1100") or {}
+    if oben:
+        von = float(oben.get("von_hoehe", 700))
+        bis = float(oben.get("bis_hoehe", 1100))
+        grenze = bz.rad_aussen_hinten
+        maske = (p[:, 2] >= von) & (p[:, 2] <= bis)
+        if maske.any():
+            ist, ort = _breitester(p, maske)
+            befunde.append(Regelbefund(
+                "T 8.2.2", f"Breite zwischen {von:.0f} und {bis:.0f} mm",
+                ok=bool(ist <= grenze + 1e-9), ist=ist, grenze=grenze, ort=ort,
+                hinweis="Grenze ist der äußerste Punkt des Hinterrads."))
     return befunde
 
 
 def _bodenfreiheit(p, rs, bz, zustand) -> list[Regelbefund]:
-    r = rs["uebernommen_aus_2026"] or {}
+    r = rs["allgemein"] or {}
     grenze = float(r.get("t2_2_1_bodenfreiheit_min", 30))
     i = int(np.argmin(p[:, 2]))
     tiefster = float(p[i, 2])
@@ -533,10 +511,11 @@ def _bodenfreiheit(p, rs, bz, zustand) -> list[Regelbefund]:
 def _keepout(p, rs, bz) -> list[Regelbefund]:
     """T 2.1.3: Die Seitenansicht der Räder muss frei bleiben.
 
-    Ausgelegt als Quader: längs von 75 mm vor bis 75 mm hinter dem
-    Reifenaußendurchmesser, hoch bis zur Reifenoberkante, seitlich zwischen
-    Innen- und Außenebene des Rad/Reifen-Verbunds. Das ist die strenge
-    Lesart - die Regel nennt Linien, nicht die Reifenkontur.
+    Längs von 75 mm vor bis 75 mm hinter dem Reifenaußendurchmesser, seitlich
+    von der INNENebene des Rads nach außen unbegrenzt. Am Vorderrad ohne
+    Höhenangabe (also unbegrenzt), am Hinterrad bis 700 mm. Dazu die
+    Zusatzzone über dem Hinterrad: von der Reifenoberkante bis 700 mm, bis
+    150 mm innerhalb der Radinnenebene, längs wie die 75-mm-Zone.
     """
     r = rs["t2_1_3"] or {}
     vor = float(r.get("abstand_vor_reifen", 75))
@@ -544,40 +523,49 @@ def _keepout(p, rs, bz) -> list[Regelbefund]:
     hoehe_hinten = r.get("hoehe_hinterreifen")
 
     befunde: list[Regelbefund] = []
-    for name, mitte_x, radius, innen, aussen, deckel in (
-            ("Vorderrad", 0.0, bz.radius_vorne, bz.rad_innen_vorne,
-             bz.rad_aussen_vorne, bz.reifen_durchmesser_vorne),
-            ("Hinterrad", bz.radstand, bz.radius_hinten, bz.rad_innen_hinten,
-             bz.rad_aussen_hinten,
-             float(hoehe_hinten) if hoehe_hinten else bz.reifen_durchmesser_hinten)):
+    zonen = [
+        ("Vorderrad", 0.0, bz.radius_vorne, bz.rad_innen_vorne, np.inf, 0.0),
+        ("Hinterrad", bz.radstand, bz.radius_hinten, bz.rad_innen_hinten,
+         float(hoehe_hinten) if hoehe_hinten else np.inf, 0.0),
+    ]
+    zusatz = r.get("zusatzzone_hinterrad")
+    if zusatz:
+        zonen.append(("über dem Hinterrad", bz.radstand, bz.radius_hinten,
+                      bz.rad_innen_hinten - float(zusatz.get("nach_innen", 150)),
+                      float(zusatz.get("bis_hoehe", 700)),
+                      bz.reifen_durchmesser_hinten))
+
+    for name, mitte_x, radius, innen, deckel, boden in zonen:
         drin = ((p[:, 0] > mitte_x - radius - vor)
                 & (p[:, 0] < mitte_x + radius + hinter)
-                & (np.abs(p[:, 1]) >= innen) & (np.abs(p[:, 1]) <= aussen)
-                & (p[:, 2] <= deckel))
+                & (np.abs(p[:, 1]) >= innen)
+                & (p[:, 2] >= boden) & (p[:, 2] <= deckel))
         anzahl = int(drin.sum())
         ort = _ort(p, int(np.argmax(drin))) if anzahl else ""
+        hoehe = (f"z {boden:.0f} bis {deckel:.0f}" if np.isfinite(deckel)
+                 else "z unbegrenzt")
         befunde.append(Regelbefund(
             "T 2.1.3", f"Keep-out-Zone {name} frei",
             ok=anzahl == 0, ist=float(anzahl), grenze=0.0, einheit="Punkte",
-            ort=ort, neu=bool(r.get("neu_2027")) and name == "Hinterrad",
+            ort=ort,
             hinweis=f"Zone: x von {mitte_x - radius - vor:.0f} bis "
-                    f"{mitte_x + radius + hinter:.0f}, |y| von {innen:.0f} bis "
-                    f"{aussen:.0f}, z bis {deckel:.0f}. Der Flügel muss davor "
-                    f"enden oder außerhalb der Radebene liegen."))
+                    f"{mitte_x + radius + hinter:.0f}, |y| ab {innen:.0f} nach "
+                    f"außen, {hoehe}. Der Flügel muss davor enden oder "
+                    f"weiter innen liegen."))
     return befunde
 
 
 def _quader(p, rs, bz) -> list[Regelbefund]:
-    """T 2.1.4, neu in 2027: zwei bodennahe Kanäle müssen frei bleiben.
+    """T 2.1.4: zwei bodennahe Kanäle müssen frei bleiben.
 
-    Der Entwurfstext nennt eine VARIABLE Keep-out-Zone aus zwei unabhängigen
+    Der Regeltext nennt eine VARIABLE Keep-out-Zone aus zwei unabhängigen
     Quadern von 75 x 250 mm, unendlich lang nach vorn, zwei Kanten auf dem
     Boden, nicht weiter außen als der äußerste Punkt des Vorderrads. Die
     Lesart hier: Vor der Reifenvorderkante muss es je Fahrzeugseite einen
     75 mm breiten Streifen geben, in dem bis 250 mm Höhe nichts steht. Zwei
     Quader, zwei Seiten - das passt zur Symmetrie des Fahrzeugs.
 
-    ACHTUNG: Der Wortlaut ist Entwurf und lässt auch eine strengere Lesart zu,
+    ACHTUNG: Der Wortlaut lässt auch eine strengere Lesart zu,
     bei der der Prüfer die Quader frei setzen darf. Fällt diese Prüfung durch,
     fällt sie in JEDER Lesart durch; besteht sie, gilt das nur für die hier
     angesetzte.
@@ -597,8 +585,8 @@ def _quader(p, rs, bz) -> list[Regelbefund]:
     return [Regelbefund(
         "T 2.1.4", f"Freier Kanal {breite:.0f} x {hoehe:.0f} mm vor dem Rad",
         ok=bool(frei >= breite - 1e-9), ist=frei, grenze=breite, richtung="min",
-        ort=wo, neu=True,
-        hinweis="Neu 2027. Der Flügel muss vor der Reifenvorderkante einen "
+        ort=wo,
+        hinweis="Der Flügel muss vor der Reifenvorderkante einen "
                 f"{breite:.0f} mm breiten Streifen bis {hoehe:.0f} mm Höhe "
                 f"freilassen, innerhalb von |y| <= {bz.rad_aussen_vorne:.0f} mm. "
                 "Das trifft genau das durchgehende untere Element, mit dem "
@@ -643,5 +631,5 @@ def _freier_streifen(y_belegt: np.ndarray,
     return breite, f"breitester freier Streifen |y| {von:.0f} bis {bis:.0f} mm"
 
 
-__all__ = ["Bezugsgeometrie", "Fahrzustand", "Regelbefund", "Regelsatz",
+__all__ = ["AKTUELL", "Bezugsgeometrie", "Fahrzustand", "Regelbefund", "Regelsatz",
            "alle_staende", "lade", "pruefe_fluegel"]

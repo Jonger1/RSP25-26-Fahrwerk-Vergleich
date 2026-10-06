@@ -304,7 +304,7 @@ def test_vorschlag_haelt_die_bodenfreiheit_ein(e423, enge_grenzen):
     stapel = schnitte(e423, Spannweite.frontfluegel_aussen().skaliert(t.halbspannweite),
                       t.sehne, t.anstellwinkel, 24,
                       lage=(-600.0, 0.0, t.hoehe))
-    befunde = regeln.pruefe_fluegel(stapel, regeln.lade("2026"))
+    befunde = regeln.pruefe_fluegel(stapel, regeln.lade())
     boden = [b for b in befunde if b.regel == "T 2.2.1"][0]
     assert boden.ok
 
@@ -350,15 +350,14 @@ def test_bester_wirkungsgrad_gewinnt(e423, enge_grenzen):
     assert v.treffer.wirkungsgrad == max(k.wirkungsgrad for k in regelkonform)
 
 
-def test_entwurfsregeln_blockieren_keinen_vorschlag(e423, enge_grenzen):
-    """T 2.1.4 steht nur im 2027-Entwurf. Wuerde sie hart zaehlen, faende die
-    Suche fuer einen Fluegel bis zur Radaussenkante gar nichts mehr."""
+def test_vorschlag_haelt_den_quaderkanal_frei(e423, enge_grenzen):
+    """T 2.1.4 ist seit FS Rules 2027 v1.0 eine harte Regel. Die Suche muss
+    trotzdem einen Fluegel finden - einen, der den bodennahen Kanal vor dem
+    Rad freilaesst."""
     v = ent.suche(60.0, e423, Spannweite.frontfluegel_aussen(),
                   geschwindigkeit=15.0, grenzen=enge_grenzen)
     assert v.gefunden and v.treffer.regelkonform
-    # Der Entwurfshinweis geht dabei nicht verloren.
-    alle = v.treffer.hinweise + v.treffer.verstoesse
-    assert any("2.1.4" in h for h in alle) or v.treffer.halbspannweite < 620.0
+    assert not any("2.1.4" in t for t in v.treffer.verstoesse)
 
 
 def test_verdrehte_grenzen_werden_abgelehnt():

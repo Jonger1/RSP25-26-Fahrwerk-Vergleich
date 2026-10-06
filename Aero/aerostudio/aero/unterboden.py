@@ -320,7 +320,7 @@ def pruefe(ub, lage=None, regelsatz=None,
     grenze = 30.0
     if regelsatz is not None:
         try:
-            grenze = float((regelsatz["uebernommen_aus_2026"] or {})
+            grenze = float((regelsatz["allgemein"] or {})
                            .get("t2_2_1_bodenfreiheit_min", 30.0))
         except (KeyError, TypeError):
             pass

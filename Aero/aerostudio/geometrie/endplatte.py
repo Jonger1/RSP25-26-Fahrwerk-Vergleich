@@ -10,9 +10,9 @@ treffen:
 * **T 8.2.2** begrenzt die Breite. Die Endplatte ist der aeusserste Punkt des
   ganzen Fluegels, und ihre Dicke traegt nach aussen auf.
 * **T 2.1.3** haelt die Seitenansicht der Raeder frei. Die Endplatte steht
-  genau dort, wo diese Zone liegt - lateral zwischen Innen- und Aussenebene
-  des Rad/Reifen-Verbunds.
-* **T 2.1.4** (Entwurf 2027) verlangt bodennah einen freien Kanal. Die
+  genau dort, wo diese Zone liegt - lateral von der Innenebene des
+  Rad/Reifen-Verbunds nach aussen.
+* **T 2.1.4** verlangt bodennah einen freien Kanal. Die
   Footplate liegt flach und tief und ist der erste Kandidat, ihn zuzusetzen.
 
 Diese drei Pruefungen gibt es in `regeln/pruefung.py` laengst. Sie haben die

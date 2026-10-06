@@ -289,7 +289,7 @@ def laufen(paket, rechnen: Callable, ziel: float, n: int = 200, *,
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    from ..regeln import Bezugsgeometrie, lade
+    from ..regeln import AKTUELL, Bezugsgeometrie, lade
     from ..spec.projekt import AeroSpec
 
     teil = argparse.ArgumentParser(
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     teil.add_argument("--seed", type=int, default=0)
     teil.add_argument("--tempo", type=float, default=20.0)
     teil.add_argument("--aus", default="export/doe_paket.yaml")
-    teil.add_argument("--regelstand", default="2026")
+    teil.add_argument("--regelstand", default=AKTUELL)
     arg = teil.parse_args(argv)
     if arg.ziel is None:
         arg.ziel = gesamt.zielbalance_aus_datei()

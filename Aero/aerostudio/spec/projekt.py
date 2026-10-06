@@ -34,7 +34,7 @@ class Meta(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = "Unbenanntes Aeropaket"
     fahrzeug: str = "RSP27"
-    regelstand: str = "2026_v1.1"
+    regelstand: str = "2027_v1.0"
     bearbeiter: str = ""
     geaendert: str = ""
 

@@ -322,7 +322,7 @@ def laufen(basis, raum: list[Parameter] | None = None, n: int = 60, *,
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    from ..regeln import lade
+    from ..regeln import AKTUELL, lade
     from ..spec.projekt import AeroSpec
     from ..spec.modell import Unterboden
 
@@ -337,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     teil.add_argument("--tempo", type=float, default=20.0, help="m/s")
     teil.add_argument("--aus", default="export/doe_unterboden.yaml",
                       help="Ergebnisdatei")
-    teil.add_argument("--regelstand", default="2026")
+    teil.add_argument("--regelstand", default=AKTUELL)
     arg = teil.parse_args(argv)
 
     basis = AeroSpec.laden(arg.spec)

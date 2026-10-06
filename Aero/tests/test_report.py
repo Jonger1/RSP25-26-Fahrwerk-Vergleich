@@ -31,7 +31,7 @@ def schnell(monkeypatch):
 def test_befunde_nennen_ihren_fahrzustand():
     spec = AeroSpec.laden(FRONT)
     stapel = [s for t in UI._elementstapel(spec.elemente[0]) for s in t]
-    befunde = regeln.pruefe_fluegel(stapel, regeln.lade("2026"),
+    befunde = regeln.pruefe_fluegel(stapel, regeln.lade(),
                                     zustand=regeln.Fahrzustand(10.0, 20.0))
     lagen = {b.regel: b.fahrzustand for b in befunde}
     assert lagen["T 2.2.1"] == "eingefedert −20.0 mm"

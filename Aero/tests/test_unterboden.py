@@ -147,14 +147,14 @@ def test_aufsetzen_zaehlt_als_null_nicht_als_luecke(basis):
 # -------------------------------------------------------- Regelpruefung
 
 def test_bodenfreiheit_nach_t221(basis):
-    befunde = ub.pruefe(basis, regelsatz=lade("2026"))
+    befunde = ub.pruefe(basis, regelsatz=lade())
     t221 = [b for b in befunde if b.regel == "T 2.2.1"][0]
     assert t221.ok and t221.grenze == 30.0
 
 
 def test_zu_tiefer_boden_reisst_t221(basis):
     tief = _mit(basis, kehle_hoehe_vorne=28.0, kehle_hoehe_hinten=25.0)
-    t221 = [b for b in ub.pruefe(tief, regelsatz=lade("2026"))
+    t221 = [b for b in ub.pruefe(tief, regelsatz=lade())
             if b.regel == "T 2.2.1"][0]
     assert not t221.ok
     assert t221.ist == pytest.approx(25.0)

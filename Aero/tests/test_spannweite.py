@@ -115,21 +115,39 @@ def test_einzelne_stuetzstelle_ergibt_rechteckfluegel(profil):
 
 # ------------------------------------------------------------ Regelstaende
 
-def test_beide_staende_laden():
+def test_nur_noch_ein_regelstand():
+    """Seit 06.10.2026 gilt allein FS Rules 2027 v1.0 - 2026 und der
+    Academy-Entwurf sind entfernt."""
     staende = alle_staende()
-    assert [r.version for r in staende] == ["2026-v1.1", "2027-draft"]
-    assert staende[0].verbindlich is True
-    assert staende[1].entwurf is True
-
-
-def test_2027_kennt_die_quaderregel_2026_nicht():
-    assert lade("2026")["t2_1_4"] is None
-    assert lade("2027")["t2_1_4"]["quader_breite"] == 75
-
-
-def test_unbekannter_stand_meldet_sich():
+    assert [r.version for r in staende] == ["2027-v1.0"]
+    assert staende[0].verbindlich is True and not staende[0].entwurf
     with pytest.raises(ValueError, match="Unbekannter Regelstand"):
-        lade("2025")
+        lade("2026")
+
+
+def test_regelwerk_liegt_im_repo():
+    """Das Original, aus dem rules_2027.yaml abgeschrieben ist."""
+    from aerostudio.regeln import ORIGINAL
+    assert ORIGINAL.is_file()
+    assert ORIGINAL.read_bytes()[:5] == b"%PDF-"
+
+
+def test_werte_wie_im_regeltext():
+    """Gegen den Wortlaut von T 2.1, T 2.2 und T 8 (S. 20/21, 44/45)."""
+    r = lade()
+    assert r["t8_2_1"]["vor_vorderreifen"]["max_hoehe"] == 350
+    assert r["t8_2_1"]["hinter_kopfstuetze"]["max_hoehe"] == 1100
+    assert "min_hoehe" not in r["t8_2_1"]["hinter_kopfstuetze"]
+    assert r["t8_2_2"]["reifenoberkante_bis_700"]["nach_innen"] == 150
+    assert r["t8_2_2"]["von_700_bis_1100"]["bis_hoehe"] == 1100
+    assert r["t8_2_3"]["max_vor_vorderreifen"] == 700
+    assert r["t8_2_3"]["max_hinter_hinterreifen"] == 250
+    assert r["t2_1_3"]["hoehe_hinterreifen"] == 700
+    assert r["t2_1_3"]["zusatzzone_hinterrad"]["nach_innen"] == 150
+    assert r["t2_1_4"]["quader_breite"] == 75
+    assert r["t2_1_4"]["quader_hoehe"] == 250
+    assert r["allgemein"]["t2_2_1_bodenfreiheit_min"] == 30
+    assert r["allgemein"]["t8_3_1_last"] == 200
 
 
 def test_bezugsebenen_aus_der_fahrzeugreferenz(bezug):
@@ -148,7 +166,7 @@ def _befund(befunde, regel, teil):
     return treffer[0]
 
 
-def test_brauchbarer_frontfluegel_besteht_beide_staende(profil, bezug):
+def test_brauchbarer_frontfluegel_besteht(profil, bezug):
     stapel = _fluegel(profil)
     zustand = Fahrzustand.bremsend(600.0)
     for rs in alle_staende():
@@ -159,7 +177,7 @@ def test_brauchbarer_frontfluegel_besteht_beide_staende(profil, bezug):
 
 def test_zu_tiefer_fluegel_faellt_ueber_die_bodenfreiheit(profil, bezug):
     stapel = _fluegel(profil, lage=(-600.0, 0.0, 55.0))
-    b = _befund(pruefe_fluegel(stapel, lade("2026"), bezug,
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
                                Fahrzustand.bremsend(600.0)),
                 "T 2.2.1", "Bodenfreiheit")
     assert not b.ok and b.blockiert
@@ -175,10 +193,10 @@ def test_bremsfall_ist_strenger_als_die_konstruktionslage(profil, bezug):
     # Tests. (Vor der Korrektur der Drehrichtung in angestellt() lag es bei
     # 78 mm - der Fluegel war damals andersherum gedreht.)
     stapel = _fluegel(profil, lage=(-600.0, 0.0, 70.0))
-    statisch = _befund(pruefe_fluegel(stapel, lade("2026"), bezug,
+    statisch = _befund(pruefe_fluegel(stapel, lade(), bezug,
                                       Fahrzustand.statisch()),
                        "T 2.2.1", "Bodenfreiheit")
-    fahrend = _befund(pruefe_fluegel(stapel, lade("2026"), bezug,
+    fahrend = _befund(pruefe_fluegel(stapel, lade(), bezug,
                                      Fahrzustand.bremsend(600.0)),
                       "T 2.2.1", "Bodenfreiheit")
     assert statisch.ok
@@ -188,45 +206,36 @@ def test_bremsfall_ist_strenger_als_die_konstruktionslage(profil, bezug):
 
 def test_zu_weit_vorstehender_fluegel_reisst_die_laengengrenze(profil, bezug):
     stapel = _fluegel(profil, lage=(-1100.0, 0.0, 90.0))
-    b = _befund(pruefe_fluegel(stapel, lade("2026"), bezug),
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug),
                 "T 8.2.3", "vor den Vorderreifen")
     assert not b.ok
     assert b.ist > 700.0
 
 
-def test_hoher_fluegel_reisst_2027_frueher_als_2026(profil, bezug):
-    """300 mm hoch vor dem Rad: 2026 unzulaessig (250), 2027 zulaessig (350).
-
-    Das ist die einzige Hoehenaenderung, die den Frontfluegel LOCKERT - und
-    genau deshalb der Fall, an dem sich zeigt, ob der Pruefer die Staende
-    wirklich auseinanderhaelt.
-    """
-    stapel = _fluegel(profil, lage=(-600.0, 0.0, 300.0))
+def test_hoehengrenze_vor_der_reifenvorderkante(profil, bezug):
+    """T 8.2.1: vor der Reifenvorderkante unter 350 mm."""
     zustand = Fahrzustand.statisch()
-    b26 = _befund(pruefe_fluegel(stapel, lade("2026"), bezug, zustand),
-                  "T 8.2.1", "vor der Vorderachse")
-    b27 = _befund(pruefe_fluegel(stapel, lade("2027"), bezug, zustand),
-                  "T 8.2.1", "vor der Reifenvorderkante")
-    assert not b26.ok
-    assert b27.ok
+    tief = _befund(pruefe_fluegel(_fluegel(profil, lage=(-600.0, 0.0, 300.0)),
+                                  lade(), bezug, zustand),
+                   "T 8.2.1", "vor der Reifenvorderkante")
+    hoch = _befund(pruefe_fluegel(_fluegel(profil, lage=(-600.0, 0.0, 380.0)),
+                                  lade(), bezug, zustand),
+                   "T 8.2.1", "vor der Reifenvorderkante")
+    assert tief.ok and tief.grenze == 350.0
+    assert not hoch.ok and hoch.blockiert
 
 
 def test_breiter_fluegel_setzt_den_quaderkanal_zu(profil, bezug):
     """T 2.1.4: Ein bis zur Radaussenkante durchgezogener Frontfluegel laesst
-    keinen 75-mm-Kanal mehr frei. 2026 gibt es die Regel nicht."""
+    keinen 75-mm-Kanal mehr frei - ein harter Verstoss."""
     breit = Spannweite(stuetzstellen=[
         Stuetzstelle(y=0.0, sehne=0.85, verwindung=-10.0),
         Stuetzstelle(y=695.0, sehne=1.0, verwindung=2.0)], schnitte=25)
     stapel = _fluegel(profil, spannweite=breit)
-
-    befunde26 = pruefe_fluegel(stapel, lade("2026"), bezug)
-    assert not [b for b in befunde26 if b.regel == "T 2.1.4"]
-
-    b = _befund(pruefe_fluegel(stapel, lade("2027"), bezug), "T 2.1.4", "Kanal")
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug), "T 2.1.4", "Kanal")
     assert not b.ok
     assert b.ist < 75.0
-    # Entwurf blockiert nicht, er warnt.
-    assert b.stufe == "hinweis" and not b.blockiert
+    assert b.blockiert
 
 
 def test_schlitz_in_der_spannweite_rettet_den_quaderkanal(profil, bezug):
@@ -243,56 +252,59 @@ def test_schlitz_in_der_spannweite_rettet_den_quaderkanal(profil, bezug):
     assert b.ist == pytest.approx(100.0, abs=1.0)
 
 
-def test_tiefer_heckfluegel_faellt_erst_2027(profil, bezug):
-    """Die neue Untergrenze von 700 mm. 2026 gibt es sie nicht."""
-    stapel = _fluegel(profil, lage=(1200.0, 0.0, 600.0), winkel=-8.0,
-                      spannweite=Spannweite.gerade(500.0))
-    befunde26 = pruefe_fluegel(stapel, lade("2026"), bezug)
-    assert not [b for b in befunde26 if "nicht unter" in b.pruefung]
+def test_tiefer_heckfluegel_muss_schmal_sein(profil, bezug):
+    """T 8.2.2: Zwischen Reifenoberkante und 700 mm hoechstens 150 mm
+    innerhalb des innersten Hinterradpunkts. Eine Untergrenze fuer den
+    Heckfluegel gibt es im endgueltigen Text NICHT (der Entwurf hatte 700)."""
+    breit = _fluegel(profil, lage=(1200.0, 0.0, 600.0), winkel=-8.0,
+                     spannweite=Spannweite.gerade(500.0))
+    befunde = pruefe_fluegel(breit, lade(), bezug)
+    assert not [b for b in befunde if "nicht unter" in b.pruefung]
+    b = _befund(befunde, "T 8.2.2", "zwischen Reifenoberkante")
+    assert b.grenze == pytest.approx(bezug.rad_innen_hinten - 150.0)
+    assert not b.ok and b.blockiert
 
-    b = _befund(pruefe_fluegel(stapel, lade("2027"), bezug),
-                "T 8.2.1", "nicht unter")
-    assert not b.ok
-    assert b.stufe == "hinweis"
+    schmal = _fluegel(profil, lage=(1200.0, 0.0, 600.0), winkel=-8.0,
+                      spannweite=Spannweite.gerade(300.0))
+    assert _befund(pruefe_fluegel(schmal, lade(), bezug),
+                   "T 8.2.2", "zwischen Reifenoberkante").ok
 
 
-def test_hoher_heckfluegel_besteht_die_untergrenze(profil, bezug):
+def test_hoher_heckfluegel_bis_zur_radaussenkante(profil, bezug):
+    """T 8.2.2: Zwischen 700 und 1100 mm zaehlt der AEUSSERSTE Punkt des
+    Hinterrads."""
     stapel = _fluegel(profil, lage=(1200.0, 0.0, 900.0), winkel=-8.0,
-                      spannweite=Spannweite.gerade(500.0))
-    b = _befund(pruefe_fluegel(stapel, lade("2027"), bezug),
-                "T 8.2.1", "nicht unter")
+                      spannweite=Spannweite.gerade(550.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug), "T 8.2.2", "zwischen 700")
+    assert b.grenze == pytest.approx(bezug.rad_aussen_hinten)
     assert b.ok
 
 
-def test_breitengrenze_oben_lockert_sich_2027(profil, bezug):
-    """Ueber Reifenoberkante zaehlt 2027 der AEUSSERSTE statt des innersten
-    Hinterradpunkts - die einzige Lockerung im Entwurf."""
-    stapel = _fluegel(profil, lage=(1200.0, 0.0, 900.0), winkel=-8.0,
-                      spannweite=Spannweite.gerade(550.0))
-    b26 = _befund(pruefe_fluegel(stapel, lade("2026"), bezug), "T 8.2.2", "über")
-    b27 = _befund(pruefe_fluegel(stapel, lade("2027"), bezug), "T 8.2.2", "über")
-    assert b26.grenze == pytest.approx(bezug.rad_innen_hinten)
-    assert b27.grenze == pytest.approx(bezug.rad_aussen_hinten)
-    assert not b26.ok
-    assert b27.ok
-
-
-def test_geltende_regeln_bleiben_auch_im_entwurf_hart(profil, bezug):
-    """T 2.2.1 gilt heute. Im Entwurfsdurchlauf darf daraus kein Hinweis
-    werden - sonst liest sich ein harter Verstoss wie eine Fussnote."""
+def test_geltende_regeln_sind_hart(profil, bezug):
+    """T 2.2.1 ist ein harter Verstoss, kein Hinweis."""
     stapel = _fluegel(profil, lage=(-600.0, 0.0, 50.0))
-    b = _befund(pruefe_fluegel(stapel, lade("2027"), bezug,
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
                                Fahrzustand.bremsend(600.0)),
                 "T 2.2.1", "Bodenfreiheit")
     assert not b.ok
     assert b.stufe == "fehler" and b.blockiert
 
 
+def test_keepout_ueber_dem_hinterrad(profil, bezug):
+    """T 2.1.3, Zusatzzone: ueber dem Hinterrad bis 700 mm, 150 mm nach
+    innen. Eine tiefe Heckfluegel-Endplatte direkt ueber dem Rad sitzt drin."""
+    stapel = _fluegel(profil, lage=(bezug.radstand - 100.0, 400.0, 500.0),
+                      spannweite=Spannweite.gerade(60.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug, Fahrzustand.statisch()),
+                "T 2.1.3", "über dem Hinterrad")
+    assert not b.ok
+
+
 def test_keepout_greift_wenn_der_fluegel_neben_dem_rad_sitzt(profil, bezug):
     """Ein Fluegel in Radhoehe seitlich neben dem Vorderrad verletzt T 2.1.3."""
     stapel = _fluegel(profil, lage=(-100.0, 550.0, 200.0),
                       spannweite=Spannweite.gerade(80.0))
-    b = _befund(pruefe_fluegel(stapel, lade("2026"), bezug,
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
                                Fahrzustand.statisch()),
                 "T 2.1.3", "Vorderrad")
     assert not b.ok
@@ -303,18 +315,18 @@ def test_gespiegelte_haelfte_wird_mitgeprueft(profil, bezug):
     """Wer die linke Haelfte modelliert, darf nicht durch die Breitenpruefung
     rutschen."""
     rechts = _fluegel(profil, lage=(1200.0, 0.0, 900.0), winkel=-8.0,
-                      spannweite=Spannweite.gerade(550.0))
+                      spannweite=Spannweite.gerade(720.0))
     links = [Schnitt(-s.y, s.sehne, s.anstellwinkel,
                      s.punkte * np.array([1.0, -1.0, 1.0])) for s in rechts]
-    b_r = _befund(pruefe_fluegel(rechts, lade("2026"), bezug), "T 8.2.2", "über")
-    b_l = _befund(pruefe_fluegel(links, lade("2026"), bezug), "T 8.2.2", "über")
+    b_r = _befund(pruefe_fluegel(rechts, lade(), bezug), "T 8.2.2", "zwischen 700")
+    b_l = _befund(pruefe_fluegel(links, lade(), bezug), "T 8.2.2", "zwischen 700")
     assert b_r.ist == pytest.approx(b_l.ist)
     assert not b_l.ok
 
 
 def test_reserve_zeigt_in_die_richtige_richtung(profil, bezug):
     stapel = _fluegel(profil)
-    for b in pruefe_fluegel(stapel, lade("2026"), bezug,
+    for b in pruefe_fluegel(stapel, lade(), bezug,
                             Fahrzustand.bremsend(600.0)):
         assert (b.reserve >= -1e-9) == b.ok
 

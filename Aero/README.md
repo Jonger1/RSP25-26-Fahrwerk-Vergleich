@@ -35,7 +35,7 @@ Projektwurzel — `conftest.py` sorgt für beides):
 |---|---|
 | `aerostudio/geometrie/` | Profil, Spline, Kaskadenanordnung, Spannweitenverteilung, Verwindung |
 | `aerostudio/aero/` | Panelverfahren, Traglinie, Profilpolare, Bodeneffekt, Entwurfsvorschlag, Generator |
-| `aerostudio/regeln/` | Reglement als YAML (`rules_2026.yaml`, `rules_2027_draft.yaml`) und der Prüfer darüber |
+| `aerostudio/regeln/` | Reglement als YAML (`rules_2027.yaml`, aus dem Original `FS_Rules_2027_v1.0.pdf` im Ordner `Aero/`) und der Prüfer darüber |
 | `aerostudio/spec/` | Datenmodell des AeroSpec und der Fahrzeugbezug `vehicle_ref.yaml` |
 | `aerostudio/formate/` | IBL-Schreiber, Exportplanung, Creo-Skelett |
 | `aerostudio/creo/` | Versionsprofile, Prüfkurve und Prüfprotokoll aus M0, Plugin-Ansatz |

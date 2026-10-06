@@ -168,7 +168,7 @@ def test_endplatte_wird_vom_validator_gesehen(profil, bezug):
     gebaut wird, muss T 2.1.3 reissen - ohne dass in pruefung.py eine Zeile
     dafuer geschrieben wurde.
     """
-    regeln = lade("2026")
+    regeln = lade()
 
     # Der Fluegel allein steht weit vor dem Rad und ist sauber.
     stapel = _fluegel(profil, lage=(-600.0, 0.0, 90.0))
@@ -197,7 +197,7 @@ def test_endplatte_zaehlt_fuer_die_breite(profil, bezug):
     von T 8.2.2 gar nicht erfasst - das ist kein Mangel des Pruefers, sondern
     der Wortlaut der Regel.
     """
-    regeln = lade("2026")
+    regeln = lade()
     stapel = _fluegel(profil, lage=(400.0, 0.0, 90.0))
 
     def breiteste(s):
@@ -213,7 +213,7 @@ def test_endplatte_zaehlt_fuer_die_breite(profil, bezug):
 
 
 def test_footplate_trifft_den_bodenkanal_von_t214(profil, bezug):
-    """T 2.1.4 (Entwurf 2027): bodennah muss ein Kanal frei bleiben.
+    """T 2.1.4: bodennah muss ein Kanal frei bleiben.
 
     Die Footplate liegt flach und tief und ist der erste Kandidat, ihn
     zuzusetzen. Wenn der Pruefer das nicht bemerkt, taugt die Geometrie
