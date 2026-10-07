@@ -989,6 +989,13 @@ def _ansicht_balance() -> html.Div:
             _feld("Varianten", _zahlenfeld("paket-n", 200.0, 50.0, 10.0, 5000.0),
                   "Anstellwinkel aller Flügel ±3°, Kehle, Diffusor und Rake. "
                   "Ziele: Abtrieb, Abstand zur Zielbalance, Nickwanderung."),
+            _feld("", dcc.Checklist(
+                id="paket-groesse", value=[],
+                options=[{"label": " Flügelgröße mitoptimieren", "value": "ja"}],
+                style={"fontSize": "13px"}),
+                "Sehne −20/+25 %, Halbspannweite ±20 %. Die Kennfelder "
+                "werden vierdimensional — die erste Rechnung dauert einige "
+                "Minuten, danach Sekunden."),
             _feld("Ergebnisdatei", dcc.Input(
                 id="paket-datei", type="text", value="export/doe_paket.yaml",
                 className="as-textfeld"),
@@ -3147,6 +3154,29 @@ def _paket(spec: AeroSpec, weitere: list[str] | None) -> AeroSpec:
                                    for pfad in weitere or []])
 
 
+def _regelverstoesse(element, lage=None) -> list[str]:
+    """Harte Regelverstoesse eines Fluegels - fuer die Front des Paket-DoE.
+
+    In der Fahrzeuglage der Variante: Rake hebt oder senkt den Fluegel und
+    stellt ihn steiler, genau wie in der Balance-Rechnung. Gegen den
+    Fahrzustand-Envelope wie im Reiter Fahrzeug & Regeln. Mit grobem
+    Profilraster (12 Punkte) - fuer Hoehen, Breiten und Laengen reicht das,
+    und die Pruefung bleibt bei einer halben Sekunde.
+    """
+    if lage is not None:
+        x_ref = float(element.pos_x) + 0.25 * float(element.sehne)
+        element = element.model_copy(update={
+            "pos_z": float(element.pos_z) + lage.versatz(x_ref),
+            "anstellwinkel": float(element.anstellwinkel) - lage.rake_grad})
+    teile = _elementstapel(element, punkte=12)
+    stapel = [s for teil in teile for s in teil]
+    if element.endplatte is not None:
+        stapel = stapel + geo_endplatte.schnitte(teile, element.endplatte)
+    return [f"{b.regel} {b.pruefung}" for b in
+            regeln.pruefe_fluegel(stapel, regeln.lade(), None, regeln.Fahrzustand())
+            if b.blockiert]
+
+
 def _gesamtfahrzeug(spec: AeroSpec, weitere: list[str] | None):
     """Fluegel und Unterboden aus dem Spec im Editor und den dazugenommenen."""
     p = _paket(spec, weitere)
@@ -3271,8 +3301,10 @@ def _paket_datei(datei: str | None) -> Path:
               State("spec", "data"), State("bal-specs", "value"),
               State(wert("paket-n"), "value"), State(wert("bal-tempo"), "value"),
               State(wert("bal-ziel"), "value"), State("paket-datei", "value"),
+              State("paket-groesse", "value"),
               prevent_initial_call=True)
-def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
+def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei,
+               groesse=None):
     leer = {"data": [], "layout": {"height": 400}}
     pfad = _paket_datei(datei)
     try:
@@ -3288,7 +3320,7 @@ def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
             p = _paket(spec, weitere)
             v = float(tempo or 20.0)
             radstand = regeln.Bezugsgeometrie.aus_datei().radstand
-            parameter = aero_paket.raum(p)
+            parameter = aero_paket.raum(p, groesse=bool(groesse))
             schluessel = f"{p.hash()}|{v:.3f}|" + "|".join(
                 f"{q.pfad}:{q.von}:{q.bis}" for q in parameter)
             felder = _KENNFELD_ZWISCHENSPEICHER.get(schluessel)
@@ -3301,7 +3333,8 @@ def _paket_doe(n_rechnen, n_laden, daten, weitere, n, tempo, ziel, datei):
             lauf, bewertung = aero_paket.laufen(
                 p, _fluegelkraefte, float(ziel), int(n or 200),
                 parameter=parameter, geschwindigkeit=v, radstand=radstand,
-                regelsatz=regeln.lade(), felder=felder)
+                regelsatz=regeln.lade(), felder=felder,
+                pruefen=_regelverstoesse)
             lauf.speichern(pfad)
         else:
             if not pfad.is_file():
@@ -3340,6 +3373,14 @@ def _paketstatus(lauf, pfad, ziel, bewertung) -> html.Div:
                 f"±3° Anstellwinkel allein geht es nicht — Flügelgröße, "
                 f"Lage oder Elementzahl müssen sich ändern.",
                 className="as-status-hinweis"))
+    geprueft = lauf.zusatz.get("regeln_geprueft")
+    if geprueft is not None:
+        verletzt = sum(1 for e in lauf.ergebnisse if e.get("regeln") == "verletzt")
+        zeilen.append(html.Div(
+            f"Regelprüfung (FS Rules 2027 v1.0) auf der Front: {geprueft} "
+            f"Varianten geprüft, {verletzt} wegen Verstoß aussortiert. "
+            f"Varianten abseits der Front sind nicht geprüft.",
+            className="as-hinweis"))
     if bewertung is not None and bewertung.ausserhalb:
         zeilen.append(html.Div(
             f"{bewertung.ausserhalb} Abfragen lagen außerhalb eines Kennfelds "

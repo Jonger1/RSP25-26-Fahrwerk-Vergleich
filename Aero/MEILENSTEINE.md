@@ -180,11 +180,12 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M3 | Traglinie konvergiert auch hinter dem Abriss: adaptive Dämpfung, Abbruch an Kraft UND induziertem Widerstand. Vorher sprang der Widerstand um bis zu 25 % | `aero/traglinie.py` |
 | M3 | Kaskadenpolare auf der anliegenden Seite linear fortgesetzt statt geklemmt (07.10.). Bei kleiner Streckung lag jeder Streifen jenseits der gerechneten ±6°, die Last war bis in die Spitze konstant. Heckflügel-Beispiel jetzt 71 statt 103 N, induzierter Widerstand am ideal-elliptischen Wert. Dazu ein Hinweis unter wirksamer Streckung 3 | `aero/kaskade3d.py` |
 | — | Zielbalance aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`), noch leer | `aero/gesamt.py` |
+| M8 | Paket-DoE mit Flügelgröße: Sehne −20/+25 %, Halbspannweite bis an die Breitengrenze der Einbauhöhe, vierdimensionale Kennfelder. Die Pareto-Front wird gegen FS Rules 2027 v1.0 geprüft (Nachrücker bis alles geprüft) | `aero/paket.py`, Reiter *Balance* |
 | M9 | Report als PDF per Kommando oder Knopf: Regelkonformität mit Fahrzustand, Geometrie, Druckverteilung, Spannweitenlast, h/c, Unterboden, Balance, Grenzen | `formate/report.py`, Reiter *Projekt* |
 | M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
 | M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **606 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **612 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `Aero`).
 
 **Regelstand seit 06.10.2026: FS Rules 2027 v1.0, und nur dieser.** Das Original liegt als `Aero/FS_Rules_2027_v1.0.pdf` im Repo. `regeln/rules_2027.yaml` enthält die Werte samt Wortlaut. FS Rules 2026 v1.1 und der Academy-Entwurf sind entfernt. Gegenüber dem Entwurf hat der endgültige Text drei Abweichungen:
@@ -461,6 +462,7 @@ Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0,
 * Anders als geplant lädt ein Frontpunkt die Variante in den Reiter *Unterboden* statt in den Kaskaden-Editor, denn der DoE-Raum ist der Unterboden.
 * Dazu gekommen ist die Kopplung im Reiter *Balance*. Frontflügel, Heckflügel und Unterboden werden je für sich gerechnet und addiert. Rake und Nicken wirken dabei auch auf die Flügel, also auf Höhe und Anstellwinkel. Das Ergebnis sind Balance, Achslasten (samt Nickmoment des Widerstands) und die Wanderung über ±0,5° Nicken. Wechselwirkungen fehlen, allen voran der Nachlauf des Frontflügels auf dem Unterboden. Die Zielbalance kommt aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`). Der Wert ist noch leer, bis eine Wägung vorliegt, und wird bis dahin von Hand eingetragen.
 * Der Paket-DoE (`aero/paket.py`, `python -m aerostudio.aero.paket`) variiert alle Flügelwinkel um ±3°, dazu Kehle, Diffusor und Rake. Er optimiert auf Abtrieb, Abstand zur Zielbalance und Nickwanderung. Jeder Flügel bekommt vorab ein Kennfeld (7 Winkel × 4 Höhen) aus der echten Rechnung. Das dauert einmal etwa eine Minute, danach laufen 200 Varianten in Sekunden. Gegenprobe: 589,2 N aus dem Kennfeld gegen 589,0 N echt. Der Widerstand steht in der Ergebnisdatei, ist aber kein Ziel. Ist die Zielbalance im Raum nicht erreichbar, sagt der Lauf das ausdrücklich.
+* Seit 07.10. kann der Paket-DoE auch die Flügelgröße variieren (Häkchen im Reiter *Balance*, Kommandozeile `--groesse`). Die Sehne läuft −20/+25 %, die Halbspannweite bis an die Breitengrenze, die T 8.2.2 für die Einbauhöhe erlaubt. Die Kennfelder haben dann vier Achsen (5 × 3 × 3 × 3 Stützstellen). Die erste Rechnung dauert etwa 5 Minuten, die Abweichung zur echten Rechnung liegt unter 1 %. Die Front wird gegen das Reglement geprüft. Bei 300 Varianten waren das etwa 110 Prüfungen, aussortiert wurden vor allem T 8.2.3 (Heckflügel zu weit hinten), T 8.2.1 (über 1100 mm) und T 2.1.4 (Kanal vor dem Rad). Ergebnis am Beispielpaket ohne Unterboden: Die beste regelkonforme Balance sinkt von 88 % auf 56 % vorn, bei 393 N. Der Heckflügel wird dafür breiter (650 statt 280 mm halb). 45 % sind ohne Unterboden oder ein drittes Element weiterhin nicht erreichbar.
 
 ---
 

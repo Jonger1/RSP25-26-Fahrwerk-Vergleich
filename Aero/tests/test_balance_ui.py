@@ -130,6 +130,9 @@ def projekt(tmp_path, monkeypatch, schnell):
         (UI.PROJEKT / HECK).read_text(encoding="utf-8"), encoding="utf-8")
     daten = _front()
     monkeypatch.setattr(UI, "PROJEKT", tmp_path)
+    # Die echte Regelpruefung kostet je Frontvariante eine halbe Sekunde -
+    # hier zaehlt der Ablauf, sie selbst hat einen eigenen Test unten.
+    monkeypatch.setattr(UI, "_regelverstoesse", lambda element, lage=None: [])
     UI._KENNFELD_ZWISCHENSPEICHER.clear()
     return tmp_path, daten
 
@@ -221,3 +224,28 @@ def test_ziellinie_beruecksichtigt_das_widerstandsmoment():
     ziel = 100.0 * b.balance_vorne
     # Genau am Ziel: Die Linie liegt auf dem Druckpunkt.
     assert b.druckpunkt_fuer(ziel) == pytest.approx(b.druckpunkt_x)
+
+
+def test_regelverstoesse_eines_fluegels():
+    """Die Pruefung, die der Paket-DoE auf der Front laufen laesst."""
+    from aerostudio.aero import gesamt
+    from aerostudio.spec.modell import Fahrzeuglage
+
+    heck = AeroSpec.laden(UI.PROJEKT / HECK).elemente[0]
+    assert UI._regelverstoesse(heck) == []
+    # 250 mm hoeher: ueber die 1100 mm hinter der Kopfstuetze.
+    zu_hoch = heck.model_copy(update={"pos_z": heck.pos_z + 250.0})
+    assert any("T 8.2.1" in v for v in UI._regelverstoesse(zu_hoch))
+    # Rake wirkt mit: 3 Grad um die Vorderachse heben den Heckfluegel an.
+    lage = gesamt.Lage(Fahrzeuglage(rake_grad=3.0), gesamt.Zustand(), 1535.0)
+    assert any("T 8.2.1" in v for v in UI._regelverstoesse(heck, lage))
+
+
+def test_paket_mit_groesse_aus_der_oberflaeche(projekt):
+    ordner, daten = projekt
+    _bild, status = _klick(UI._paket_doe, "btn-paket", 1, 0, daten, [HECK],
+                           20, 20.0, 45.0, "export/g.yaml", ["ja"])
+    from aerostudio.aero import doe
+    lauf = doe.Lauf.laden(ordner / "export" / "g.yaml")
+    assert any(p.pfad.endswith("halbspannweite") for p in lauf.raum)
+    assert "gegen" in _text(status) or "Regelprüfung" in _text(status)

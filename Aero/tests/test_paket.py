@@ -153,3 +153,73 @@ def test_zielbalance_steht_in_der_ergebnisdatei(tmp_path):
     lauf, _ = paket.laufen(_paket(), attrappe, 47.0, n=8, radstand=L)
     geladen = doe.Lauf.laden(lauf.speichern(tmp_path / "p.yaml"))
     assert geladen.zusatz["zielbalance"] == 47.0
+
+
+# ------------------------------------------------- Groesse mitoptimieren
+
+def attrappe_groesse(element, v):
+    """Linear in Winkel, Hoehe, Sehne und Halbspannweite - das Kennfeld muss
+    sie exakt treffen."""
+    h = paket.halbspannweite(element)
+    abtrieb = (100.0 - 10.0 * element.anstellwinkel - 0.1 * element.pos_z
+               + 0.2 * element.sehne + 0.1 * h)
+    from types import SimpleNamespace
+    return SimpleNamespace(abtrieb=abtrieb, widerstand=abtrieb / 10.0,
+                           streifen=[], auftrieb_lokal=[])
+
+
+def test_halbspannweite_streckt_die_stuetzstellen():
+    p = _paket()
+    alt = [s.y for s in p.elemente[0].spannweite.stuetzstellen]
+    v = doe.variante(p, {"elemente.0.halbspannweite": 2.0 * max(alt)})
+    neu = [s.y for s in v.elemente[0].spannweite.stuetzstellen]
+    assert neu == pytest.approx([2.0 * y for y in alt])
+
+
+def test_raum_mit_groesse_reicht_bis_zur_regelgrenze():
+    """Der Heckfluegel ueber 700 mm darf bis zur Hinterrad-Aussenkante -
+    +20 % allein haetten die Zielbalance unerreichbar gelassen."""
+    from aerostudio.regeln import Bezugsgeometrie
+    bezug = Bezugsgeometrie.aus_datei()
+    p = _paket()
+    r = {q.pfad: q for q in paket.raum(p, groesse=True)}
+    assert "elemente.0.sehne" in r and "elemente.1.halbspannweite" in r
+    assert r["elemente.1.halbspannweite"].bis == pytest.approx(
+        max(1.2 * paket.halbspannweite(p.elemente[1]), bezug.rad_aussen_hinten))
+    assert "elemente.0.sehne" not in {q.pfad for q in paket.raum(p)}
+
+
+def test_kennfeld_mit_groesse_trifft_die_rechnung():
+    e = fluegel(-600.0, 80.0, -4.0)
+    feld = paket.kennfeld(e, attrappe_groesse, 20.0, (-8.0, 0.0), (60.0, 100.0),
+                          stufen_winkel=3, stufen_hoehe=2,
+                          sehne=(160.0, 260.0), spannweite=(400.0, 700.0))
+    assert set(feld.achsen) == {"winkel", "hoehe", "sehne", "halbspannweite"}
+    probe = paket._mit(e, {"winkel": -5.3, "hoehe": 77.0, "sehne": 211.0,
+                           "halbspannweite": 555.0})
+    assert feld(probe).abtrieb == pytest.approx(attrappe_groesse(probe, 20.0).abtrieb)
+    assert feld.enthaelt(probe)
+
+
+def test_front_wird_gegen_die_regeln_geprueft():
+    """Faellt eine Frontvariante durch, rueckt die naechste nach - am Ende
+    ist jede Variante auf der Front geprueft und regelkonform."""
+    p = _paket()
+    gesehen = []
+
+    def pruefen(element, lage):
+        gesehen.append(element.id)
+        return (["T 8.2.2 zu breit"] if paket.halbspannweite(element) > 560.0
+                else [])
+
+    lauf, _ = paket.laufen(p, attrappe_groesse, 45.0, n=40, radstand=L,
+                           groesse=True, pruefen=pruefen,
+                           stufen_winkel=3, stufen_hoehe=2,
+                           stufen_sehne=2, stufen_spannweite=2)
+    assert lauf.front
+    assert all(lauf.ergebnisse[i]["regeln"] == "geprüft" for i in lauf.front)
+    verletzt = [e for e in lauf.ergebnisse if e["regeln"] == "verletzt"]
+    assert verletzt and all(not e["gueltig"] for e in verletzt)
+    assert all("T 8.2.2" in e["grund"] for e in verletzt)
+    assert lauf.zusatz["regeln_geprueft"] == len(
+        [e for e in lauf.ergebnisse if e["regeln"] != "ungeprüft"])

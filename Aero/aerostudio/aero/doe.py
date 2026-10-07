@@ -99,6 +99,17 @@ def setze(daten: dict, pfad: str, wert: float) -> None:
                 raise KeyError(f"Pfad {pfad}: '{teil}' fehlt im Spec. Ist der "
                                f"Unterboden angelegt?")
             knoten = knoten[teil]
+    if teile[-1] == "halbspannweite" and "spannweite" in knoten:
+        # Abgeleitete Groesse: Im Spec steht keine Halbspannweite, sondern
+        # Stuetzstellen. Gestreckt wird wie in Spannweite.skaliert -
+        # derselbe Verlauf, proportional an andere Stellen.
+        stellen = (knoten["spannweite"] or {}).get("stuetzstellen") or []
+        weite = max((s["y"] for s in stellen), default=0.0)
+        if weite <= 0.0:
+            raise ValueError(f"Pfad {pfad}: Die Spannweite hat keine Ausdehnung.")
+        for s in stellen:
+            s["y"] = s["y"] * float(wert) / weite
+        return
     knoten[teile[-1]] = float(wert)
 
 
