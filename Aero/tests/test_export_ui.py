@@ -237,10 +237,12 @@ ENDPLATTE_AUS = ("keine", 4.0, 30.0, 30.0, 40.0, 20.0, 0.0, 25.0, 0.0)
 # Unterboden sehen - wie jeder Entwurf von vor M8.
 UNTERBODEN_AUS = ([], 250.0, 700.0, 150.0, 110.0, 750.0, 55.0, 50.0, 10.0,
                   400.0, 0.7, 0.0, 0.0)
+# Nichts geoeffnet: keine Basis (siehe _baue_spec).
+BASIS_AUS = (None,)
 
 WERTE = ("datei", "e423.dat", 4.0, 40.0, 12.0, "abtrieb", 250.0, -4.0,
          "prepreg", 0.6, 3.0, 0.2, "Frontfluegel Hauptelement",
-         SEKTIONEN, 13.0, 600.0, 90.0, KASKADE) + ENDPLATTE_AUS + UNTERBODEN_AUS
+         SEKTIONEN, 13.0, 600.0, 90.0, KASKADE) + ENDPLATTE_AUS + UNTERBODEN_AUS + BASIS_AUS
 
 
 def test_hauptcallback_liefert_spec_und_vier_figuren():
@@ -253,7 +255,7 @@ def test_hauptcallback_liefert_spec_und_vier_figuren():
 def test_naca_zweig_erzeugt_ein_anderes_profil():
     naca = ("naca", None, 6.0, 40.0, 15.0, "abtrieb", 180.0, -8.0,
             "nasslaminat", 1.2, 0.0, 0.2, "NACA-Versuch",
-            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0, []) + ENDPLATTE_AUS + UNTERBODEN_AUS
+            [{"y": 0.0}, {"y": 500.0}], 9.0, 500.0, 80.0, []) + ENDPLATTE_AUS + UNTERBODEN_AUS + BASIS_AUS
     a, *_ = UI._profil_aktualisieren(*WERTE)
     b, *_ = UI._profil_aktualisieren(*naca)
     assert AeroSpec.model_validate(a).hash() != AeroSpec.model_validate(b).hash()

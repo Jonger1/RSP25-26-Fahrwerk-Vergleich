@@ -1058,11 +1058,35 @@ def _ansicht_regeln() -> html.Div:
     ])
 
 
+def _alle_specs() -> list[dict]:
+    """Alle Specs unter specs/ zum Oeffnen - auch aktuell.yaml und Pakete."""
+    ordner = PROJEKT / "specs"
+    if not ordner.is_dir():
+        return []
+    return [{"label": str(p.relative_to(ordner)), "value": str(p.relative_to(PROJEKT))}
+            for p in sorted(ordner.rglob("*.yaml")) if ".historie" not in p.parts]
+
+
 def _ansicht_projekt() -> html.Div:
     return html.Div([
         _karte([_ueberschrift("Aktueller Stand"),
                 html.Div(id="projekt-info", style={"fontSize": "13px"})]),
 
+        _karte([
+            _ueberschrift("Entwurf öffnen"),
+            html.Div("Lädt ein gespeichertes Spec in alle Felder — den eigenen "
+                     "Stand (aktuell.yaml), ein Beispiel oder eine "
+                     "Paketvariante. Beim Start wird aktuell.yaml automatisch "
+                     "geöffnet.", className="as-hinweis",
+                     style={"marginBottom": "9px"}),
+            dcc.Dropdown(id="oeffnen-datei", options=_alle_specs(),
+                         placeholder="Spec wählen"),
+            html.Button("Öffnen", id="btn-oeffnen", n_clicks=0,
+                        className="as-knopf as-knopf-voll",
+                        style={"marginTop": "8px"}),
+            html.Div(id="oeffnen-status", className="as-hinweis",
+                     style={"marginTop": "9px"}),
+        ]),
         _karte([
             _ueberschrift("Frühere Stände"),
             html.Div("Jedes Speichern, bei dem sich etwas geändert hat, legt "
@@ -1108,6 +1132,11 @@ def layout() -> html.Div:
 
     return html.Div([
         dcc.Store(id="spec"),
+        # Was ein geoeffnetes Spec mitbringt und kein Bedienfeld hat (siehe
+        # _baue_spec). Leer, solange nichts geoeffnet wurde.
+        dcc.Store(id="spec-basis"),
+        # Beim Seitenaufruf: welche Datei automatisch geoeffnet wird.
+        dcc.Store(id="spec-start", data=str(SPEC_VORGABE) if SPEC_VORGABE.is_file() else None),
         # Merkt sich je Verfahren die zuletzt benutzten Werte. Bewusst nur
         # Bedienkomfort und nicht Teil des Spec: Es beschreibt nicht den
         # Entwurf, sondern die Gewohnheit des Bearbeiters.
@@ -1531,14 +1560,30 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
                endplattenhoehe,
                ub_aktiv, ub_x, ub_breite, ub_einlass_l, ub_einlass_h,
                ub_kehle_l, ub_kehle_v, ub_kehle_h, ub_diffusor_w,
-               ub_diffusor_l, ub_abdichtung, rake, rake_x) -> AeroSpec:
+               ub_diffusor_l, ub_abdichtung, rake, rake_x,
+               basis=None) -> AeroSpec:
     """Sammelt die Bedienelemente zu einem gueltigen Spec.
 
     Einzige Stelle, an der aus Bedienelementen Fachdaten werden - alles Weitere
     arbeitet nur noch mit dem Spec.
+
+    `basis` traegt, was ein geoeffnetes Spec mitbringt und wofuer es kein
+    Bedienfeld gibt: Projektname und Bearbeiter, Exporteinstellungen, die
+    Fertigungsdetails, id, pos_y und Fertigung des Elements. Ohne sie
+    haette ein geoeffneter Entwurf einen anderen Spec-Hash als seine Datei.
     """
     spec = AeroSpec.beispiel()
     element = spec.elemente[0]
+    basis = basis or {}
+    if basis.get("meta"):
+        spec.meta = type(spec.meta).model_validate(basis["meta"])
+    if basis.get("export"):
+        spec.export = type(spec.export).model_validate(basis["export"])
+    if basis.get("element_id"):
+        element.id = basis["element_id"]
+    element.pos_y = float(basis.get("pos_y") or 0.0)
+    if basis.get("element_fertigung"):
+        element.fertigung = Fertigung.model_validate(basis["element_fertigung"])
     if quelle == "naca":
         element.profil = ProfilNaca(
             woelbung=(0.0 if w is None else w) / 100.0,
@@ -1591,12 +1636,81 @@ def _baue_spec(quelle, katalogdatei, w, lage, dicke, wirkrichtung, sehne, aoa,
     spec.lage = Fahrzeuglage(rake_grad=zahl(rake, 0.0),
                              drehpunkt_x=zahl(rake_x, 0.0))
 
-    spec.fertigung = Fertigung(
-        verfahren=verfahren or "unbestimmt",
-        wandstaerke=float(wandstaerke or 0.6),
-        kern=float(0.0 if kern is None else kern),
-        klebespalt=float(0.0 if klebespalt is None else klebespalt))
+    spec.fertigung = Fertigung.model_validate({
+        **(basis.get("fertigung") or {}),
+        "verfahren": verfahren or "unbestimmt",
+        "wandstaerke": float(wandstaerke or 0.6),
+        "kern": float(0.0 if kern is None else kern),
+        "klebespalt": float(0.0 if klebespalt is None else klebespalt)})
     return spec
+
+
+def felder_aus_spec(spec: AeroSpec) -> tuple[list, dict, list[str]]:
+    """Die Umkehrung von `_baue_spec`: Feldwerte in der Reihenfolge von
+    `_EINGABEN` (ohne die Basis), die Basis und Hinweise auf alles, was der
+    Editor nicht abbilden kann.
+
+    Der Editor kennt EIN Element. Ein Paket-Spec mit Front- und Heckfluegel
+    wird mit dem ersten geoeffnet - das sagt der Hinweis.
+    """
+    if not spec.elemente:
+        raise ValueError("Das Spec enthält kein Element.")
+    e = spec.elemente[0]
+    hinweise = []
+    if len(spec.elemente) > 1:
+        hinweise.append(
+            f"Das Spec enthält {len(spec.elemente)} Flügel. Der Editor zeigt "
+            f"den ersten ({e.name or e.id}); die übrigen bleiben in der Datei "
+            f"und lassen sich im Reiter Balance dazunehmen.")
+    if e.spannweite is None:
+        hinweise.append("Das Spec hat keine Spannweite. Der Editor ergänzt "
+                        "die Vorgabe — damit ändert sich der Spec-Hash.")
+    if isinstance(e.profil, ProfilNaca):
+        quelle, datei = "naca", "e423.dat"
+        w, lage, dicke = (e.profil.woelbung * 100.0, e.profil.woelbungslage * 100.0,
+                          e.profil.dicke * 100.0)
+    elif isinstance(e.profil, ProfilAusDatei):
+        quelle, datei = "datei", e.profil.datei
+        w, lage, dicke = 4.0, 40.0, 12.0
+    else:
+        raise ValueError("Das Profil dieses Specs (CST) lässt sich im Editor "
+                         "nicht darstellen.")
+    ep = e.endplatte
+    art = "geometrie" if ep is not None else (
+        "hoehe" if (e.endplattenhoehe or 0.0) > 0.0 else "keine")
+    ub = spec.unterboden
+    vorgabe_ub = Unterboden()
+    q = ub or vorgabe_ub
+    fuss = ep.footplate if ep is not None else None
+    werte = [
+        quelle, datei, round(w, 3), round(lage, 3), round(dicke, 3),
+        e.wirkrichtung.value, e.sehne, e.anstellwinkel,
+        spec.fertigung.verfahren, spec.fertigung.wandstaerke, spec.fertigung.kern,
+        spec.fertigung.klebespalt, e.name,
+        _tabellendaten(e.spannweite) if e.spannweite is not None
+        else _tabellendaten(Spannweite.frontfluegel_aussen()),
+        float(e.spannweite.schnitte if e.spannweite is not None else 13),
+        -e.pos_x, e.pos_z,
+        _kaskadendaten(e.kaskade),
+        art,
+        ep.dicke if ep else 4.0, ep.ueberstand_vorne if ep else 0.0,
+        ep.ueberstand_hinten if ep else 0.0, ep.ueberstand_oben if ep else 0.0,
+        ep.ueberstand_unten if ep else 0.0,
+        fuss.breite if fuss else 0.0, fuss.hoehe if fuss else 25.0,
+        float(e.endplattenhoehe or 0.0),
+        ["ja"] if ub is not None else [],
+        q.x_start, q.breite, q.einlass_laenge, q.einlass_hoehe, q.kehle_laenge,
+        q.kehle_hoehe_vorne, q.kehle_hoehe_hinten, q.diffusor_winkel,
+        q.diffusor_laenge, q.abdichtung,
+        spec.lage.rake_grad, spec.lage.drehpunkt_x,
+    ]
+    basis = {"meta": spec.meta.model_dump(mode="json"),
+             "export": spec.export.model_dump(mode="json"),
+             "fertigung": spec.fertigung.model_dump(mode="json"),
+             "element_id": e.id, "pos_y": e.pos_y,
+             "element_fertigung": (e.fertigung.model_dump(mode="json")
+                                   if e.fertigung is not None else None)}
+    return werte, basis, hinweise
 
 
 _EINGABEN = [
@@ -1623,6 +1737,7 @@ _EINGABEN = [
     Input(wert("ub-kehle-h"), "value"), Input(wert("ub-diffusor-w"), "value"),
     Input(wert("ub-diffusor-l"), "value"), Input(wert("ub-abdichtung"), "value"),
     Input(wert("rake"), "value"), Input(wert("rake-x"), "value"),
+    Input("spec-basis", "data"),
 ]
 
 
@@ -1648,6 +1763,40 @@ def _profil_aktualisieren(*werte):
     except Exception as fehler:
         leer = {"data": [], "layout": {"height": 200}}
         return no_update, _fehlerkarte(fehler), leer, leer, leer, leer
+
+
+def _spec_oeffnen(pfad) -> tuple:
+    """Feldwerte, Basis und Meldung fuer eine Spec-Datei."""
+    datei = Path(pfad)
+    if not datei.is_absolute():
+        datei = PROJEKT / datei
+    spec = AeroSpec.laden(datei)
+    werte, basis, hinweise = felder_aus_spec(spec)
+    meldung = [html.Div(f"Geöffnet: {datei.name} (Spec {spec.hash()})",
+                        className="as-status-ok")]
+    meldung += [html.Div(h, className="as-status-hinweis") for h in hinweise]
+    return (*werte, basis, html.Div(meldung))
+
+
+@app.callback(*[Output(i.component_id, i.component_property, allow_duplicate=True)
+                for i in _EINGABEN],
+              Output("oeffnen-status", "children"),
+              Input("btn-oeffnen", "n_clicks"), Input("spec-start", "data"),
+              State("oeffnen-datei", "value"),
+              prevent_initial_call="initial_duplicate")
+def _oeffnen(n, start, gewaehlt):
+    """Oeffnet ein Spec: per Knopf das gewaehlte, beim Seitenaufruf
+    aktuell.yaml. Die Felder werden gesetzt, das Spec entsteht daraus wie
+    immer - der Editor bleibt die einzige Stelle, an der es gebaut wird."""
+    leer = tuple(no_update for _ in _EINGABEN)
+    pfad = gewaehlt if _ausgeloest_von("btn-oeffnen") else start
+    if not pfad:
+        return (*leer, no_update if not _ausgeloest_von("btn-oeffnen")
+                else "Erst ein Spec wählen.")
+    try:
+        return _spec_oeffnen(pfad)
+    except Exception as fehler:
+        return (*leer, _fehlerkarte(fehler))
 
 
 @app.callback(Output("katalog-notiz", "children"),
@@ -1840,9 +1989,8 @@ def _stand_zurueckholen(klicks):
         projekt.zurueck(SPEC_VORGABE, stand.datei)
         return html.Div(
             f"Stand vom {stand.lesbar} in {SPEC_VORGABE.name} zurückgeholt. "
-            f"Die Felder zeigen weiter den bisherigen Entwurf — ein "
-            f"gespeichertes Spec lässt sich in der Oberfläche noch nicht "
-            f"öffnen (siehe ANLEITUNG.md, Abschnitt 2).",
+            f"In die Felder kommt er über \u201eEntwurf öffnen\u201c "
+            f"(aktuell.yaml) oder beim Neuladen der Seite.",
             className="as-status-ok")
     except Exception as fehler:
         return _fehlerkarte(fehler)

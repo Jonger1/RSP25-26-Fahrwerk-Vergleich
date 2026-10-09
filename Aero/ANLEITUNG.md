@@ -55,15 +55,21 @@ leitet sich allein aus diesem Spec ab.
 * **„Spec speichern“** (oben rechts) schreibt den Entwurf nach
   `specs/aktuell.yaml`. Der vorherige Stand wandert in die Historie (Reiter
   Projekt).
+* **Beim Start öffnet Aero Studio `specs/aktuell.yaml` automatisch.** Du
+  machst also dort weiter, wo du zuletzt gespeichert hast.
+* **Reiter Projekt → „Entwurf öffnen“** lädt jedes andere Spec in die Felder:
+  ein Beispiel aus `specs/beispiele/`, eine Paketvariante aus `specs/pakete/`
+  oder den Entwurf eines Teamkollegen. Danach „Spec speichern“, um damit
+  weiterzuarbeiten.
 * Fertige Startpunkte liegen in `specs/beispiele/`: ein zweielementiger
   Frontflügel und ein Heckflügel.
 
-> **Derzeitige Einschränkung:** Die Oberfläche startet immer mit den
-> Vorgabewerten. Ein gespeichertes Spec lässt sich in der Oberfläche **noch
-> nicht wieder öffnen**. Auch „zurückholen“ im Reiter Projekt stellt nur die
-> Datei wieder her, nicht die Felder. Gespeicherte Specs nutzt man derzeit im
-> Reiter Balance („Weitere Specs“), im Report und auf der Kommandozeile.
-> Wichtige Werte deshalb notieren oder die YAML-Datei als Referenz öffnen.
+> **Ein Flügel im Editor:** Der Editor bearbeitet immer einen Flügel. Öffnest
+> du ein Paket mit Front- und Heckflügel, erscheint der erste, und die Meldung
+> sagt es. Die anderen Flügel nimmst du im Reiter Balance unter „Weitere Specs“
+> dazu. Front- und Heckflügel deshalb am besten als getrennte Dateien
+> speichern, z. B. `specs/frontfluegel.yaml` und `specs/heckfluegel.yaml`
+> (Datei kopieren und umbenennen).
 
 ---
 
@@ -96,7 +102,8 @@ So entsteht ein Frontflügel. Die Reiter stehen oben in der Leiste.
 5. **Creo** – „IBL schreiben“ erzeugt die Kurvendatei, „Skelett schreiben“ nur
    die Drehachsen. Wie es in Creo weitergeht, steht in
    [ANLEITUNG_Creo.md](ANLEITUNG_Creo.md).
-6. **Projekt** – „Spec speichern“ und **„Report als PDF“**.
+6. **Projekt** – „Entwurf öffnen“, frühere Stände zurückholen und
+   **„Report als PDF“**. Gespeichert wird oben rechts mit „Spec speichern“.
 
 ---
 
@@ -111,7 +118,7 @@ So entsteht ein Frontflügel. Die Reiter stehen oben in der Leiste.
 | **Balance** | Gesamtfahrzeug aus mehreren Specs: Abtrieb, Achslasten, Balance vorn, Nickwanderung, DRS offen; Paket-Optimierung |
 | **Fahrzeug & Regeln** | Regelampel FS Rules 2027 v1.0 mit Fahrzustand, Seiten- und Draufsicht |
 | **Creo** | Export als IBL, Skelett, Vorschau der Punkte |
-| **Projekt** | Speicherstand, Historie, PDF-Report, das komplette Spec als Text |
+| **Projekt** | Entwurf öffnen, Speicherstand, Historie, PDF-Report, das komplette Spec als Text |
 
 ### Unterboden
 
