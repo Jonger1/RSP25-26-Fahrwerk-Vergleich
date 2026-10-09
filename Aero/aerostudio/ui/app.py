@@ -1839,9 +1839,10 @@ def _stand_zurueckholen(klicks):
         stand = staende[nr]
         projekt.zurueck(SPEC_VORGABE, stand.datei)
         return html.Div(
-            f"Stand vom {stand.lesbar} zurückgeholt. Die Oberfläche zeigt "
-            f"ihn erst nach einem Neuladen der Seite — sie liest das Spec "
-            f"beim Start, nicht fortlaufend.",
+            f"Stand vom {stand.lesbar} in {SPEC_VORGABE.name} zurückgeholt. "
+            f"Die Felder zeigen weiter den bisherigen Entwurf — ein "
+            f"gespeichertes Spec lässt sich in der Oberfläche noch nicht "
+            f"öffnen (siehe ANLEITUNG.md, Abschnitt 2).",
             className="as-status-ok")
     except Exception as fehler:
         return _fehlerkarte(fehler)

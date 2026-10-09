@@ -56,6 +56,8 @@ die Rules 2027 als auch das nächste Creo-Upgrade ohne Umbau.
 
 ## Weiterlesen
 
+* [ANLEITUNG.md](ANLEITUNG.md) — **Bedienungsanleitung**: starten, ein Flügel
+  von Anfang bis Ende, alle Reiter, Report, Teilen im Team
 * [KONZEPT_AeroStudio.md](KONZEPT_AeroStudio.md) — warum das Werkzeug so
   aufgebaut ist, wie es aufgebaut ist
 * [MEILENSTEINE.md](MEILENSTEINE.md) — Arbeitsplan M0 bis M9, aktueller Stand,
