@@ -186,7 +186,7 @@ Plan, keine Reihenfolge, in der gearbeitet werden muss:
 | M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
 | M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
 
-Die Testabdeckung liegt bei **644 Tests**, die in gut drei Minuten
+Die Testabdeckung liegt bei **648 Tests**, die in gut drei Minuten
 durchlaufen (`python -m pytest` im Ordner `AERO`).
 
 **Regelstand seit 06.10.2026: FS Rules 2027 v1.0, und nur dieser.** Das Original liegt als `AERO/FS_Rules_2027_v1.0.pdf` im Repo. `regeln/rules_2027.yaml` enthält die Werte samt Wortlaut. FS Rules 2026 v1.1 und der Academy-Entwurf sind entfernt. Gegenüber dem Entwurf hat der endgültige Text drei Abweichungen:

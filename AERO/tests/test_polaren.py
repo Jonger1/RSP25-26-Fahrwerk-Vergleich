@@ -85,7 +85,9 @@ def test_csv():
     text = pp.als_csv([p])
     zeilen = text.strip().splitlines()
     assert zeilen[0].startswith("profil;reynolds;alpha_grad;cl;cd")
+    assert zeilen[0].endswith(";vertrauen;unsicher")
     assert len(zeilen) == 3 and zeilen[1].startswith("x;200000;-1.00;-0.20000")
+    assert zeilen[1].endswith(";nein")
 
 
 @nf
@@ -134,3 +136,45 @@ def test_sicherer_bereich_um_den_arbeitspunkt():
     assert pp.sicherer_bereich(p) == (-4.0, 0.0)
     p.vertrauen = np.full_like(a, 0.3)
     assert pp.sicherer_bereich(p) is None
+
+
+def _polare(vertrauen, name=""):
+    a = np.arange(-5.0, -5.0 + len(vertrauen), 1.0)
+    return pp.Polare(alpha=a, cl=a * 0.1, cd=0.01 + 0.001 * a ** 2, cm=a * 0,
+                     vertrauen=np.asarray(vertrauen, dtype=float),
+                     reynolds=2e5, name=name)
+
+
+def test_unsichere_bereiche():
+    p = _polare([.5, .6, .9, .9, .9, .9, .9, .9, .7, .9, .4])
+    assert pp.unsichere_bereiche(p) == [(-5.0, -4.0, 0.5), (3.0, 3.0, 0.7),
+                                        (5.0, 5.0, 0.4)]
+    assert pp.anteil_sicher(p) == pytest.approx(7 / 11)
+
+
+def _text(meldungen) -> str:
+    return " | ".join(json.dumps(m.to_plotly_json(), default=str,
+                                 ensure_ascii=False) for m in meldungen)
+
+
+def test_meldung_arbeitspunkt_im_unsicheren_bereich():
+    element = AeroSpec.beispiel().elemente[0].model_copy(
+        update={"anstellwinkel": -4.5})
+    p = _polare([.5, .6, .9, .9, .9, .9, .9, .9, .9, .9, .9])
+    text = _text(UI._unsicherheitsmeldungen([p], {}, element))
+    assert "Dein Anstellwinkel -4,5°" in text and "as-status-fehler" in text
+    assert "unsicher bei α -5,0° bis -4,0°" in text
+
+
+def test_meldung_fast_ueberall_unsicher():
+    element = AeroSpec.beispiel().elemente[0].model_copy(
+        update={"anstellwinkel": 0.0})
+    p = _polare([.5, .5, .5, .5, .5, .5, .5, .9, .9, .5, .5])
+    text = _text(UI._unsicherheitsmeldungen([p], {}, element))
+    assert "nur bei 18 %" in text and "nicht zum Auslegen" in text
+    assert "von +2,0° bis +3,0°" in text
+
+
+def test_keine_meldung_wenn_alles_sicher():
+    element = AeroSpec.beispiel().elemente[0]
+    assert UI._unsicherheitsmeldungen([_polare([.9] * 11)], {}, element) == []

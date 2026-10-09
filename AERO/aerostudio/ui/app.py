@@ -2710,6 +2710,63 @@ def _polarenreihe(daten, re_text, tempo_text, von, bis, ncrit, modell):
     return polaren, beschriftung, profil, element
 
 
+def _grad(a: float) -> str:
+    return f"{a:+.1f}°".replace(".", ",")
+
+
+def _unsicherheitsmeldungen(polaren, beschriftung, element) -> list:
+    """Klartext, wo NeuralFoil unsicher ist - die gestrichelte Linie allein
+    uebersieht man zu leicht.
+
+    Drei Stufen: der eingestellte Anstellwinkel liegt im unsicheren Bereich
+    (rot, denn damit rechnet der Fluegel), eine Polare ist fast ueberall
+    unsicher (rot, nicht zum Auslegen), oder sie ist nur an den Raendern
+    unsicher (Hinweis mit den Winkelbereichen).
+    """
+    from ..aero import profilpolare as pp
+
+    meldungen = []
+    aoa = float(element.anstellwinkel)
+    for p in polaren:
+        name = beschriftung.get(p.reynolds,
+                                f"Re {p.reynolds:,.0f}".replace(",", " "))
+        if p.alpha[0] <= aoa <= p.alpha[-1]:
+            v = float(p.vertrauen_bei(aoa))
+            if v < pp.VERTRAUENSSCHWELLE:
+                meldungen.append(html.Div(
+                    f"⚠ {name}: Dein Anstellwinkel {_grad(aoa)} liegt im "
+                    f"unsicheren Bereich - NeuralFoil ist sich dort nur zu "
+                    f"{v * 100:.0f} % sicher. Die Werte an diesem "
+                    f"Arbeitspunkt nicht ohne CFD oder Messung verwenden.",
+                    className="as-status-fehler"))
+
+        bereiche = pp.unsichere_bereiche(p)
+        if not bereiche:
+            continue
+        anteil = pp.anteil_sicher(p)
+        sicher = pp.sicherer_bereich(p)
+        if anteil < 0.5:
+            text = (f"⚠ {name}: NeuralFoil ist sich nur bei {anteil * 100:.0f} % "
+                    f"der Winkel sicher"
+                    + (f" (von {_grad(sicher[0])} bis {_grad(sicher[1])})"
+                       if sicher else "")
+                    + ". Diese Polare nicht zum Auslegen verwenden. Bei kleiner "
+                      "Reynoldszahl ist das typisch: Die Laminarblase bildet "
+                      "das Verfahren nur grob ab.")
+            meldungen.append(html.Div(text, className="as-status-fehler"))
+        else:
+            teile = ", ".join(
+                f"{_grad(a)} bis {_grad(b)} (bis {v * 100:.0f} %)"
+                if a != b else f"{_grad(a)} ({v * 100:.0f} %)"
+                for a, b, v in bereiche)
+            meldungen.append(html.Div(
+                f"{name}: unsicher bei α {teile}. Dort sind die Werte nur "
+                f"grob - meist ist das der Bereich hinter dem Abriss.",
+                className="as-status-hinweis"))
+    return [html.Div(m.children, className=m.className,
+                     style={"marginTop": "5px"}) for m in meldungen]
+
+
 def _polarentabelle(polaren, beschriftung, abtrieb: bool) -> html.Table:
     from ..aero.profilpolare import kennwerte
 
@@ -2780,6 +2837,7 @@ def _polaren_zeichnen(daten, re_text, tempo_text, von, bis, ncrit, modell):
                 "wo NeuralFoil sich selbst unter 80 % sicher ist - meist "
                 "hinter dem Abriss. Dort ist die Zahl eine Hausnummer.",
                 className="as-hinweis", style={"marginTop": "4px"}),
+            *_unsicherheitsmeldungen(polaren, beschriftung, element),
         ], style={"margin": "0 0 8px 2px"})
         return (darstellung.polarendiagramme(polaren, beschriftungen=beschriftung),
                 _polarentabelle(polaren, beschriftung, abtrieb), hinweis)

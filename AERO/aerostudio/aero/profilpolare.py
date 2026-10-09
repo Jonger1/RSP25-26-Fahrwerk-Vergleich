@@ -308,6 +308,33 @@ def sicherer_bereich(p: Polare, schwelle: float = VERTRAUENSSCHWELLE):
     return float(p.alpha[links]), float(p.alpha[rechts])
 
 
+def unsichere_bereiche(p: Polare, schwelle: float = VERTRAUENSSCHWELLE
+                       ) -> list[tuple[float, float, float]]:
+    """Die Winkelbereiche, in denen NeuralFoil sich selbst nicht traut.
+
+    Je Bereich (von, bis, schlechtestes Vertrauen darin), aufsteigend.
+    """
+    unsicher = p.vertrauen < schwelle
+    bereiche = []
+    i = 0
+    while i < len(unsicher):
+        if not unsicher[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < len(unsicher) and unsicher[j + 1]:
+            j += 1
+        bereiche.append((float(p.alpha[i]), float(p.alpha[j]),
+                         float(p.vertrauen[i:j + 1].min())))
+        i = j + 1
+    return bereiche
+
+
+def anteil_sicher(p: Polare, schwelle: float = VERTRAUENSSCHWELLE) -> float:
+    """Welcher Anteil der gerechneten Winkel belastbar ist, 0 bis 1."""
+    return float(np.mean(p.vertrauen >= schwelle)) if len(p.vertrauen) else 0.0
+
+
 def als_csv(polaren: list[Polare]) -> str:
     """Alle Polaren in einer Tabelle, eine Zeile je Reynoldszahl und Winkel.
 
@@ -315,9 +342,10 @@ def als_csv(polaren: list[Polare]) -> str:
     Rechner richtig, wenn man es über "Daten > Aus Text" holt, und jedes
     Skript liest es ohne Umweg.
     """
-    zeilen = ["profil;reynolds;alpha_grad;cl;cd;cm;cl_cd;vertrauen"]
+    zeilen = ["profil;reynolds;alpha_grad;cl;cd;cm;cl_cd;vertrauen;unsicher"]
     for p in polaren:
         for a, cl, cd, cm, v in zip(p.alpha, p.cl, p.cd, p.cm, p.vertrauen):
             zeilen.append(f"{p.name};{p.reynolds:.0f};{a:.2f};{cl:.5f};{cd:.6f};"
-                          f"{cm:.5f};{cl / max(cd, 1e-9):.3f};{v:.3f}")
+                          f"{cm:.5f};{cl / max(cd, 1e-9):.3f};{v:.3f};"
+                          f"{'ja' if v < VERTRAUENSSCHWELLE else 'nein'}")
     return "\n".join(zeilen) + "\n"

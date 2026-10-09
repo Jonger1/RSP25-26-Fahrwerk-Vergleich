@@ -135,7 +135,10 @@ Die fünf Diagramme wie bei Airfoil Tools – CL über CD, CL über α, CL/CD ü
 * **Dazu aus Geschwindigkeit**: z. B. `10, 20` – die Reynoldszahl kommt dann
   aus Tempo und Sehne. So sieht man, welche Polare im Betrieb gilt.
 * **Gestrichelt** ist, wo NeuralFoil sich selbst unter 80 % sicher ist, meist
-  hinter dem Abriss. Die Tabelle darunter nennt CL-Maximum, beste Gleitzahl,
+  hinter dem Abriss. Über den Diagrammen steht es zusätzlich im Klartext: je
+  Reynoldszahl die unsicheren Winkelbereiche (orange), **rot**, wenn der
+  eingestellte Anstellwinkel in einem unsicheren Bereich liegt oder eine Polare
+  fast überall unsicher ist – die dann nicht zum Auslegen verwenden. Die Tabelle darunter nennt CL-Maximum, beste Gleitzahl,
   CD min, CL und CM bei 0° und den sicheren Winkelbereich je Reynoldszahl.
 * Bei Wirkrichtung **Abtrieb** ist das Profil gespiegelt, die Kurven stehen
   gegenüber Airfoil Tools auf dem Kopf (negatives CL = Abtrieb). Für den
