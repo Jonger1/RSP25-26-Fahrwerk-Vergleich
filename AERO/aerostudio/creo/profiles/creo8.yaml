@@ -1,0 +1,270 @@
+# Versionsprofil Creo 8
+#
+# Alles, was von der Creo-Version abhaengt, steht hier und nirgendwo sonst.
+# Der Anwendungscode kennt keine Creo-Version, er laedt dieses Profil.
+# Fuer eine neuere Creo-Version wird eine Kopie dieser Datei angelegt und
+# ausgefuellt - der Code bleibt unveraendert.
+#
+# Erhoben am 05.09.2026 mit setup/Pruefe-Umgebung.ps1 auf Rechner JANNIS.
+
+profile:
+  id: creo8
+  label: "Creo Parametric 8.0"
+  status: aktiv          # aktiv | veraltet | ungeprueft
+
+creo:
+  version: "8"
+  datecode: "8.0.3.0"
+  loadpoint: 'C:\Program Files\PTC\Creo 8.0.3.0'
+
+  # Es wird die TEAM-Vorlage verwendet, nicht PTCs mmns_part_solid_abs.
+  # Grund: Die Aeroteile muessen spaeter in derselben Baugruppe leben wie der
+  # Rest des Fahrzeugs - gleiche Ebenenbenennung, gleicher Zeichnungsstandard,
+  # gleiche Parameter. Eine zweite Vorlagenfamilie einzufuehren erzeugt genau
+  # die Inkonsistenz, die man beim Zusammenbau dann teuer bezahlt.
+  vorlage: 'C:\gtstarter\8.0.0.0\stools-se\data\stools-se\library_dir\start_model_dir\sut_de_startt.prt'
+  vorlage_name: sut_de_startt.prt
+  vorlage_quelle: "gtstarter 8.0.0.0 / stools-se, deutsche Startmodelle der HS Pforzheim"
+
+  # Bereits korrekt in der config.pro gesetzt, nichts zu tun:
+  #   enable_absolute_accuracy yes
+  #   default_abs_accuracy     0.01
+  # Absolute Genauigkeit ist fuer uns Pflicht: relative Genauigkeit skaliert mit
+  # der Modellgroesse und rechnet an 2-mm-Hinterkanten und 3-mm-Nasenradien zu grob.
+  genauigkeit: absolut
+  genauigkeit_wert: 0.01
+  config_pro: 'C:\Users\janni\config.pro'
+  pro_unit_sys: mmks      # nur Rueckfallebene; die Vorlage traegt ihre eigenen Einheiten
+
+  # Solange irgendwo Creo 8 laeuft, werden ALLE Modelldateien hier gespeichert.
+  # Creo oeffnet aeltere Dateien, aber niemals neuere.
+  speichert_modelldateien: true
+
+  # Creo legt Modelldateien versioniert ab: teil.prt.1, teil.prt.2, ...
+  # In der config.pro steht der versionslose Name, Creo loest ihn auf die
+  # hoechste vorhandene Version auf. Wer versionslos per Test-Path prueft,
+  # bekommt faelschlich "fehlt". Betrifft jeden Code, der Creo-Dateien sucht.
+  dateien_versioniert: true
+
+api_toolkits:
+  # BEFUND M0: Vorhanden, nichts nachzuinstallieren.
+  # Der Ordnername sagt nichts - ein vorhandener Ordner "otk_java_examples"
+  # beweist nicht, dass die Bibliotheken da sind. Entscheidend ist otk.jar.
+  # Bei Creo 8 liegt "Common Files" direkt im Installationsordner.
+  pruefdatei: 'C:\Program Files\PTC\Creo 8.0.3.0\Common Files\text\java\otk.jar'
+  otk_jar_vorhanden: true
+  java_version_creo: 11           # in Creo 8 ist Java 11 die unterstuetzte Version
+
+creoson:
+  min_version: "2.8.0"            # frueher kein Creo-8-Support
+  # Bei Creo 7 und 8 zwingend zu Sessionbeginn aufzurufen, sonst arbeitet
+  # CREOSON mit falschen Annahmen.
+  set_creo_version: "8"
+
+umgebung:
+  python: "3.10.11"
+  python_pfad: 'C:\Users\janni\AppData\Local\Programs\Python\Python310\python.exe'
+  # OFFEN fuer M5: System-Java ist 25, Creo 8 erwartet fuer J-Link Java 11.
+  # Ob CREOSON mit 25 laeuft, wird in M5 geprueft; notfalls JDK 11 daneben.
+  java_system: 25
+  java_konflikt_geklaert: OFFEN_BIS_M5
+
+koordinatensystem:
+
+  # BEFUND M0: Die Teamvorlage hat Y als Hochachse.
+  # Ebenennamen XY_T_VORNE / XZ_T_OBEN / YZ_T_RECHTS, Standard-KS mit
+  # X seitlich, Y nach oben, Z in die Tiefe. Normales Creo-Verhalten.
+  #
+  # Das Tool arbeitet dagegen mit Z als Hochachse, weil das gesamte Reglement
+  # ueber Hoehen ueber Grund argumentiert (T 8.2: "lower than 500 mm from the
+  # ground"). Mit z = 0 auf der Bodenebene wird jede Hoehenpruefung trivial.
+  #
+  # ENTSCHEIDUNG GEAENDERT am 09.09.2026:
+  # Frueher sollte in Creo von Hand ein gedrehtes CS_AERO angelegt werden.
+  # Das ist selbst eine Fehlerquelle - wer +90 statt -90 dreht, bekommt eine
+  # gespiegelte Geometrie, ohne dass es an der Form auffaellt. Stattdessen
+  # dreht der EXPORTER, gesteuert ueber `export.frame_map` weiter unten.
+  # Damit sitzt die Konvention weiterhin an genau einer Stelle, ist aber
+  # versionierbar und testbar - und in Creo muss niemand etwas anlegen.
+  vorlage_hochachse: "Y"
+
+  # Zuordnung Tool -> Fahrzeug. Steht fest, weil sie aus dem Reglement folgt.
+  x: "nach hinten"
+  y: "nach rechts"
+  z: "nach oben, z = 0 auf der Bodenebene"
+
+  # OFFEN bis M4: Wie das Aeroteil im echten Fahrzeugmodell platziert wird,
+  # also welche Richtung im Auto "hinten" ist. Das ist dann eine normale
+  # Baugruppen-Randbedingung, kein handgebautes Koordinatensystem.
+  ausrichtung_im_fahrzeugmodell: OFFEN_BIS_M4
+
+export:
+  # Achsabbildung Werkzeug -> Creo-Vorlage, angewandt beim Schreiben der .ibl.
+  # Gelesen als: Creos X-Achse ist unser +x, Creos Y-Achse unser +z,
+  # Creos Z-Achse unser -y.
+  #
+  # Das Minuszeichen ist Pflicht, nicht Geschmack: mit +y waere die Abbildung
+  # eine Spiegelung (Determinante -1) und jedes Profil kaeme seitenverkehrt
+  # in Creo an, ohne dass man es der Form ansieht. Der Exporter prueft das
+  # und verweigert die Arbeit bei Determinante != +1.
+  frame_map:
+    creo_x: "+x"
+    creo_y: "+z"
+    creo_z: "-y"
+
+  # Folge: Eine erzeugte .ibl laesst sich direkt auf das Standard-Koordinaten-
+  # system importieren - oder sogar per Datei -> Oeffnen laden - und sitzt
+  # richtig. In Creo ist nichts vorzubereiten.
+  kein_eigenes_ks_noetig: true
+
+mapkeys:
+  # Einzige versionsfragile Stelle im ganzen System - deshalb hier isoliert
+  # und spaeter durch "aerostudio doctor" abgesichert.
+  #
+  # KORREKTUR 21.09.2026: Hier stand "ENTFAELLT", begruendet mit
+  # befunde.plugin_laedt. Das war ein Kurzschluss, denn es sind zwei
+  # verschiedene Mechanismen:
+  #
+  #   Mapkey  = Bordmittel von Creo Parametric. Eine aufgezeichnete
+  #             Klickfolge in der config.pro (ab Creo 11: Mapkeys.pro).
+  #             Kein TOOLKIT, kein J-Link, keine Zusatzlizenz.
+  #             -> In der Student Edition aufzeichenbar und abspielbar.
+  #
+  #   CREOSON = Toolkit-Anwendung, die einen Mapkey von AUSSEN abfeuert.
+  #             -> Braucht das Laden eines Zusatzprogramms, geht hier nicht.
+  #
+  # Nicht erreichbar ist also nur das Abfeuern aus Python, nicht der Mapkey.
+  # Er hat auch ohne Automatisierung Wert: Er ersetzt die vier Importklicks
+  # durch ein Tastenkuerzel und ist die fertige Vorarbeit fuer M5, sobald
+  # eine Volllizenz da ist.
+  import_curve: AUSFUELLEN
+  delete_import_feature: AUSFUELLEN
+
+  # Der Dateiname steckt in der aufgezeichneten Klickfolge mit drin. Fuer M5
+  # brauchen wir deshalb entweder einen festen Dateinamen, den das Werkzeug
+  # immer ueberschreibt, oder eine Mapkey-Variante, die den Dialog offen
+  # laesst (Creo zeichnet bei Bildschirmauswahl automatisch eine Pause auf).
+  # Was davon in Creo 8 traegt, faellt beim Aufzeichnen heraus.
+  dateiname_im_mapkey: AUSFUELLEN
+
+befunde:
+  ibl_import_funktioniert: true
+  masshaltigkeit_ok: true
+  direktimport_geprueft: true               # vorgedrehte .ibl ohne eigenes KS
+
+  # Die sechs Sichtpruefungen aus Schritt 4 des Pruefprotokolls, mit der
+  # VORGEDREHTEN Datei. Beim ersten Versuch am 05.09. lag das Rechteck flach
+  # und der Spline hing nach unten - das war die ungedrehte Datei, und genau
+  # das kehrt die Drehung im Exporter um. Nachgewiesen ist die Umkehr noch
+  # nicht: gemessen wurde am 09.09. zwar exakt, aber Masse allein wuerden
+  # eine um 180 Grad verdrehte Lage nicht auffallen lassen.
+  sichtpruefung_ok: AUSFUELLEN
+
+  # Kommentarzeilen: der letzte wirklich offene Befund aus M0 - und der mit
+  # Abstand folgenreichste, denn das Werkzeug verlaesst sich im Betrieb
+  # bereits darauf. ui/app.py schreibt in JEDE exportierte .ibl fuenf
+  # Kommentarzeilen samt AERO_SPEC_HASH, das Skelett ebenso. Faellt der
+  # Befund negativ aus, ist nicht ein Nebenweg betroffen, sondern jeder
+  # Export.
+  #
+  # TEILBEFUND, schon belegt: Das Zeichen "!" als Kommentar am Zeilenende
+  # funktioniert. Jede geschriebene Sektion traegt "begin section ! 1", und
+  # der Import vom 09.09.2026 lief damit durch. Offen ist nur die POSITION
+  # ganzer Kommentarzeilen. Deshalb drei getrennte Pruefdateien statt einer:
+  # ein einziger Fehlschlag sagt sonst nicht, welche Stelle das Problem ist.
+  ibl_kommentar_inline: true                # "begin section ! 1" - bewiesen
+  ibl_kommentar_vor_kopf: AUSFUELLEN        # "!"-Zeilen VOR "open"
+  ibl_kommentar_nach_kopf: AUSFUELLEN       # "!"-Zeilen NACH "arclength"
+  ibl_kommentar_zwischen_sektionen: AUSFUELLEN
+
+  # Einen vierten Eintrag als Zusammenfassung gab es hier bis zum 23.09. Er
+  # ist entfallen: Was sich ableiten laesst, soll niemand eintippen. Der
+  # Exporter schreibt vor den Kopf, also entscheidet `ibl_kommentar_vor_kopf`
+  # allein, ob formate/ibl.py Kommentare schreibt - siehe
+  # creo/profil.py:kommentare_erlaubt. Steht dort `false`, hoert er von
+  # selbst damit auf, ohne Codeaenderung.
+
+  # BEFUND 09.09.2026: Das Plugin laedt NICHT.
+  # Weder ueber Werkzeuge -> Hilfsanwendungen (der Knopf ist in der Student
+  # Edition ausgegraut) noch ueber toolkit_registry_file in der config.pro.
+  # Keine Fehlermeldung, die Befehle erscheinen schlicht nicht.
+  # Damit sind Stufe 1 (CREOSON) und Stufe 2 (Ribbon-Plugin) auf dieser Lizenz
+  # nicht erreichbar - beide setzen voraus, dass Creo ein Toolkit-Programm
+  # ueberhaupt laedt. Auch der lizenzfreie IGES-Weg haette daran nichts
+  # geaendert: das Problem ist nicht die API, sondern das Laden.
+  plugin_laedt: false
+  plugin_grund: "Creo Parametric Student Edition laedt keine Toolkit-Anwendungen"
+  automatisierung_moeglich_ab: "Volllizenz mit TOOLKIT-Option"
+  geprueft_am: "2026-09-09"
+  geprueft_von: "Jannis"
+
+  # SPUR FUER M5, aufgetan am 21.09.2026 - noch NICHT geprueft.
+  # Creo nimmt eine Trail-Datei als Befehlszeilenargument entgegen und spielt
+  # die darin aufgezeichnete Sitzung ab. Eine Trail-Datei kann einen
+  # in-session-Mapkey ueber sein Kuerzel aufrufen. Das liefe vollstaendig an
+  # TOOLKIT vorbei und waere damit auch auf der Student Edition ein Weg zur
+  # Automatisierung - genau die Luecke, die CREOSON hier nicht fuellen kann.
+  #
+  # Vorsicht ist angebracht, und zwar aus drei Gruenden:
+  #   1. Die Quelle ist ein PTC-Community-Beitrag, keine Produktdokumentation.
+  #   2. Trail-Dateien sind noch versionsfragiler als Mapkeys - sie zeichnen
+  #      jede Interaktion auf und brechen bei jeder UI-Aenderung.
+  #   3. Startet die Trail-Datei eine eigene Creo-Sitzung, kostet das jedes
+  #      Mal Minuten und zwei Gigabyte. Fuer einen DoE-Lauf ueber 50
+  #      Varianten (M8) waere das unbrauchbar.
+  # Zu klaeren in M5, nicht in M0. Hier steht es nur, damit es nicht
+  # verlorengeht.
+  trailfile_weg_moeglich: UNGEPRUEFT
+  trailfile_quelle: "PTC Community, 'Run mapkey from a trail file'"
+
+  # Gemessen am 09.09.2026, alle Sollwerte exakt getroffen:
+  #   grosses Rechteck   200.000 x  50.000 mm
+  #   kleines Rechteck   100.000 x  25.000 mm
+  #   Querabstand        300.000 mm
+  #   Segmentluecke        0.000 mm  -> Sektionen haengen sauber zusammen
+  masse:
+    rechteck_gross: [200.000, 50.000]
+    rechteck_klein: [100.000, 25.000]
+    querabstand: 300.000
+    segmentluecke: 0.000
+
+  # Eine .ibl laesst sich in Creo per Datei -> Oeffnen direkt als neues Teil
+  # oeffnen. Bequem zum Nachmessen, aber ohne Kontrolle ueber das
+  # Koordinatensystem - das Teil bekommt das Standard-KS der Vorlage.
+  # Fuer den Arbeitsablauf ist deshalb Modell -> Daten abrufen -> Importieren
+  # noetig, nur dort laesst sich CS_AERO waehlen.
+  ibl_per_datei_oeffnen_moeglich: true
+
+spline:
+  # BEFUND M0, der wichtigste des Meilensteins.
+  # Creo baut aus einer IBL-Sektion einen interpolierenden kubischen Spline
+  # mit not-a-knot-Randbedingung, parametrisiert ueber die kumulierte
+  # Sehnenlaenge. Nachgewiesen an der Splinesektion der Pruefkurve:
+  #   Creo gemessen            210.184  mm
+  #   Python not-a-knot        210.1857 mm
+  #   Abweichung                 1.7    um
+  # Damit ist die Kurve, die Creo bauen wird, in Python exakt vorhersagbar.
+  typ: "kubisch, interpolierend, not-a-knot"
+  parametrisierung: "kumulierte Sehnenlaenge"
+  nachweis_creo_mm: 210.184
+  nachweis_python_mm: 210.1857
+  nachweis_skript: creo/test/spline_verifikation.py
+
+  # Konsequenz fuer M1: Die Punktzahl pro Profilkurve wird berechnet, nicht
+  # geschaetzt.
+  #
+  # NACHTRAG 09.09.2026, nach dem Laden der Benchmarkprofile:
+  # Der aus NACA 4412 abgeleitete Richtwert von 40 Punkten war zu optimistisch.
+  # Echte Hochauftriebsprofile sind an der Nase deutlich staerker gekruemmt und
+  # brauchen bei 250 mm Sehne und 5 um Toleranz:
+  #
+  #     S1210     86      LNV109A  108      E422    130
+  #     S1223     92      FX 63-137 144     E420    158
+  #     S1221    156      E423     170
+  #
+  # NACA 4412 kam mit 40 aus - ein Profil, das wir nie einsetzen werden.
+  # Genau deshalb wird die Zahl gerechnet und nicht aus einer Erfahrungsregel
+  # genommen: Sie haengt am Profil, nicht am Verfahren.
+  punktzahl_wird_berechnet: true
+  punktzahl_richtwert: 150      # fuer Hochauftriebsprofile bei 250 mm Sehne
+  punktzahl_toleranz_mm: 0.005

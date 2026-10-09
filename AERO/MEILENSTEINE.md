@@ -1,0 +1,545 @@
+# RSP Aero Studio — Meilensteinplan
+
+Arbeitsplan zum Durchgehen. Jeder Meilenstein endet mit etwas, das man **in Creo anfassen kann**, plus Commit und Push. Kein Meilenstein wird abgehakt, bevor sein "Fertig, wenn"-Kriterium nachweislich erfüllt ist.
+
+Begleitdokument: [KONZEPT_AeroStudio.md](KONZEPT_AeroStudio.md)
+
+---
+
+## Die Plugin-Frage vorab beantwortet
+
+Es gibt drei Ausbaustufen der Creo-Anbindung. Sie bauen aufeinander auf — wir müssen uns jetzt nicht festlegen, aber die Architektur muss von Anfang an auf Stufe 2 zulaufen.
+
+| Stufe | Was | PTC-Lizenz nötig? | Aufwand | Wann |
+|---|---|---|---|---|
+| **0 — Dateiübergabe** | Tool schreibt `.ibl`, du importierst von Hand (3 Klicks) | keine | — | ab M1 nutzbar |
+| **1 — CREOSON-Automatisierung** | Python steuert Creo: Parameter setzen, Mapkey für den Import feuern, regenerieren, STEP exportieren | keine *Zusatz*lizenz, aber eine Lizenz, die **Toolkit-Anwendungen lädt** — siehe Befund unten | mittel | M5, blockiert auf der Student Edition |
+| **2 — Echtes Ribbon-Plugin** | Eigener Reiter "Aero Studio" in Creo mit Buttons "Spec laden", "Update", "Regelcheck" | Ribbon-Buttons und Menüs: **kostenloses J-Link reicht.** Nur eingebettete PTC-Dialoge (uifc) brauchen die kostenpflichtige Object-TOOLKIT-Lizenz — ein normales Java-Swing-Fenster geht auch ohne | hoch | M7, optional |
+
+**Empfehlung: Stufe 1 als Zielbild, Stufe 2 nur wenn das Team es wirklich täglich benutzt.** Stufe 1 liefert 95 % des Nutzens bei einem Bruchteil des Aufwands.
+
+> **Befund aus M0, der diese Tabelle einschränkt (09.09.2026).** Die Creo Parametric Student Edition lädt **überhaupt keine** Toolkit-Anwendungen — der Knopf unter *Werkzeuge → Hilfsanwendungen* ist ausgegraut, und `toolkit_registry_file` in der `config.pro` bewirkt nichts. Damit sind Stufe 1 *und* Stufe 2 auf dieser Lizenz unerreichbar, denn beide setzen voraus, dass Creo ein Zusatzprogramm überhaupt lädt. Die Aussage „CREOSON braucht keine Zusatzlizenz" stimmt weiterhin — sie braucht aber eine Lizenz, die Toolkit-Anwendungen lädt, und das ist hier der Engpass.
+>
+> **Was davon nicht betroffen ist:** der **Mapkey** selbst. Er ist ein Bordmittel von Creo — eine aufgezeichnete Klickfolge in der `config.pro`, ohne TOOLKIT und ohne J-Link. Blockiert ist nur sein Abfeuern von außen. Er bleibt deshalb im Plan und wird in M0 aufgezeichnet: Er spart heute vier Klicks und ist die fertige Vorarbeit für M5.
+>
+> **Offene Spur, ungeprüft:** Creo nimmt eine Trail-Datei als Befehlszeilenargument entgegen, und eine Trail-Datei kann einen Mapkey über sein Kürzel aufrufen — das liefe an TOOLKIT vorbei. Zu klären in M5, notiert als `befunde.trailfile_weg_moeglich` in `creo8.yaml`.
+
+Und seit die eigene UI gesetzt ist (nächstes Kapitel), schrumpft der Nutzen von Stufe 2 weiter: Der Anwender arbeitet ohnehin in Aero Studio, nicht in Creo. Der Ribbon-Button spart dann nur noch einen Fensterwechsel. Er bleibt im Plan, aber weit hinten.
+
+**Eine harte technische Randbedingung, die den Plan prägt:** Eine importierte Bezugskurve in Creo liest ihre Quelldatei **nicht** bei der Regenerierung neu ein — *Edit Definition* öffnet den Import DataDoctor, nicht den Dateidialog. Ein geändertes Profil bedeutet also immer: altes Import-Feature löschen, neu importieren. Genau dafür gibt es in CREOSON die Funktion `interface.mapkey`, die einen aufgezeichneten Mapkey in Creo abspielt. Das ist der Kern von M5.
+
+Daraus folgt die Aufteilung, die sich durch den ganzen Plan zieht:
+
+- **Punktgeometrie** (Profilkonturen) → Datei + Re-Import per Mapkey
+- **Layoutparameter** (Sehne, Anstellwinkel, Gap, Overlap, Spannweite) → echte Creo-Parameter mit Relations, per CREOSON setzbar, regeneriert automatisch
+
+---
+
+## Versionsstrategie: Creo 8 heute, neuere Versionen später
+
+Basis ist **Creo 8**. Ein späterer Umstieg auf Creo 9, 10, 11 oder neuer darf kein Umbauprojekt werden. Sechs Regeln, die das sicherstellen — sie gelten ab M0 und werden in jedem Meilenstein mitgeführt.
+
+**1. Creo-Modelle immer in der ältesten produktiv genutzten Version speichern.**
+Creo öffnet ältere Dateien problemlos, aber **niemals neuere**. Wer das Skelettmodell versehentlich einmal in Creo 11 speichert, sperrt damit jeden Creo-8-Rechner im Team dauerhaft aus — es gibt keinen Rückweg. Solange irgendwo Creo 8 läuft, werden `AERO_SKELETON.PRT` und alle Templates in Creo 8 gespeichert. Das gehört als Regel in die README und wird beim Umstieg bewusst und gemeinsam aufgehoben, nicht nebenbei.
+
+**2. Der Geometrieaustausch bleibt Klartext.**
+`.ibl` und `.pts` sind reine Textformate ohne Versionsbindung, diffbar in Git und in zehn Jahren noch lesbar. Das ist neben der Sauberkeit der zweite große Grund, IBL gegenüber jedem binären Weg zu bevorzugen: **Bei einem Creo-Upgrade migriert man nichts.** Die Dateien sind einfach weiter gültig.
+
+**3. Alles Versionsabhängige lebt in einer Adapterschicht.**
+Der Anwendungscode kennt keine Creo-Version. Was sich zwischen Versionen unterscheidet, steht in Profildateien:
+
+```
+aerostudio/creo/profiles/
+├── creo8.yaml     # Loadpoint-Muster, Mapkey-Strings, creoson_version: "8", java: 11
+├── creo9.yaml
+├── creo10.yaml
+└── creo11.yaml
+```
+
+Ein neues Profil anzulegen kostet einen Nachmittag. Verstreute `if creo_version == 8`-Abfragen im Code kosten jedes Mal eine Woche.
+
+**4. Versionserkennung zur Laufzeit, mit ehrlichem Fallback.**
+Das Tool ermittelt die laufende Creo-Version und lädt das passende Profil. Ist die Version unbekannt, wird **nicht geraten** — das Tool fällt auf Stufe 0 zurück (Dateien schreiben, Handimport) und sagt klar, dass für diese Version noch kein Profil existiert. Ein falsch abgefeuerter Mapkey in einer unbekannten Creo-Version kann Geometrie zerstören; eine Fehlermeldung kann das nicht.
+
+**5. Mapkeys auf das Minimum begrenzen und aktiv absichern.**
+Mapkeys zeichnen Klickfolgen auf und brechen, wenn PTC das Ribbon umbaut — sie sind die einzige wirklich versionsfragile Stelle im ganzen System. Deshalb: **Nichts über Mapkey, was auch über Parameter und Relations geht.** Mapkey ausschließlich für den Kurven-Re-Import. Dazu ein Smoke-Test, der nach jedem Creo-Update in zwei Minuten sagt, ob der Weg noch funktioniert.
+
+**6. Nur Funktionen nutzen, die es in Creo 8 schon gibt.**
+Imported Datum Curve, Boundary Blend, Publish/Copy Geometry, Familientabellen, Relations — alles seit vielen Versionen stabil. Keine Abhängigkeit von Neuerungen aus Creo 9+, damit der Plan nicht heimlich eine Upgrade-Pflicht erzeugt.
+
+### Versionsmatrix
+
+| | Creo 8 (heute) | Creo 9/10 | Creo 11+ |
+|---|---|---|---|
+| IBL-Import (Get Data → Import → Curve) | ja | ja | ja |
+| CREOSON | ab 2.8.0, `creo.set_creo_version("8")` **zwingend zu Sessionbeginn** | ja | Profil beim Umstieg prüfen |
+| J-Link / OTK Java | enthalten, **Java 11** | Java-Version beim Umstieg prüfen | dito |
+| Mapkeys | pro Version eigene Datei | pro Version eigene Datei | pro Version eigene Datei |
+| Modelldateien speichern | **hier speichern, solange Creo 8 im Einsatz ist** | nur lesen | nur lesen |
+
+---
+
+## Die UI — gesetzt, und deshalb strukturbestimmend
+
+Die grafische Oberfläche ist Pflicht. Das ist keine Kosmetik am Ende, sondern eine Entscheidung, die den Aufbau des gesamten Programms prägt — deshalb steht sie hier vor den Meilensteinen und nicht in einem davon.
+
+### Das Grundprinzip: Die UI hält keinen Zustand
+
+**Der einzige Zustand des Programms ist das AeroSpec-YAML.** Die UI liest es, stellt es dar, schreibt Änderungen hinein — mehr nicht. Jede Berechnung, jeder Export, jede Regelprüfung leitet sich allein aus dem Spec ab.
+
+Warum das so wichtig ist:
+
+- **UI und Kommandozeile sind automatisch gleichwertig.** Ein DoE-Lauf über 500 Varianten (M8) läuft ohne UI, benutzt aber exakt dieselbe Logik wie der Anwender im Browser. Es gibt keine zwei Wahrheiten.
+- **Jeder Designstand ist eine Textdatei im Git.** Diffbar, kommentierbar, im Design Report zitierbar. Was jemand geklickt hat, ist nachvollziehbar.
+- **Die UI ist austauschbar.** Wenn sich in zwei Jahren herausstellt, dass eine andere Technologie besser passt, wird die Oberfläche ersetzt und nicht das Programm.
+
+Die Versuchung, "schnell mal" einen Wert nur im UI-Widget zu halten, ist der Weg, auf dem solche Tools unwartbar werden. Diese Regel wird ab M1 durchgehalten.
+
+### Die sieben Ansichten
+
+| Ansicht | Was der Anwender tut | Ab |
+|---|---|---|
+| **Projekt** | Spec laden und speichern, Varianten vergleichen, Versionsstand mit Hash sehen | M1 |
+| **Profil-Editor** | Profil aus Katalog wählen oder per CST-Regler formen; Kontur, Krümmungs- und Dickenverlauf live; Fertigungsampel (Hinterkantendicke, Nasenradius) | M1 |
+| **Kaskaden-Editor** | Elemente hinzufügen, Gap / Overlap / Anstellwinkel per Regler oder durch Ziehen im Plot ändern; Schlitzkanal-Diagramm mit Konvergenzwarnung | M2 |
+| **Fahrzeug & Regeln** | Seiten- und Draufsicht mit den T-8.2-Hüllkurven; Regelampel mit anklickbaren Verstößen; Regler für Hub, Nick und Wank, um den Fahrzustands-Envelope abzufahren | M2 |
+| **Aerodynamik** | AoA-Sweeps, Polaren, Kandidatenvergleich, h/c-Sensitivität | M3 |
+| **Spannweite & 3D** | Verteilungskurven `chord(y)`, `twist(y)`, `z(y)`, `x(y)` mit ziehbaren Stützstellen; 3D-Vorschau des Elements | M4 |
+| **Creo** | Exportpfad, Punktzahl pro Kurve, Vorschau der erzeugten IBL, Buttons *Dateien schreiben*, *Push nach Creo*, *doctor* mit Statusanzeige | M1 (schreiben), M5 (push) |
+
+Jede Ansicht wird in dem Meilenstein gebaut, in dem ihre Fachlogik entsteht — nicht alles am Schluss. So ist ab M1 jederzeit etwas Vorzeigbares da, und Fehlentscheidungen in der Bedienung fallen früh auf.
+
+### Bedienbarkeit als Anforderung, nicht als Absicht
+
+Die Anwender sind Teammitglieder, die Aerodynamik können und nicht Python. Daraus folgen harte Anforderungen:
+
+- **Start mit einem Doppelklick.** Eine `Aero Studio.bat`, die die Umgebung hochfährt und die Oberfläche öffnet. Kein Terminal, keine virtuelle Umgebung, keine Pfadvariablen.
+- **Nie eine nackte Fehlermeldung.** Jeder Fehler wird in einen Satz übersetzt, der sagt, was zu tun ist ("Creo läuft nicht — bitte Creo starten und CREOSON verbinden"), mit ausklappbarem Detail für den, der es wissen will.
+- **Rückgängig auf Spec-Ebene.** Da der Zustand eine Datei ist, ist Undo ein Sprung zur vorherigen Version. Kostet fast nichts und rettet Nachmittage.
+- **Nichts Wichtiges nur über Tastenkürzel oder verstecktes Ziehen.** Alles per Regler oder Eingabefeld erreichbar; Ziehen ist die Abkürzung, nicht der einzige Weg.
+
+### Die Technologie: Dash im Browser — entschieden
+
+Begründung: passt zum bestehenden RSP-Werkzeugkasten, der bereits auf Plotly aufbaut, ist am schnellsten gebaut, läuft auf jedem Rechner und lässt sich bei Bedarf auch übers Netz mitbenutzen. Daraus folgen fünf konkrete Umsetzungsregeln:
+
+**1. Callbacks bleiben dünn.** Ein Dash-Callback nimmt Eingaben entgegen, ruft eine Funktion aus `aerostudio.*` auf und gibt das Ergebnis zurück. Keine Fachlogik in der Oberflächenschicht. Das ist die Bedingung dafür, dass die UI später austauschbar bleibt und dass die Kommandozeile denselben Weg nimmt.
+
+**2. `dcc.Store` nur für flüchtigen Bedienzustand.** Aktiver Reiter, Auswahl, Zoomstand — ja. Konstruktionsdaten — nie. Die gehören ins Spec.
+
+**3. Lange Rechnungen als Background Callbacks.** AoA-Sweeps und DoE-Vorbereitung laufen als Dash-Background-Callback mit DiskCache, damit die Oberfläche nicht einfriert und ein Fortschrittsbalken möglich ist. Das muss ab M3 stehen, weil es die Struktur der Callbacks bestimmt und sich später schlecht nachrüsten lässt.
+
+**4. Ziehen über editierbare Plotly-Formen.** Flap-Position und Stützstellen der Spannweitenverteilung werden als Shapes mit `editable` gezeichnet und über `relayoutData` zurückgelesen. Das Ziehen bleibt dabei die Abkürzung — jeder Wert ist zusätzlich über Regler und Eingabefeld erreichbar. Eine variable Zahl von Elementen in der Kaskade wird über Pattern-Matching-Callbacks abgebildet.
+
+**5. Ein Bearbeiter pro Spec.** Der Dash-Server ist schnell auch von einem zweiten Rechner erreichbar — dann schreiben aber zwei Personen in dieselbe Datei. Aero Studio setzt beim Öffnen eine Sperrdatei neben das Spec und weist den zweiten Zugriff mit einem klaren Hinweis ab, statt Änderungen stillschweigend zu überschreiben. Ansehen darf jeder, ändern einer.
+
+---
+
+---
+
+## Stand am 21.09.2026
+
+Was **läuft**, quer über die Meilensteine hinweg — die Reihenfolge oben ist ein
+Plan, keine Reihenfolge, in der gearbeitet werden muss:
+
+| Aus | Was steht | Wo |
+|-----|-----------|-----|
+| M0 | Creo-Spline nachgebaut und gegen Creo verifiziert (210.184 zu 210.1857 mm) | `geometrie/spline.py` |
+| M1 | Profilkern, Katalog mit 11 Profilen und Notizen, Fertigungsprüfung, IBL-Export | `geometrie/profil.py`, `formate/` |
+| M1 | Oberfläche mit Profil-, Creo- und Projektansicht | `ui/app.py` |
+| M2 | `rules_2027.yaml` (FS Rules 2027 v1.0, seit 06.10.2026 einziger Stand), `vehicle_ref.yaml` | `regeln/`, `spec/` |
+| M2 | Validator über den Fahrzustands-Envelope gegen FS Rules 2027 v1.0 | `regeln/pruefung.py` |
+| M4 | Spannweitenverteilungen mit PCHIP, Sektionsstapel-Export mit identischem Aufbau | `geometrie/spannweite.py` |
+| M4 | Sektionseditor: Verwindung je Sektion, Sektionen hinzufügen und löschen | Reiter *Flügel* |
+| M3 | Profilpolare über NeuralFoil, Reynoldszahl aus Geschwindigkeit und Sehne | `aero/profilpolare.py` |
+| M3 | Polaren über mehrere Reynoldszahlen im Reiter *Profil*: fünf Diagramme wie Airfoil Tools, live gerechnet, Ncrit wählbar, Re auch aus Tempo und Sehne, unsichere Bereiche gestrichelt, Kennwerttabelle und CSV | `aero/profilpolare.py`, `ui/darstellung.py` |
+| M3 | Traglinienrechnung mit Bodenspiegelung, gegen die Theorie geprüft | `aero/traglinie.py` |
+| M3 | Flügelvorschlag zu einem Zielabtrieb, mit Regelprüfung und Begründung | `aero/entwurf.py` |
+| M3 | Maximaler Abtrieb als Suchziel | `aero/entwurf.py` |
+| M2 | 2D-Panelverfahren für mehrere Profile, gegen Zylinder und Theorie geprüft | `aero/panel.py` |
+| M2 | Kaskade: Anordnung über Spalt und Überlappung, zähe Rechnung, Abriss über die Saugspitze | `geometrie/kaskade.py`, `aero/kaskade.py` |
+| M2 | Generator: Profilpaarungen und Elementzahl für maximalen Abtrieb | `aero/generator.py` |
+| M4 | Skelett für Creo — Drehachsen, Querlinie, Bezugslinien des Reglements | `formate/skelett.py` |
+| M2 | Kaskaden-Editor in der Oberfläche, Elementliste mit Spalt und Überlappung | Reiter *Kaskade* |
+| M2 | Räumliche Kaskadenprüfung über den Sektionsstapel, getrennte Schnittstapel je Element | `geometrie/spannweite.py`, `formate/export.py` |
+| — | Paketliste als `requirements.txt`, vom Starter benutzt, durch Tests abgesichert | `requirements.txt`, `tests/test_umgebung.py` |
+| M0 | Adapterschicht als Code: Versionsprofil wird gelesen, nicht nur abgelegt | `creo/profil.py` |
+| M0 | Abnahme rechnet sich selbst aus, statt als Häkchenliste zu veralten | `creo/test/M0_abnahme.py` |
+| M4 | Endplatte und Footplate als Geometrie, regelgeprüft und exportierbar | `geometrie/endplatte.py` |
+| M1 | DXF-Fertigungsvorlagen: Rippen mit Hohlraum, Schablonen, Rippensätze | `formate/dxf.py` |
+| M1 | NACA-5-Generator als analytische Referenz | `geometrie/profil.py` |
+| M2 | Ansicht *Fahrzeug & Regeln*: Seiten- und Draufsicht, Ampel, Envelope-Regler | Reiter *Fahrzeug & Regeln* |
+| M1 | DXF-Vorlagen in der Oberfläche, eigene Karte im Reiter *Creo* | `ui/app.py` |
+| M6 | Undo über die Spec-Historie, mit Bedienung im Reiter *Projekt* | `spec/projekt.py` |
+| M6 | Beispiel-Specs als Startpunkte, regelkonform in beiden Ständen | `specs/beispiele/` |
+| M6 | Fehlermeldungen in handlungsleitende Sätze übersetzt | `ui/meldungen.py` |
+| M3 | Druckverteilung am verschiebbaren Schnitt, cp-Diagramm und eingefärbte Kontur | `aero/kaskade.py`, Reiter *Kaskade* |
+| M8 | Unterboden als Kanalmodell mit Diffusorablösung, Druckpunkt, Höhenkennlinie, T 2.2.1 | `aero/unterboden.py` |
+| M8 | Rake als Fahrzeuglage mit Drehpunkt, im Spec-Hash nur wenn gesetzt | `spec/modell.py` |
+| M8 | DoE: Latin Hypercube, Pareto-Front über Abtrieb/Widerstand/Stabilität, Ergebnisdatei, CLI | `aero/doe.py` |
+| M8 | Reiter *Unterboden*: Schnitt, Bodendruck, Kennlinie, DoE, Frontpunkt anklicken übernimmt Variante | `ui/app.py` |
+| M8 | DRS: zweiter Flapwinkel je Kaskadenstufe, Kräftevergleich zu/offen, Regelprüfung und Balance mit offenem DRS, Familientabelle für Creo | `aero/drs.py`, `formate/familientabelle.py`, Reiter *Kaskade* |
+| M3 | Traglinie konvergiert auch hinter dem Abriss: adaptive Dämpfung, Abbruch an Kraft UND induziertem Widerstand. Vorher sprang der Widerstand um bis zu 25 % | `aero/traglinie.py` |
+| M3 | Kaskadenpolare auf der anliegenden Seite linear fortgesetzt statt geklemmt (07.10.). Bei kleiner Streckung lag jeder Streifen jenseits der gerechneten ±6°, die Last war bis in die Spitze konstant. Heckflügel-Beispiel jetzt 71 statt 103 N, induzierter Widerstand am ideal-elliptischen Wert. Dazu ein Hinweis unter wirksamer Streckung 3 | `aero/kaskade3d.py` |
+| — | Zielbalance aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`), noch leer | `aero/gesamt.py` |
+| M8 | Paket-DoE mit Flügelgröße: Sehne −20/+25 %, Halbspannweite bis an die Breitengrenze der Einbauhöhe, vierdimensionale Kennfelder. Die Pareto-Front wird gegen FS Rules 2027 v1.0 geprüft (Nachrücker bis alles geprüft) | `aero/paket.py`, Reiter *Balance* |
+| M9 | Report als PDF per Kommando oder Knopf: Regelkonformität mit Fahrzustand, Geometrie, Druckverteilung, Spannweitenlast, h/c, Unterboden, Balance, Grenzen | `formate/report.py`, Reiter *Projekt* |
+| M8 | Paket-DoE: Flügelwinkel, Unterboden und Rake gemeinsam, Ziele Abtrieb/Balancefehler/Nickwanderung, Flügel-Kennfelder statt Traglinie je Variante, CLI | `aero/paket.py`, Reiter *Balance* |
+| M8 | Gesamtfahrzeug: Front- und Heckflügel aus mehreren Specs plus Unterboden, Aerobalance, Achslasten mit Widerstandsmoment, Nickwanderung | `aero/gesamt.py`, Reiter *Balance* |
+
+Die Testabdeckung liegt bei **648 Tests**, die in gut drei Minuten
+durchlaufen (`python -m pytest` im Ordner `AERO`).
+
+**Regelstand seit 06.10.2026: FS Rules 2027 v1.0, und nur dieser.** Das Original liegt als `AERO/FS_Rules_2027_v1.0.pdf` im Repo. `regeln/rules_2027.yaml` enthält die Werte samt Wortlaut. FS Rules 2026 v1.1 und der Academy-Entwurf sind entfernt. Gegenüber dem Entwurf hat der endgültige Text drei Abweichungen:
+* Die 700-mm-**Untergrenze** für den Heckflügel gibt es nicht.
+* T 8.2.2 hat drei Höhenbänder. Zwischen Reifenoberkante und 700 mm gilt |y| ≤ innerster Hinterradpunkt − 150 mm, und zwar über die ganze Fahrzeuglänge. Zwischen 700 und 1100 mm gilt der äußerste Hinterradpunkt.
+* T 2.1.3 bekommt eine Zusatzzone über dem Hinterrad (Reifenoberkante bis 700 mm, 150 mm nach innen). Außerdem reicht die Keep-out-Zone seitlich von der Radinnenebene unbegrenzt nach außen.
+
+T 2.1.4 (Quaderkanal) ist jetzt eine harte Regel, kein Hinweis mehr. Die Reifenoberkante zählt bei ungleichen Reifen konservativ mit dem kleineren Durchmesser.
+
+Was **fehlt** und in welcher Reihenfolge es sinnvoll ist:
+
+0. ~~Induzierter Widerstand gegen CFD prüfen.~~ **Ursache gefunden am 07.10.:** Die Kaskadenpolare war jenseits von ±6° geklemmt. Jetzt liegt der Heckflügel mit 12,4 N am ideal-elliptischen Wert mit Hoerner-Endplatten (13,1 N). Abgleich mit CFD bleibt sinnvoll, weil die Traglinie bei Streckung unter 3 nur eine Näherung ist. Das Werkzeug weist darauf hin.
+
+1. **Kaskadenmodell kalibrieren.** Am 24.09. deutlich verbessert, aber
+   nicht erledigt. Zwei Fehler im Abrisskriterium sind gefunden und behoben:
+
+   * **Die Nasensingularität.** Der ausgewertete kleinste Druckbeiwert lag
+     bei x/c = 0,002 und wuchs mit jedem Flap (−2,8 / −9,8 / −23,0 bei
+     einem, zwei, drei Elementen). Beim Einzelprofil ändert ein Ausschluss
+     des ersten Sehnenprozents nichts, im Verbund halbiert er den Wert —
+     es war keine Saugspitze, sondern eine numerische Spitze.
+   * **Die falsche Größe.** Verglichen wurde die absolute Saugspitze. Eine
+     Grenzschicht löst aber am DRUCKANSTIEG dahinter ab, nicht an der
+     Spitze (A. M. O. Smith, 1975).
+
+   Die Reserve des Hauptelements stieg damit von −1,47 auf −0,65. Es bleibt
+   zu streng: Bei drei Elementen fällt das Hauptelement durch, sobald die
+   Flaps üblich groß sind. **Negativbefund dazu:** Der Dumping-Effekt, der
+   das Hauptelement entlasten müsste, zeigt sich in der reibungsfreien
+   Rechnung nicht (cp am Ende der Saugseite bleibt bei 0,26 / 0,68 / 0,64).
+   Dort sollte eine CFD-Rechnung zuerst nachsehen. `GRENZSCHICHTRESERVE`
+   steht auf 1,0 — unkalibriert, und bleibt dort, bis Daten vorliegen.
+2. **Endplatten in der Aerodynamik.** Die *Geometrie* steht seit dem
+   21.09. (`geometrie/endplatte.py`): Umriss, Dicke, Footplate, Keep-out
+   nach T 2.1.3, Export, Bedienung im Reiter *Flügel*. Was fehlt, ist ihre
+   aerodynamische Wirkung über die Hoerner-Näherung hinaus — Wirbelbildung
+   an der Unterkante, Outwash, die Wirkung der Footplate auf den Rad-Wake.
+   Das ist ein CFD-Thema und kein Panelverfahren-Thema; ehrlicher ist es,
+   die Grenze zu benennen, als sie mit einem Korrekturfaktor zu verdecken.
+3. **M5/M7 — Automatisierung in Creo.** Blockiert: Die Student Edition lädt
+   keine Toolkit-Anwendungen. Bis zur Vollversion bleibt es beim Weg
+   "Werkzeug schreibt .ibl, Import in Creo in vier Klicks".
+
+**Offene Punkte aus der Anwendung**
+
+* Die Lesart der neuen T 2.1.4 ist eine Auslegung des Entwurfstextes. Sobald
+  der endgültige 2027er-Text da ist, gehört sie überprüft — sie steht im
+  Docstring von `regeln/pruefung.py`, damit sie auffindbar ist.
+* Echte Laminatdicken trägt das Team selbst ein; die Vorgaben je Verfahren
+  sind Startwerte, keine Messwerte.
+* Die Abtriebszahlen sind eine **Abschätzung**. Inzwischen enthalten sind die
+  Kanalwirkung zwischen Flügel und Boden (`aero/boden.py`), die Endplatten
+  als wirksame Streckung nach Hoerner und die Wirkung mehrerer Elemente
+  aufeinander (`aero/kaskade.py`). Nicht enthalten sind die Räder, der
+  Fahrzeugkörper und alles, was aus der Endplattenform selbst kommt —
+  Wirbelbildung an ihrer Unterkante, Outwash, Footplates. Seit dem 21.09.
+  gibt es die Endplatte als *Geometrie*, aber sie geht weiterhin nur über
+  ihre Höhe in die Rechnung ein: Der Bauraum ist damit belastbar, die
+  aerodynamische Wirkung nicht. Beide Bodenfaktoren sind bewusst vorsichtig
+  angesetzt und gehören mit CFD abgeglichen; die Begründung steht in
+  `aero/boden.py`. Der Vergleich zweier Entwürfe untereinander bleibt
+  belastbarer als der Absolutwert.
+* Das Logo fehlt: `logo.png` oder `logo.svg` nach `aerostudio/ui/assets/`
+  legen, dann erscheint es links oben von selbst.
+
+---
+
+## M0 — Umgebung und Machbarkeitsnachweis
+
+**Ziel:** Bevor eine Zeile Anwendungscode entsteht, ist bewiesen, dass der Creo-Weg trägt.
+
+**Aufgaben**
+1. Creo-8-Datecode feststellen (Hilfe → Über Creo Parametric) und in `creo8.yaml` eintragen.
+2. Prüfen, ob bei der Installation die Komponente **API Toolkits** mitinstalliert wurde. Erkennbar am Ordner `<creo_loadpoint>\<datecode>\Common Files\otk\otk_java` bzw. `otk_java_free`. Falls nicht: nachinstallieren — kostenlos, gleicher Installer. Nur für M5/M6 nötig, aber jetzt zu klären ist billiger als später.
+3. Creo-Starttemplate anlegen und **in Creo 8 speichern**: Einheiten **mmNs**, Koordinatensystem `CS_AERO` (Ursprung Vorderachsmitte/Boden, x nach hinten, y nach rechts, z nach oben), Bodenebene.
+4. Eine handgeschriebene Test-IBL mit einem bekannten Rechteck importieren (Model → Get Data → Import → Import type: Curve → Placement: `CS_AERO`) und in Creo **nachmessen**.
+5. Denselben Import als **Mapkey aufzeichnen**, abspielen und den Mapkey-String in `creo8.yaml` ablegen.
+6. Anlegen der Adapterstruktur `creo/profiles/` mit `creo8.yaml` als erstem und vorerst einzigem Profil.
+
+**Fertig, wenn:** Eine Kurve mit bekannten Sollmaßen sitzt in Creo 8 auf ±0,01 mm richtig, der Mapkey wiederholt den Import ohne Handeingriff, und `creo8.yaml` enthält Datecode, Loadpoint, Mapkey-String und Java-Version.
+
+**Risiko:** Einheitenverwechslung (Template auf Zoll), falsches KS. Beides hier billig zu finden, in M4 teuer.
+
+### Stand 21.09.2026 — ein Creo-Durchlauf fehlt
+
+Der Stand wird nicht mehr von Hand geführt, sondern gerechnet:
+
+```
+python aerostudio/creo/test/M0_abnahme.py
+```
+
+Das Skript liest `creo8.yaml` und die Prüfkurven und endet mit Rückgabewert 0, sobald M0 zu ist. Heute meldet es **acht offene Einträge**, die alle denselben Ursprung haben: Sie sind nur an einem Creo-Bildschirm zu beantworten. Nachgerechnet und grün sind die Achsabbildung (Determinante +1, also Drehung statt Spiegelung), die Sollmaße in der erzeugten Datei und die Punktgleichheit aller Kommentarvarianten.
+
+**Erledigt:** Umgebung, IBL-Import, Maßhaltigkeit, Splinetyp (not-a-knot, 8 ppm), Achskonvention — und seit dem 21.09. die **Adapterschicht als Code**: `creo/profil.py` liest das Versionsprofil, `formate/ibl.py` bezieht die Achsabbildung daraus statt aus einer zweiten Kopie im Code. Das war Aufgabe 6 und bisher nur eine Absichtserklärung.
+
+**Offen, drei Dinge, zusammen etwa 15 Minuten** (Ablauf in `creo/test/M0_PRUEFPROTOKOLL.md`):
+
+1. **Sichtprüfung mit der vorgedrehten Datei.** Die Maße vom 09.09. sind exakt, aber Maße allein würden eine um 180° verdrehte Lage nicht auffallen lassen.
+2. **Kommentarzeilen.** Der folgenreichste Punkt: Das Werkzeug schreibt in *jede* exportierte IBL fünf Kommentarzeilen samt `AERO_SPEC_HASH`. Drei Prüfdateien isolieren die drei möglichen Positionen, damit ein Fehlschlag sagt, welche Stelle stört. Fällt es negativ aus, genügt `ibl_kommentarzeilen_erlaubt: false` in der YAML — am Code ist nichts zu ändern.
+3. **Mapkey aufzeichnen.** Bisher als `ENTFAELLT` geführt, mit falscher Begründung: Ein Mapkey ist ein Bordmittel von Creo und läuft ohne Zusatzlizenz. Was die Student Edition blockiert, ist nur das *Abfeuern von außen* über CREOSON.
+
+**Spur für M5, noch ungeprüft:** Creo nimmt eine Trail-Datei als Befehlszeilenargument, und eine Trail-Datei kann einen Mapkey über sein Kürzel aufrufen. Das liefe an TOOLKIT vorbei und wäre damit auch auf der Student Edition ein Weg zur Automatisierung. Quelle ist ein Community-Beitrag, keine Produktdokumentation — steht als `befunde.trailfile_weg_moeglich: UNGEPRUEFT` in der YAML, damit es nicht verlorengeht.
+
+---
+
+## M1 — Profilkern und IBL-Export
+
+**Ziel:** Ein echtes Profil aus dem Tool sitzt maßhaltig in Creo und lässt sich extrudieren.
+
+**Aufgaben**
+1. Projektgerüst `aerostudio/` mit pydantic-Datenmodell für ein Einzelprofil.
+2. Profilimport aus UIUC-`.dat` (beide gängigen Formatvarianten robust einlesen).
+3. NACA-4/5-Generator als analytische Referenz. **Beide stehen** (`Profil.aus_naca`, `Profil.aus_naca5`). Dabei kam heraus, dass die Mittellinie aus Koordinaten bei der Fünfziffernfamilie fast ein Fünftel unter der Skelettlinie liegt — 1,49 statt 1,84 % beim 23012. Der Docstring von `woelbungsverlauf` behauptete „wenige Hundertstel Prozent"; das war für NACA-4 knapp und für NACA-5 falsch und steht jetzt mit gemessenen Zahlen da.
+4. CST/Kulfan-Repräsentation, Konvertierung Punktwolke ↔ CST, Rückrechnungsfehler messbar machen.
+5. Repanelisierung mit Cosinus-Clustering, 60–120 Punkte, Ober-/Unterseite getrennt, Knick an Nase und Hinterkante.
+6. Fertigungscheck: Hinterkantendicke ≥ 2,0 mm, Nasenradius ≥ 3,0 mm (T 2.4.1), Mindestdicke über die Sehne. Bei Verletzung: Vorschlag zur Korrektur, nicht nur Fehlermeldung.
+7. Krümmungsplot in Plotly — ein zappelnder Krümmungsverlauf ist der beste Frühwarnindikator für schlechte Profile.
+8. **IBL-Writer** nach verifiziertem PTC-Format (`open` / `arclength` / `begin section ! n` / `begin curve` / XYZ), Koordinaten in mm im Fahrzeug-KS.
+9. DXF-Writer (ezdxf) als Nebenstrecke für Fertigungsvorlagen. **Steht seit 23.09.** (`formate/dxf.py`): Schablonen als reine Außenkontur, Rippen mit Hohlraum, Rippensätze über die Spannweite. Wo die Rippe hohl ist, entscheidet nicht ein eigenes Kriterium, sondern `Profil.laminatzonen` — dieselbe Antwort wie in der Fertigungsampel. Schnittpfade und Hilfslinien liegen auf getrennten Layern: Wer die Sehnenlinie mitschneidet, zersägt sein Teil.
+10. Unit-Tests inkl. Regression auf Referenzprofile (E423, S1223).
+
+**UI dazu:** Grundgerüst mit Navigation und den Ansichten **Projekt**, **Profil-Editor** und **Creo** (vorerst nur *Dateien schreiben*). Spec laden und speichern, CST-Regler mit Live-Kontur, Krümmungs- und Dickenverlauf, Fertigungsampel. Ab hier gilt das Zustandsprinzip: Die Oberfläche schreibt ins Spec, sonst nirgendwohin.
+
+**Fertig, wenn:** Ein E423 mit 250 mm Sehne, −4° Anstellung, an definierter Position, wird **in der Oberfläche eingestellt**, exportiert, in Creo importiert, in einer Skizze über *Referenzen projizieren* übernommen und extrudiert. Nachgemessene Sehnenlänge und Anstellwinkel stimmen. Screenshot ins Repo.
+
+**Risiko:** Zu viele Punkte → wellige Splines. Gegenmittel ist Teil der Aufgabe (Punktzahl als Parameter, visuelle Kontrolle).
+
+---
+
+## M2 — Mehrelement-Kaskade und Regelvalidator
+
+**Ziel:** Kaskaden lassen sich auslegen und werden live gegen das Reglement geprüft.
+
+**Aufgaben**
+1. Element- und Kaskadenmodell mit **Gap / Overlap / aoa_rel** relativ zum Vorgänger (nicht absolute x/y — siehe Konzept 4.4).
+2. Geometrische Auflösung: aus Gap/Overlap die absoluten Lagen rechnen, inkl. korrekter senkrechter Gap-Messung zur Hinterkantentangente.
+3. Kollisionsprüfung zwischen Elementen (shapely).
+4. **Schlitzkonvergenz-Check:** Kanalbreite über die Lauflänge plotten, Warnung bei nicht monoton fallendem Verlauf.
+5. Gurney-Flap als Parameter (Höhe in % Sehne).
+6. `rules/rules_2026.yaml` mit allen T-8.2-Grenzen, T 2.1.3, T 2.2, T 2.4.1 als Daten.
+7. `vehicle_ref.yaml` — Radpositionen, Reifenmaße, Kopfstützenebene, AIP-Position, Federungs-Envelope. Erste Version aus den vorhandenen RSP26-Kinematikdaten.
+8. Validator, der **über den gesamten Fahrzustands-Envelope** prüft, nicht nur statisch (T 8.2 verlangt Einhaltung "with any suspension setup with or without a driver").
+9. Ampel-Report: Regelnummer, Sollwert, Istwert, kritischster Fahrzustand.
+
+**UI dazu:** Ansicht **Kaskaden-Editor** (Elementliste, Gap/Overlap/AoA per Regler und durch Ziehen im Plot, Schlitzkanal-Diagramm) und Ansicht **Fahrzeug & Regeln** (Seiten- und Draufsicht mit T-8.2-Hüllkurven, Regelampel mit anklickbaren Verstößen, Regler für Hub, Nick und Wank). Die Ampel ist das Herzstück: Sie muss beim Schieben eines Reglers sofort reagieren, sonst wird sie ignoriert.
+
+**Fertig, wenn:** Eine 3-Element-Frontflügelkaskade ist in der Oberfläche aufgebaut, der Validator meldet grün, und eine absichtlich zu hoch gesetzte Variante wird mit korrekter Regelnummer und Millimeterangabe abgelehnt — sichtbar an der Ampel, nicht nur im Log.
+
+---
+
+## M3 — 2D-Aerodynamik und Bewertung
+
+**Ziel:** Aus "sieht gut aus" wird "ist messbar besser".
+
+**Aufgaben**
+1. NeuralFoil-Adapter: CL, CD, Cm über AoA- und Reynolds-Sweep, Millisekunden pro Auswertung.
+2. XFOIL-Adapter als Referenz und für Grenzschichtdetails, mit sauberem Umgang mit Nichtkonvergenz.
+3. Reynoldszahl aus Fahrgeschwindigkeit und Sehne; typischer FS-Bereich dokumentieren.
+4. Bodeneffekt: `h/c` als Parameter, Abtriebsverlauf über `h/c`, Balanceverschiebung über den Federungs-Envelope.
+5. Zielfunktion `J` mit Gewichten aus Rundenzeit-Sensitivitäten, **integriert über einen AoA- und Höhenbereich** — nicht über einen Punkt. Das war der explizite Fehler in der KTH-Arbeit.
+6. Vergleichsplot mehrerer Kandidaten.
+
+**UI dazu:** Ansicht **Aerodynamik** — AoA-Sweep auf Knopfdruck, Polare, Kandidatenvergleich in einer Tabelle mit Sortierung, h/c-Sensitivität. Hier werden die **Background Callbacks** eingeführt (Dash mit DiskCache), damit die Oberfläche während eines Sweeps nicht einfriert und ein Fortschrittsbalken möglich ist. Das ist der Meilenstein, in dem das passieren muss — später nachgerüstet bedeutet, alle Rechen-Callbacks umzubauen.
+
+**Fertig, wenn:** Ein Screening über mindestens fünf Profile (E423, S1223, LNV109A, NACA 7412, plus ein CST-Kandidat) läuft in unter einer Minute durch und liefert eine begründete Rangfolge mit dokumentierten Randbedingungen.
+
+**Ehrliche Grenze, die im Report stehen muss:** NeuralFoil und XFOIL sind Einzelprofilwerkzeuge. Für die finale Gap/Overlap-Optimierung braucht es 2D-CFD. Das Tool wählt hier das Grundprofil und den groben Arbeitsbereich, nicht die Kaskadenfeinabstimmung.
+
+---
+
+## M4 — 3D-Sektionsstapel und Creo-Skelett
+
+**Ziel:** Ein kompletter, verwundener 3D-Flügel entsteht aus dem Spec heraus.
+
+**Aufgaben**
+1. Spannweitenverteilungen `chord(y)`, `twist(y)`, `z(y)`, `x(y)` mit PCHIP-Interpolation.
+2. Sektionsstapel-Export: alle Stationen in **einer** IBL pro Element, identische Punktzahl, identischer Startpunkt, identische Umlaufrichtung — sonst verdreht der Boundary Blend.
+3. Endplates und Footplates als 2D-Umriss + Dicke, inkl. Keep-out-Check nach T 2.1.3.
+4. **Creo-Skelettmodell** `AERO_SKELETON.PRT`: `CS_AERO`, Bodenebene, Radpositionen und die T-8.2-Grenzen als echte Bezugsebenen. Das Reglement wird damit im CAD sichtbar.
+5. Boundary Blend über die Sektionskurven, Verdicken, Verrundungen — als dokumentierte, wiederholbare Featurekette.
+6. Publish Geometry im Skelett, Copy Geometry in `FW_EL1.PRT`, `FW_EL2.PRT`, `FW_ENDPL.PRT`, Zusammenbau zu `AERO_FRONT.ASM`.
+
+**UI dazu:** Ansicht **Spannweite & 3D** — Verteilungskurven mit ziehbaren Stützstellen und 3D-Vorschau des Elements. Die Vorschau muss nicht schön sein, aber sie muss zeigen, ob der Flügel verdreht ist, **bevor** jemand Creo öffnet.
+
+**Fertig, wenn:** Der Frontflügel steht als Baugruppe in Creo, hängt ausschließlich am Skelett, und eine Änderung der Sehnenverteilung im Spec führt nach Neuimport zu einem korrekt regenerierten Modell.
+
+**Risiko:** Boundary-Blend-Fehler bei ungleich strukturierten Sektionen. Deshalb ist die Strukturgleichheit in Punkt 2 hart getestet, nicht gehofft.
+
+---
+
+## M5 — CREOSON-Automatisierung (die eigentliche "Plugin"-Stufe)
+
+**Ziel:** Ein Kommando. Spec rein, aktualisiertes Creo-Modell und STEP für CFD raus.
+
+**Aufgaben**
+1. CREOSON-Server ab **Version 2.8.0** aufsetzen (davor kein Creo-8-Support), Verbindung aus Python über creopyson prüfen.
+2. **`creo.set_creo_version("8")` zu Sessionbeginn** — bei Creo 7 und 8 zwingend, sonst arbeitet CREOSON mit falschen Annahmen. Der Wert kommt aus dem Versionsprofil, nicht aus dem Code.
+3. Layoutparameter als **Creo-Parameter mit Relations** im Skelett anlegen (`FW_E1_CHORD`, `FW_E2_AOA`, `FW_E2_GAP`, …). Alles, was hierüber läuft, ist versionsunkritisch und regeneriert von selbst.
+4. `bridge.py`: Modell öffnen, Parameter setzen, regenerieren, exportieren.
+5. **Mapkey-Generator** für den Ablauf "altes Import-Feature löschen → IBL neu importieren auf `CS_AERO`", abgespielt über `interface.mapkey`, mit dem Mapkey-String aus `creo8.yaml`.
+6. **Smoke-Test** `aerostudio doctor`: prüft in unter zwei Minuten Creo-Version, CREOSON-Verbindung, Mapkey-Funktion und Import-Ergebnis. Das ist das Werkzeug, das nach einem künftigen Creo-Upgrade als Erstes läuft.
+7. `AERO_SPEC_HASH` als Creo-Parameter setzen → jedes CAD-Modell ist eindeutig einem Git-Stand zugeordnet.
+8. STEP-Export für CFD, benannt nach Spec-Hash.
+9. Ein CLI-Kommando: `aerostudio push --spec rsp27_front_v3.yaml`.
+
+**UI dazu:** Die Ansicht **Creo** wird vollständig — Verbindungsstatus, Buttons *Push nach Creo* und *doctor*, Protokollfenster. Wichtig: Alles, was hier per Klick geht, muss auch als CLI-Kommando existieren, damit der DoE-Lauf in M8 denselben Weg nimmt.
+
+**Fertig, wenn:** Änderung einer Zahl — per Regler in der Oberfläche oder direkt im YAML — führt über einen Klick beziehungsweise ein Kommando dazu, dass das Creo-8-Modell die Änderung zeigt, ohne dass jemand Creo angefasst hat. Die exportierte STEP trägt den richtigen Hash, und `aerostudio doctor` läuft grün durch.
+
+**Risiko:** Mapkeys sind die einzige versionsfragile Stelle im System. Gegenmittel sind eingebaut: Mapkey-Definition pro Versionsprofil, Beschränkung auf den einen unvermeidbaren Anwendungsfall, und der Smoke-Test aus Punkt 6.
+
+---
+
+## M6 — Auslieferung an das Team
+
+**Ziel:** Ein Teammitglied, das nie eine Zeile Python gesehen hat, entwirft damit einen Flügel.
+
+**Aufgaben**
+1. **`Aero Studio.bat`** — Doppelklick, Umgebung fährt hoch, Oberfläche öffnet sich. Keine Konsole, keine virtuelle Umgebung, keine Pfadvariablen.
+2. Fehlerbehandlung durchgängig: jede Ausnahme wird in einen handlungsleitenden Satz übersetzt, technisches Detail nur auf Ausklappen. **Steht seit 25.09.** (`ui/meldungen.py`). Drei Regeln tragen das: Was schon gut formuliert ist, bleibt — ein großer Teil der Ausnahmen wird von uns selbst geworfen und trägt bereits einen brauchbaren deutschen Satz. Nichts verschwindet — ein unbekannter Fehler wird als unerwartet benannt statt mit einem Allgemeinplatz zugedeckt, und die rohe Meldung bleibt immer ausklappbar. Und der Rat nennt einen Ort: nicht „bitte Eingaben prüfen", sondern „im Reiter Profil ein Katalogprofil wählen".
+3. Undo über die Spec-Historie. **Steht seit 24.09.** Jedes Speichern, bei dem sich etwas ändert, legt den vorherigen Stand unter `.historie/` ab; Zurückholen lässt sich selbst zurückholen. Warum nicht einfach Git: Wer einen Nachmittag lang Flapwinkel probiert, committet nicht nach jedem Reglerzug — und genau der Stand von vor zwanzig Minuten ist der gesuchte.
+4. Kurze Bedienungsanleitung mit Screenshots, im Repo neben dem Code.
+5. **Bedientest mit zwei Teammitgliedern, die das Tool noch nie gesehen haben** — ohne Hilfestellung, mit Beobachtung. Was sie nicht finden, wird geändert, nicht erklärt.
+6. Beispiel-Specs als Startpunkte (Frontflügel, Heckflügel) im Repo. **Stehen seit 24.09.** in `specs/beispiele/`, beide mit Spannweite, Kaskade und Endplatte — und in beiden Regelständen grün. Ein Beispiel mit roter Ampel wäre schlimmer als keins: Der Anfänger hält den Verstoß für normal oder sucht den Fehler bei sich.
+
+**Fertig, wenn:** Zwei Personen ohne Vorkenntnis bauen jeweils in unter 30 Minuten einen regelkonformen Zwei-Element-Flügel und exportieren ihn nach Creo. Ohne Rückfrage.
+
+**Warum genau hier:** Vor M5 gäbe es nichts auszuliefern, was den ganzen Weg abdeckt. Nach M8 wäre es zu spät — dann hat sich die Bedienung bereits um Annahmen herum verfestigt, die nie jemand geprüft hat.
+
+---
+
+## M7 — Ribbon-Plugin in Creo *(optional)*
+
+**Ziel:** Das Team benutzt das Tool aus Creo heraus, ohne Python zu kennen.
+
+**Aufgaben**
+1. J-Link-Anwendung in **Java 11** (das ist die für Creo 8 unterstützte Java-Version), registriert über `protk.dat` in den Auxiliary Applications, `STARTUP` auf `spawn` oder `dll`.
+2. Eigener Ribbon-Reiter "Aero Studio" mit den Befehlen *Spec laden*, *Update aus Spec*, *Regelcheck*, *STEP für CFD*.
+3. Die Buttons rufen die bestehende Python-CLI aus M5 — **die Fachlogik bleibt vollständig in Python, das Plugin ist eine dünne Bedienoberfläche.** Genau deshalb ist ein späteres Creo-Upgrade hier billig: Es trifft nur ein paar hundert Zeilen Java, nicht das Tool.
+4. Ausgabe in einem Swing-Fenster (funktioniert mit dem kostenlosen J-Link; eingebettete PTC-Dialoge über uifc bräuchten die kostenpflichtige Object-TOOLKIT-Lizenz).
+5. Gegen die otk-JAR der **ältesten** im Team eingesetzten Creo-Version kompilieren, damit dieselbe Plugin-Datei auf allen Rechnern läuft.
+6. Installationsanleitung für die Teamrechner.
+
+**Fertig, wenn:** Auf einem zweiten Rechner installiert ein Teammitglied das Plugin nach Anleitung und aktualisiert den Flügel per Klick.
+
+**Beim Umstieg auf eine neuere Creo-Version zu prüfen:** benötigte Java-Version (in Creo 8 ist es Java 11, das kann sich ändern) und ob sich die Ribbon-API verschoben hat.
+
+**Ehrliche Einschätzung:** Dieser Meilenstein ist reiner Komfort — und seit die eigene Oberfläche gesetzt ist, noch weniger als vorher. Der Anwender arbeitet in Aero Studio; der Ribbon-Button spart ihm einen Fensterwechsel. Wenn die Zeit knapp wird, fällt M7 zuerst, danach M9. Niemals M5 oder M6.
+
+---
+
+## M8 — Undertray, DoE und Optimierung
+
+**Ziel:** Optimierungsläufe statt Handiterationen. Hier liegt der größte aerodynamische Hebel.
+
+**Aufgaben**
+1. Undertray-Tunnelschnitte durch dieselbe 2D-Pipeline: Einlasshöhe, Kehlenhöhe vorne und hinten (= Neigung), Diffusorhöhe und -winkel — exakt die Parameter, die im KTH-Ansatz per DoE optimiert wurden.
+2. Rake als Fahrzeugparameter (1° ≈ +15 % Abtrieb laut Cologne-Fallstudie — im eigenen Setup nachrechnen, nicht übernehmen).
+3. Optuna-Anbindung, multikriteriell: Abtrieb gegen Widerstand gegen Breite des Arbeitsbereichs.
+4. Batch-Runner: Spec-Varianten → Creo → STEP → CFD-Warteschlange → Ergebnisse zurück in die Zielfunktion.
+5. DRS als zwei `aoa`-Zustände, exportiert als Zeilen einer Creo-Familientabelle.
+
+**UI dazu:** DoE-Konfiguration und Pareto-Front als eigene Ansicht; ein Punkt in der Front ist anklickbar und lädt die zugehörige Variante in den Kaskaden-Editor. Der Lauf selbst gehört auf die Kommandozeile, nicht in die Oberfläche — er dauert Stunden.
+
+**Fertig, wenn:** Ein DoE über mindestens 50 Varianten läuft ohne Handeingriff durch und liefert eine Pareto-Front.
+
+**Stand (28.09.):** Das Kriterium ist erfüllt und durch `tests/test_doe.py` abgesichert (200 Varianten in etwa 1,5 s).
+
+* Aufgabe 1 ist erledigt, aber **nicht** über die 2D-Pipeline gelöst, sondern mit einem 1D-Kanalmodell (`aero/unterboden.py`). Das Panelverfahren kennt keine Reibung, deshalb wächst der Sog im engen Kanal ohne Grenze. Nicht kalibriert sind der Abdichtungsfaktor (keine Schürzen nach T 2.2.2) und die Ablösegrenze von 15° bis 25°. Beide gehören als Erstes gegen CFD abgeglichen.
+* Aufgabe 2 ist erledigt. Nachgerechnet bringen 0,5° Rake um das Kehlenende etwa +17 %, um die Vorderachse gedreht weniger.
+* Aufgabe 3 ist erledigt, allerdings mit Latin Hypercube statt Optuna. Bei Millisekunden je Variante zeigt eine gleichmäßige Abdeckung den ganzen Raum. Optuna lohnt sich erst, wenn CFD in der Schleife hängt. Den Arbeitsbereich misst die Stabilität, also der kleinste durch den größten Abtrieb über ±15 mm Hub.
+* **Offen:** Aufgabe 4 (Batch über Creo/CFD; hängt an M5 und damit an der Lizenz).
+* Aufgabe 5 ist erledigt, bis auf den Test in Creo. `drs_winkel` an einer Kaskadenstufe ist der Winkel bei offenem DRS. Solange das Feld leer ist, bleibt der Hash älterer Specs unverändert. Beide Zustände werden gerechnet und gegen die Regeln geprüft, auch in Balance und Report. Die Familientabelle (`RW_E2_AOA`, Zeilen `RW_DRS_ZU`/`RW_DRS_AUF`) ist tabulatorgetrennt. **In Creo nicht geprüft.** Die Parameter müssen dort per Relation den Flap um sein Scharnier drehen, das kommt mit M5. Beispielrechnung am Heckflügel, offen −20° → −5° (Stand 07.10.): 71 → 48 N Abtrieb (−32 %), 13,8 → 7,2 N Widerstand (−48 %). Front- und Heckflügel-Beispiel ohne Unterboden: Die Balance springt von 107 % auf 116 % vorn. Die Beispielflügel sind bewusst nicht aufeinander abgestimmt.
+* Anders als geplant lädt ein Frontpunkt die Variante in den Reiter *Unterboden* statt in den Kaskaden-Editor, denn der DoE-Raum ist der Unterboden.
+* Dazu gekommen ist die Kopplung im Reiter *Balance*. Frontflügel, Heckflügel und Unterboden werden je für sich gerechnet und addiert. Rake und Nicken wirken dabei auch auf die Flügel, also auf Höhe und Anstellwinkel. Das Ergebnis sind Balance, Achslasten (samt Nickmoment des Widerstands) und die Wanderung über ±0,5° Nicken. Wechselwirkungen fehlen, allen voran der Nachlauf des Frontflügels auf dem Unterboden. Die Zielbalance kommt aus `vehicle_ref.yaml` (`fahrdynamik.achslast_vorne_prozent`). Der Wert ist noch leer, bis eine Wägung vorliegt, und wird bis dahin von Hand eingetragen.
+* Der Paket-DoE (`aero/paket.py`, `python -m aerostudio.aero.paket`) variiert alle Flügelwinkel um ±3°, dazu Kehle, Diffusor und Rake. Er optimiert auf Abtrieb, Abstand zur Zielbalance und Nickwanderung. Jeder Flügel bekommt vorab ein Kennfeld (7 Winkel × 4 Höhen) aus der echten Rechnung. Das dauert einmal etwa eine Minute, danach laufen 200 Varianten in Sekunden. Gegenprobe: 589,2 N aus dem Kennfeld gegen 589,0 N echt. Der Widerstand steht in der Ergebnisdatei, ist aber kein Ziel. Ist die Zielbalance im Raum nicht erreichbar, sagt der Lauf das ausdrücklich.
+* Seit 07.10. kann der Paket-DoE auch die Flügelgröße variieren (Häkchen im Reiter *Balance*, Kommandozeile `--groesse`). Die Sehne läuft −20/+25 %, die Halbspannweite bis an die Breitengrenze, die T 8.2.2 für die Einbauhöhe erlaubt. Die Kennfelder haben dann vier Achsen (5 × 3 × 3 × 3 Stützstellen). Die erste Rechnung dauert etwa 5 Minuten, die Abweichung zur echten Rechnung liegt unter 1 %. Die Front wird gegen das Reglement geprüft. Bei 300 Varianten waren das etwa 110 Prüfungen, aussortiert wurden vor allem T 8.2.3 (Heckflügel zu weit hinten), T 8.2.1 (über 1100 mm) und T 2.1.4 (Kanal vor dem Rad). Ergebnis am Beispielpaket ohne Unterboden: Die beste regelkonforme Balance sinkt von 88 % auf 56 % vorn, bei 393 N. Der Heckflügel wird dafür breiter (650 statt 280 mm halb). 45 % sind ohne Unterboden oder ein drittes Element weiterhin nicht erreichbar.
+
+---
+
+## M9 — Report und Scrutineering-Paket
+
+**Ziel:** Das, was am Ende in der Design-Jury und bei der Technical Inspection auf dem Tisch liegt.
+
+**Aufgaben**
+1. Regelkonformitäts-Report je Design: Regelnummer, Sollwert, Istwert, kritischster Fahrzustand.
+2. Nachweis der Frontflügelanbindung hinter der AIP (T 3.20.2) und der 120-kN-Rechnung nach T 3.19.4 aus Schraubenbild und Strebenknicklast.
+3. Steifigkeitsnachweis nach T 8.3 (200 N auf 225 cm² ≤ 10 mm; 50 N ≤ 25 mm) — FEM-Export oder Handrechnung.
+4. Design-Report-Grafiken automatisch aus dem Spec: Profilvergleiche, Kaskadenlayout, Abtriebsverteilung, h/c-Sensitivität.
+5. Fertigungsableitungen: Rippen- und Schablonen-DXF, Formtrennebenen.
+
+**Fertig, wenn:** Für ein Design entsteht per Kommando ein PDF, das man ohne Nacharbeit in den Design Report übernehmen kann.
+
+**Stand (28.09.):** `python -m aerostudio.formate.report --spec … [--dazu …] [--ziel 45]` schreibt das PDF, alternativ der Knopf im Reiter *Projekt*. Für Front- und Heckflügel dauert es etwa 15 s.
+
+* Aufgabe 1 ist erledigt. Jeder Befund nennt jetzt den Fahrzustand, in dem er geprüft wurde (`Regelbefund.fahrzustand`).
+* Aufgabe 4 ist erledigt: Kaskade im Wurzelschnitt, Profilvergleich, Grundriss, Druckverteilung, Abtrieb über die Spannweite und h/c-Kurve (nur Frontflügel), dazu Unterboden und Balance. Die Grafiken kommen aus matplotlib, weil kaleido für den Plotly-PDF-Export auf Teamrechnern unzuverlässig ist.
+* **Offen:** Aufgaben 2 und 3 (T 3.20.2/T 3.19.4, T 8.3). Sie brauchen Struktur- und Laminatdaten, die das Spec nicht kennt. Der Report weist sie ausdrücklich als nicht nachgewiesen aus. Formtrennebenen (Aufgabe 5) fehlen ebenfalls, die DXF-Vorlagen gibt es.
+* Ob das PDF „ohne Nacharbeit“ in den Design Report passt, muss das Team am echten Entwurf beurteilen.
+
+---
+
+## Reihenfolge und Abhängigkeiten
+
+```
+M0 Umgebung
+ └─ M1 Profilkern + IBL + UI-Grundgerüst ──┐
+     ├─ M2 Kaskade + Regelvalidator (+UI)  │
+     │   └─ M3 2D-Aero (+UI)               │
+     └─ M4 3D-Stapel + Skelett (+UI) ◄─────┘
+         └─ M5 CREOSON (+UI)
+             └─ M6 Auslieferung an das Team
+                 ├─ M7 Ribbon-Plugin (optional)
+                 └─ M8 Undertray + DoE
+                     └─ M9 Report
+```
+
+**Kritischer Pfad: M0 → M1 → M4 → M5 → M6.** Alles andere ist parallelisierbar oder verschiebbar.
+
+Die UI wächst quer durch M1 bis M5 mit und wird in M6 ausgeliefert. Sie ist damit kein eigener Block am Ende, sondern ab dem ersten Meilenstein da — das ist die einzige Art, bei der Bedienungsfehler früh auffallen statt kurz vor dem Rollout.
+
+---
+
+## Arbeitsweise
+
+- Ein Meilenstein pro Sitzung, am Ende Commit und Push.
+- Jeder Meilenstein endet mit einem **Nachweis in Creo**, nicht mit "Code läuft durch".
+- Wenn ein "Fertig, wenn"-Kriterium nicht erfüllt ist, wird der Meilenstein nicht abgehakt, sondern der Plan angepasst.
+- Regelstand: **FS Rules 2027 v1.0** (Original `AERO/FS_Rules_2027_v1.0.pdf`, Werte in `regeln/rules_2027.yaml`). Ein neuer Stand kommt als eigene YAML-Datei, `regeln.AKTUELL` wird umgestellt, alle Designs laufen erneut durch den Validator.
+- **Zwei Dinge sind in diesem Projekt versioniert und dürfen nie hartcodiert werden: das Reglement und die Creo-Version.** Beides sind Konfigurationsdaten, kein Code. Wer das durchhält, übersteht sowohl die Rules 2027 als auch das nächste Creo-Upgrade ohne Umbau.
+
+### Was ein späteres Creo-Upgrade konkret kostet
+
+| Betroffen | Aufwand | Warum so wenig |
+|---|---|---|
+| `.ibl` / `.pts`-Dateien | **null** | Klartext, versionsunabhängig |
+| Python-Tool (M1–M4, M7, M8) | **null** | kennt Creo überhaupt nicht |
+| Neues Versionsprofil `creoNN.yaml` | ein Nachmittag | Datecode, Loadpoint, Mapkey neu aufzeichnen |
+| CREOSON-Anbindung (M5) | gering | Versionsstring anpassen, `aerostudio doctor` laufen lassen |
+| Skelett- und Bauteilmodelle | einmalig bewusst | Creo öffnet sie; erst beim vollständigen Umstieg neu speichern — danach gibt es keinen Weg zurück zu Creo 8 |
+| Ribbon-Plugin (M6, optional) | ein bis zwei Tage | Java-Version und Ribbon-API prüfen, neu kompilieren |
+
+---
+
+## Quellen zur Plugin-Entscheidung
+
+- [Installing and Working with J-Link (PTC Help)](https://support.ptc.com/help/creo_toolkit/otk_java_pma/r11.0/usascii/creo_toolkit/user_guide/Installing_J_Link.html) — J-Link wird als Teil der Komponente „API Toolkits" mitinstalliert
+- [Creating Ribbon Tabs, Groups, and Menu Items (PTC Help)](https://support.ptc.com/help/creo_toolkit/otk_java_pma/r11.0/usascii/creo_toolkit/user_guide/Creating_Ribbon_Tabs_Groups_and_Menu_Items.html)
+- [Registry File — protk.dat (PTC Help)](https://support.ptc.com/help/creo_toolkit/otk_cpp_plus/usascii/creo_toolkit/user_guide/Registry_File.html)
+- [CS35654 — Synchrone Toolkit-Anwendung beim Start registrieren](https://www.ptc.com/en/support/article/CS35654)
+- [CS60620 — Wann ist eine TOOLKIT-Lizenz erforderlich?](https://www.ptc.com/en/support/article/CS60620)
+- [CREOSON — Voraussetzungen und Funktionsumfang](https://www.creoson.com/?page_id=5) — ab Creo 3.0, keine Zusatzlizenz
+- [CREOSON Releases auf GitHub](https://github.com/SimplifiedLogic/creoson/releases) — Creo-8-Unterstützung ab 2.8.0; bei Creo 7/8 ist `creo.set_creo_version` zu Sessionbeginn erforderlich
+- [creopyson `interface` — u. a. `mapkey`](https://creopyson.readthedocs.io/en/latest/_modules/creopyson/interface.html)
+- [Compatibility with J-Link (PTC Help)](https://support.ptc.com/help/creo_toolkit/otk_java_pma/r11.0/usascii/creo_toolkit/user_guide/Compatibility_with_J_Link.html) — Java-basierte Anpassung in Creo 8 mit Java 11
+- [To Edit the Definition of Imported Datum Curves (PTC Help)](https://support.ptc.com/help/creo/creo_pma/r11.0/usascii/part_modeling/part_modeling/To_Edit_the_Definition_of_Imported_Datum_Curves.html) — öffnet den Import DataDoctor, kein Neueinlesen der Datei

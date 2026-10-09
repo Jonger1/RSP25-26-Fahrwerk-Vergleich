@@ -1,0 +1,399 @@
+"""
+Tests fuer den 3D-Fluegel und die Regelpruefung.
+
+Der Schwerpunkt liegt bewusst nicht darauf, dass der Pruefer gruen meldet -
+das tut er auch, wenn er nichts tut. Geprueft wird, dass er bei absichtlich
+regelwidriger Geometrie ANSCHLAEGT, und zwar bei der richtigen Regel und im
+richtigen Regelstand.
+"""
+
+import numpy as np
+import pytest
+
+from aerostudio.geometrie.profil import Profil
+from aerostudio.geometrie.spannweite import (Schnitt, als_sektionen, huellwerte,
+                                             schnitte)
+from aerostudio.regeln import (Bezugsgeometrie, Fahrzustand, alle_staende, lade,
+                               pruefe_fluegel)
+from aerostudio.spec.modell import Spannweite, Stuetzstelle
+
+
+@pytest.fixture(scope="module")
+def profil():
+    return Profil.aus_dat("profile/katalog/e423.dat").gespiegelt()
+
+
+@pytest.fixture(scope="module")
+def bezug():
+    return Bezugsgeometrie.aus_datei()
+
+
+def _fluegel(profil, spannweite=None, sehne=250.0, winkel=-4.0,
+             lage=(-600.0, 0.0, 90.0)):
+    return schnitte(profil, spannweite or Spannweite.frontfluegel_aussen(),
+                    sehne, winkel, 60, lage=lage)
+
+
+# ---------------------------------------------------------------- Geometrie
+
+def test_schnittzahl_und_aufbau(profil):
+    stapel = _fluegel(profil)
+    assert len(stapel) == 13
+    # Gleicher Aufbau ueberall - sonst verdreht der Boundary Blend die Flaeche.
+    punktzahlen = {len(s.punkte) for s in stapel}
+    assert len(punktzahlen) == 1
+
+
+def test_lage_verschiebt_alles_gleich(profil):
+    ohne = _fluegel(profil, lage=(0.0, 0.0, 0.0))
+    mit = _fluegel(profil, lage=(-600.0, 25.0, 90.0))
+    for a, b in zip(ohne, mit):
+        versatz = b.punkte - a.punkte
+        assert np.allclose(versatz, [-600.0, 25.0, 90.0])
+
+
+# Eigene Verteilung statt der Vorgabe: Die Tests pruefen, DASS Sehne
+# multiplikativ und Verwindung additiv wirken - nicht, welche Zahlen gerade
+# in der Vorgabe stehen. Vorher hingen sie an 0.85 und -10 Grad und fielen
+# um, als die Vorgabe entschaerft wurde.
+EIGENE = Spannweite(stuetzstellen=[
+    Stuetzstelle(y=0.0, sehne=0.80, verwindung=-6.0),
+    Stuetzstelle(y=600.0, sehne=1.00, verwindung=+3.0)], schnitte=13)
+
+
+def test_verwindung_wirkt_additiv(profil):
+    stapel = _fluegel(profil, spannweite=EIGENE, winkel=-4.0)
+    assert stapel[0].anstellwinkel == pytest.approx(-10.0)
+    assert stapel[-1].anstellwinkel == pytest.approx(-1.0)
+
+
+def test_sehne_wirkt_multiplikativ(profil):
+    stapel = _fluegel(profil, spannweite=EIGENE, sehne=250.0)
+    assert stapel[0].sehne == pytest.approx(0.80 * 250.0)
+    assert stapel[-1].sehne == pytest.approx(1.00 * 250.0)
+
+
+def test_verlauf_schwingt_nicht_ueber(profil):
+    """PCHIP statt kubischem Spline: zwischen zwei Stationen darf keine
+    Sehne herauskommen, die groesser ist als beide Nachbarn."""
+    spw = Spannweite(stuetzstellen=[
+        Stuetzstelle(y=0.0, sehne=0.6),
+        Stuetzstelle(y=300.0, sehne=1.0),
+        Stuetzstelle(y=600.0, sehne=1.0)], schnitte=41)
+    stapel = _fluegel(profil, spannweite=spw)
+    sehnen = np.array([s.sehne for s in stapel])
+    assert sehnen.max() <= 1.0 * 250.0 + 1e-9
+    assert np.all(np.diff(sehnen) >= -1e-9)      # monoton steigend
+
+
+def test_sektionen_paarweise_und_gleich_lang(profil):
+    stapel = _fluegel(profil)
+    sektionen = als_sektionen(stapel)
+    assert len(sektionen) == 2 * len(stapel)
+    laengen = {len(s) for s in sektionen}
+    assert len(laengen) == 1
+    # Ober- und Unterseite muessen sich an der Nase treffen.
+    assert np.allclose(sektionen[0][-1], sektionen[1][0])
+
+
+def test_huellwerte_stimmen_mit_der_wolke(profil):
+    stapel = _fluegel(profil)
+    h = huellwerte(stapel)
+    alle = np.vstack([s.punkte for s in stapel])
+    assert h["x_min"] == pytest.approx(alle[:, 0].min())
+    assert h["z_max"] == pytest.approx(alle[:, 2].max())
+    assert h["spannweite"] == pytest.approx(600.0)
+    assert h["flaeche"] > 0.0
+
+
+def test_einzelne_stuetzstelle_ergibt_rechteckfluegel(profil):
+    spw = Spannweite(stuetzstellen=[Stuetzstelle(y=0.0)], schnitte=2)
+    stapel = schnitte(profil, spw, 200.0, -3.0, 40)
+    assert {s.sehne for s in stapel} == {200.0}
+    assert {s.anstellwinkel for s in stapel} == {-3.0}
+
+
+# ------------------------------------------------------------ Regelstaende
+
+def test_nur_noch_ein_regelstand():
+    """Seit 06.10.2026 gilt allein FS Rules 2027 v1.0 - 2026 und der
+    Academy-Entwurf sind entfernt."""
+    staende = alle_staende()
+    assert [r.version for r in staende] == ["2027-v1.0"]
+    assert staende[0].verbindlich is True and not staende[0].entwurf
+    with pytest.raises(ValueError, match="Unbekannter Regelstand"):
+        lade("2026")
+
+
+def test_regelwerk_liegt_im_repo():
+    """Das Original, aus dem rules_2027.yaml abgeschrieben ist."""
+    from aerostudio.regeln import ORIGINAL
+    assert ORIGINAL.is_file()
+    assert ORIGINAL.read_bytes()[:5] == b"%PDF-"
+
+
+def test_werte_wie_im_regeltext():
+    """Gegen den Wortlaut von T 2.1, T 2.2 und T 8 (S. 20/21, 44/45)."""
+    r = lade()
+    assert r["t8_2_1"]["vor_vorderreifen"]["max_hoehe"] == 350
+    assert r["t8_2_1"]["hinter_kopfstuetze"]["max_hoehe"] == 1100
+    assert "min_hoehe" not in r["t8_2_1"]["hinter_kopfstuetze"]
+    assert r["t8_2_2"]["reifenoberkante_bis_700"]["nach_innen"] == 150
+    assert r["t8_2_2"]["von_700_bis_1100"]["bis_hoehe"] == 1100
+    assert r["t8_2_3"]["max_vor_vorderreifen"] == 700
+    assert r["t8_2_3"]["max_hinter_hinterreifen"] == 250
+    assert r["t2_1_3"]["hoehe_hinterreifen"] == 700
+    assert r["t2_1_3"]["zusatzzone_hinterrad"]["nach_innen"] == 150
+    assert r["t2_1_4"]["quader_breite"] == 75
+    assert r["t2_1_4"]["quader_hoehe"] == 250
+    assert r["allgemein"]["t2_2_1_bodenfreiheit_min"] == 30
+    assert r["allgemein"]["t8_3_1_last"] == 200
+
+
+def test_bezugsebenen_aus_der_fahrzeugreferenz(bezug):
+    assert bezug.vorderreifen_vorderkante_x == pytest.approx(-203.2)
+    assert bezug.reifenoberkante_z == pytest.approx(406.4)
+    assert bezug.rad_aussen_vorne == pytest.approx(695.25)
+    assert bezug.rad_innen_hinten == pytest.approx(494.75)
+
+
+# -------------------------------------------------------------- Pruefungen
+
+def _befund(befunde, regel, teil):
+    treffer = [b for b in befunde if b.regel == regel and teil in b.pruefung]
+    assert treffer, f"Keine Pruefung {regel} / {teil} in " \
+                    f"{[b.pruefung for b in befunde]}"
+    return treffer[0]
+
+
+def test_brauchbarer_frontfluegel_besteht(profil, bezug):
+    stapel = _fluegel(profil)
+    zustand = Fahrzustand.bremsend(600.0)
+    for rs in alle_staende():
+        befunde = pruefe_fluegel(stapel, rs, bezug, zustand)
+        schlecht = [b for b in befunde if not b.ok]
+        assert not schlecht, [str(b) for b in schlecht]
+
+
+def test_zu_tiefer_fluegel_faellt_ueber_die_bodenfreiheit(profil, bezug):
+    stapel = _fluegel(profil, lage=(-600.0, 0.0, 55.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
+                               Fahrzustand.bremsend(600.0)),
+                "T 2.2.1", "Bodenfreiheit")
+    assert not b.ok and b.blockiert
+    assert "höher gesetzt" in b.hinweis
+
+
+def test_bremsfall_ist_strenger_als_die_konstruktionslage(profil, bezug):
+    """Genau der Fall, den T 8.2.4 meint: statisch in Ordnung, im Fahrzustand
+    nicht mehr."""
+    # 70 mm ist so gewaehlt, dass der tiefste Punkt bei 35,4 mm liegt: ueber
+    # den geforderten 30 mm, aber weniger als die 6,6 mm Absinken darueber,
+    # die der Bremsfall kostet. Genau dieses schmale Fenster ist der Sinn des
+    # Tests. (Vor der Korrektur der Drehrichtung in angestellt() lag es bei
+    # 78 mm - der Fluegel war damals andersherum gedreht.)
+    stapel = _fluegel(profil, lage=(-600.0, 0.0, 70.0))
+    statisch = _befund(pruefe_fluegel(stapel, lade(), bezug,
+                                      Fahrzustand.statisch()),
+                       "T 2.2.1", "Bodenfreiheit")
+    fahrend = _befund(pruefe_fluegel(stapel, lade(), bezug,
+                                     Fahrzustand.bremsend(600.0)),
+                      "T 2.2.1", "Bodenfreiheit")
+    assert statisch.ok
+    assert not fahrend.ok
+    assert fahrend.ist < statisch.ist
+
+
+def test_zu_weit_vorstehender_fluegel_reisst_die_laengengrenze(profil, bezug):
+    stapel = _fluegel(profil, lage=(-1100.0, 0.0, 90.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug),
+                "T 8.2.3", "vor den Vorderreifen")
+    assert not b.ok
+    assert b.ist > 700.0
+
+
+def test_hoehengrenze_vor_der_reifenvorderkante(profil, bezug):
+    """T 8.2.1: vor der Reifenvorderkante unter 350 mm."""
+    zustand = Fahrzustand.statisch()
+    tief = _befund(pruefe_fluegel(_fluegel(profil, lage=(-600.0, 0.0, 300.0)),
+                                  lade(), bezug, zustand),
+                   "T 8.2.1", "vor der Reifenvorderkante")
+    hoch = _befund(pruefe_fluegel(_fluegel(profil, lage=(-600.0, 0.0, 380.0)),
+                                  lade(), bezug, zustand),
+                   "T 8.2.1", "vor der Reifenvorderkante")
+    assert tief.ok and tief.grenze == 350.0
+    assert not hoch.ok and hoch.blockiert
+
+
+def test_breiter_fluegel_setzt_den_quaderkanal_zu(profil, bezug):
+    """T 2.1.4: Ein bis zur Radaussenkante durchgezogener Frontfluegel laesst
+    keinen 75-mm-Kanal mehr frei - ein harter Verstoss."""
+    breit = Spannweite(stuetzstellen=[
+        Stuetzstelle(y=0.0, sehne=0.85, verwindung=-10.0),
+        Stuetzstelle(y=695.0, sehne=1.0, verwindung=2.0)], schnitte=25)
+    stapel = _fluegel(profil, spannweite=breit)
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug), "T 2.1.4", "Kanal")
+    assert not b.ok
+    assert b.ist < 75.0
+    assert b.blockiert
+
+
+def test_schlitz_in_der_spannweite_rettet_den_quaderkanal(profil, bezug):
+    """Gegenprobe: Mit einer Luecke von 100 mm besteht derselbe Fluegel."""
+    innen = _fluegel(profil, spannweite=Spannweite(stuetzstellen=[
+        Stuetzstelle(y=0.0, sehne=0.85, verwindung=-10.0),
+        Stuetzstelle(y=300.0, sehne=0.95, verwindung=-4.0)], schnitte=13))
+    aussen = _fluegel(profil, spannweite=Spannweite(stuetzstellen=[
+        Stuetzstelle(y=400.0, sehne=1.0, verwindung=0.0),
+        Stuetzstelle(y=695.0, sehne=1.0, verwindung=2.0)], schnitte=13))
+    b = _befund(pruefe_fluegel(innen + aussen, lade("2027"), bezug),
+                "T 2.1.4", "Kanal")
+    assert b.ok
+    assert b.ist == pytest.approx(100.0, abs=1.0)
+
+
+def test_tiefer_heckfluegel_muss_schmal_sein(profil, bezug):
+    """T 8.2.2: Zwischen Reifenoberkante und 700 mm hoechstens 150 mm
+    innerhalb des innersten Hinterradpunkts. Eine Untergrenze fuer den
+    Heckfluegel gibt es im endgueltigen Text NICHT (der Entwurf hatte 700)."""
+    breit = _fluegel(profil, lage=(1200.0, 0.0, 600.0), winkel=-8.0,
+                     spannweite=Spannweite.gerade(500.0))
+    befunde = pruefe_fluegel(breit, lade(), bezug)
+    assert not [b for b in befunde if "nicht unter" in b.pruefung]
+    b = _befund(befunde, "T 8.2.2", "zwischen Reifenoberkante")
+    assert b.grenze == pytest.approx(bezug.rad_innen_hinten - 150.0)
+    assert not b.ok and b.blockiert
+
+    schmal = _fluegel(profil, lage=(1200.0, 0.0, 600.0), winkel=-8.0,
+                      spannweite=Spannweite.gerade(300.0))
+    assert _befund(pruefe_fluegel(schmal, lade(), bezug),
+                   "T 8.2.2", "zwischen Reifenoberkante").ok
+
+
+def test_hoher_heckfluegel_bis_zur_radaussenkante(profil, bezug):
+    """T 8.2.2: Zwischen 700 und 1100 mm zaehlt der AEUSSERSTE Punkt des
+    Hinterrads."""
+    stapel = _fluegel(profil, lage=(1200.0, 0.0, 900.0), winkel=-8.0,
+                      spannweite=Spannweite.gerade(550.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug), "T 8.2.2", "zwischen 700")
+    assert b.grenze == pytest.approx(bezug.rad_aussen_hinten)
+    assert b.ok
+
+
+def test_geltende_regeln_sind_hart(profil, bezug):
+    """T 2.2.1 ist ein harter Verstoss, kein Hinweis."""
+    stapel = _fluegel(profil, lage=(-600.0, 0.0, 50.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
+                               Fahrzustand.bremsend(600.0)),
+                "T 2.2.1", "Bodenfreiheit")
+    assert not b.ok
+    assert b.stufe == "fehler" and b.blockiert
+
+
+def test_keepout_ueber_dem_hinterrad(profil, bezug):
+    """T 2.1.3, Zusatzzone: ueber dem Hinterrad bis 700 mm, 150 mm nach
+    innen. Eine tiefe Heckfluegel-Endplatte direkt ueber dem Rad sitzt drin."""
+    stapel = _fluegel(profil, lage=(bezug.radstand - 100.0, 400.0, 500.0),
+                      spannweite=Spannweite.gerade(60.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug, Fahrzustand.statisch()),
+                "T 2.1.3", "über dem Hinterrad")
+    assert not b.ok
+
+
+def test_keepout_greift_wenn_der_fluegel_neben_dem_rad_sitzt(profil, bezug):
+    """Ein Fluegel in Radhoehe seitlich neben dem Vorderrad verletzt T 2.1.3."""
+    stapel = _fluegel(profil, lage=(-100.0, 550.0, 200.0),
+                      spannweite=Spannweite.gerade(80.0))
+    b = _befund(pruefe_fluegel(stapel, lade(), bezug,
+                               Fahrzustand.statisch()),
+                "T 2.1.3", "Vorderrad")
+    assert not b.ok
+    assert b.ist > 0
+
+
+def test_gespiegelte_haelfte_wird_mitgeprueft(profil, bezug):
+    """Wer die linke Haelfte modelliert, darf nicht durch die Breitenpruefung
+    rutschen."""
+    rechts = _fluegel(profil, lage=(1200.0, 0.0, 900.0), winkel=-8.0,
+                      spannweite=Spannweite.gerade(720.0))
+    links = [Schnitt(-s.y, s.sehne, s.anstellwinkel,
+                     s.punkte * np.array([1.0, -1.0, 1.0])) for s in rechts]
+    b_r = _befund(pruefe_fluegel(rechts, lade(), bezug), "T 8.2.2", "zwischen 700")
+    b_l = _befund(pruefe_fluegel(links, lade(), bezug), "T 8.2.2", "zwischen 700")
+    assert b_r.ist == pytest.approx(b_l.ist)
+    assert not b_l.ok
+
+
+def test_reserve_zeigt_in_die_richtige_richtung(profil, bezug):
+    stapel = _fluegel(profil)
+    for b in pruefe_fluegel(stapel, lade(), bezug,
+                            Fahrzustand.bremsend(600.0)):
+        assert (b.reserve >= -1e-9) == b.ok
+
+
+# ----------------------------------------------------- Verwindungspruefung
+
+from aerostudio.geometrie import verwindung
+
+
+def test_zu_schnelle_verwindung_wird_gemeldet():
+    """Aufgefallen im CAD: Die erste Vorgabe verdrehte sich mit 24 Grad je
+    Meter, und der Berandungsverbund schnuerte in der Mitte sichtbar ein."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(), -4.0)
+    warnungen = [b for b in befunde if b.stufe == "warnung"]
+    assert warnungen
+    assert any("eingeschnürt" in b.text for b in warnungen)
+
+
+def test_massvolle_vorgabe_wird_nicht_beanstandet():
+    assert verwindung.pruefe(Spannweite.frontfluegel_aussen(), -4.0, -12.0) == []
+
+
+def test_schnitt_jenseits_des_abrisses_wird_gemeldet():
+    """Die alte Vorgabe stellte die Wurzel auf -14 Grad, bei einem Abriss des
+    E423 bei -12 Grad. Das faellt sonst erst in der Abtriebsrechnung auf und
+    ist dort schwer zuzuordnen."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(),
+                                -4.0, -12.0)
+    assert any("JENSEITS des Abrisses" in b.text for b in befunde)
+    ueber = [b for b in befunde if "JENSEITS" in b.text][0]
+    assert "y 0 mm" in ueber.ort
+
+
+def test_knappe_abrissreserve_wird_gemeldet():
+    spw = Spannweite(stuetzstellen=[Stuetzstelle(y=0.0, verwindung=-7.0),
+                                    Stuetzstelle(y=600.0, verwindung=-6.0)])
+    befunde = verwindung.pruefe(spw, -4.0, -12.0)
+    assert any("Reserve bis zum Abriss" in b.text for b in befunde)
+
+
+def test_ohne_abrisswinkel_bleibt_die_ratenpruefung():
+    """Ohne NeuralFoil laesst sich der Abriss nicht bestimmen - die
+    Verwindungsrate braucht aber keine Aerodynamik."""
+    befunde = verwindung.pruefe(Spannweite.frontfluegel_stark_verwunden(), -4.0,
+                                abrisswinkel=None)
+    assert befunde
+    assert all("Abriss" not in b.text for b in befunde)
+
+
+def test_verwindungsrate_rechnet_je_meter():
+    spw = Spannweite(stuetzstellen=[Stuetzstelle(y=0.0, verwindung=-10.0),
+                                    Stuetzstelle(y=250.0, verwindung=-4.0)])
+    (von, bis, rate), = verwindung.verwindungsrate(spw)
+    assert (von, bis) == (0.0, 250.0)
+    assert rate == pytest.approx(24.0)
+
+
+def test_neue_vorgabe_haelt_abstand_zum_abriss(profil):
+    """Der eigentliche Zweck der Aenderung: Reserve fuer Nicken und Federn."""
+    from aerostudio.aero.profilpolare import polare
+    abriss = polare(profil, 250_000.0).abriss_winkel
+    for st in Spannweite.frontfluegel_aussen().stuetzstellen:
+        assert (-4.0 + st.verwindung) - abriss >= 3.0
+
+
+def test_alte_vorgabe_bleibt_fuer_den_vergleich_erhalten():
+    """Sie ist nicht falsch, sondern nur fuer eine durchgehende Flaeche
+    ungeeignet - als segmentierter Fluegel waere sie sinnvoll."""
+    alt = Spannweite.frontfluegel_stark_verwunden()
+    assert alt.stuetzstellen[0].verwindung == pytest.approx(-10.0)

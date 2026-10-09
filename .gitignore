@@ -1,10 +1,10 @@
 .claude/settings.local.json
 __pycache__/
 *.pyc
-Aero/aerostudio/creo/plugin/build/
-Aero/aerostudio/creo/plugin/aerostudio.jar
-Aero/aerostudio/creo/plugin/protk.dat
-Aero/export/
-Aero/specs/*.lock
+AERO/aerostudio/creo/plugin/build/
+AERO/aerostudio/creo/plugin/aerostudio.jar
+AERO/aerostudio/creo/plugin/protk.dat
+AERO/export/
+AERO/specs/*.lock
 .idea/
-Aero/.venv/
+AERO/.venv/

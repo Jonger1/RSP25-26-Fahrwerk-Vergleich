@@ -1,0 +1,11 @@
+# Zusaetzlich zu requirements.txt, wenn man am Werkzeug selbst arbeitet.
+#
+# Wer Aero Studio nur benutzt, braucht das hier nicht - deshalb steht es nicht
+# in requirements.txt und wird von "Aero Studio.bat" nicht mitinstalliert.
+#
+#   .venv\Scripts\python -m pip install -r requirements.txt -r requirements-dev.txt
+#   .venv\Scripts\python -m pytest
+
+-r requirements.txt
+
+pytest>=7.0

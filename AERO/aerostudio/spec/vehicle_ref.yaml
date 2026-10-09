@@ -1,0 +1,167 @@
+# Fahrzeugreferenz für den Regelvalidator
+#
+# Hier stehen nur die Werte, die KEIN Kinematikprogramm exportiert. Alles
+# Bewegte - Radhub, Nicken, Wanken - liest das Werkzeug direkt aus euren
+# vorhandenen Textexporten unter RSP26/Textfiles/ ein. Format dort:
+#
+#     groesse [einheit]: [wert, wert, wert, ...]
+#
+# Diese Datei ist also kurz und muss nur einmal pro Fahrzeug gepflegt werden.
+#
+# Alle Längen in mm, Winkel in Grad.
+# Koordinatensystem: Ursprung Vorderachsmitte auf der Bodenebene,
+#                    x nach hinten, y nach rechts, z nach oben.
+#
+# AUSFUELLEN = von euch einzutragen.
+
+meta:
+  fahrzeug: RSP26
+  stand: "2026-09-09"
+  gepflegt_von: "Jannis"
+  # Gilt laut Team auch fuer RSP27.
+
+# --------------------------------------------------------------- Räder
+# Relevant für T 8.2 (Breiten- und Längengrenzen) und T 2.1.3 (Keep-out-Zone).
+raeder:
+  radstand: 1535                      # Vorderachse bis Hinterachse
+  spurweite_vorne: 1200               # Mitte Rad zu Mitte Rad
+  spurweite_hinten: 1180
+  # Bestaetigt durch die Kinematikexporte: die Spurkennlinien laufen in der
+  # Konstruktionslage exakt durch 1200.0 bzw. 1180.0 mm.
+
+  # 16 Zoll Aussendurchmesser, 7.5 Zoll Breite, vorne und hinten gleich.
+  # Umgerechnet: 16 x 25.4 = 406.4 mm, 7.5 x 25.4 = 190.5 mm.
+  # ANNAHME: das ist der UNBELASTETE Durchmesser. Unter Last ist der
+  # Abrollradius kleiner; fuer die Laengengrenzen aus T 8.2.3 zaehlt aber die
+  # Reifenkontur, nicht der Abrollradius - deshalb hier unkritisch.
+  reifen_vorne:
+    durchmesser: 406.4
+    breite: 190.5
+  reifen_hinten:
+    durchmesser: 406.4
+    breite: 190.5
+
+  # Aus Spurweite und Reifenbreite rechnet das Werkzeug die innersten und
+  # äußersten Punkte selbst aus. Nur eintragen, falls die Felgen asymmetrisch
+  # sitzen und die Rechnung nicht stimmt:
+  # innerster_punkt_vorne: null
+  # aeusserster_punkt_vorne: null
+
+# ------------------------------------------------------------- Cockpit
+# T 8.2.1 nennt die Vertikalebene durch den hintersten Punkt der Vorderfläche
+# der Kopfstützenaufnahme, ohne Polster, in HINTERSTER Einstellposition.
+# Davor gilt 500 mm Höhengrenze, dahinter 1100 mm.
+cockpit:
+  # Aus dem Fahrzeugmodell abgelesen. Helmmittelpunkt liegt bei X = -1019.11,
+  # Z = 702.949 im CAD-Koordinatensystem des Autos.
+  # Soll laut Team VARIABEL bleiben - die Kopfstuetzenlage aendert sich noch.
+  kopfstuetze_x_hinterste_position: 1000     # gerundet, im Werkzeug-KS
+  kopfstuetze_variabel: true
+  kopfstuetze_z_helm: 703                    # nur informativ
+
+# ------------------------------------------------ Frontstruktur (T 3.20)
+# Aeroteile dürfen vor die Anti-Intrusion-Platte ragen, ihr Anbindungspunkt
+# ans Chassis muss aber dahinter liegen.
+frontstruktur:
+  # Eckpunkt der AIP im CAD: X = 514.000, Y = 103.127, Z = 463.353
+  # Im CAD ist +X nach VORNE, die Platte liegt also 514 mm VOR der Vorderachse.
+  # Im Werkzeug-KS (x nach hinten) entspricht das -514.
+  aip_x: -514
+  aip_z: 463
+
+  # Front Bulkhead bei X = 510 im CAD, also 510 mm vor der Vorderachse.
+  # Die AIP liegt bei 514 - genau 4 mm davor. Das passt exakt zu T 3.19.4,
+  # die eine 4 mm starke Aluminium-AIP nennt, die ans Bulkhead geschraubt
+  # wird. Guter Beleg dafuer, dass beide Werte richtig abgelesen sind.
+  frontschott_x: -510
+
+# ------------------------------------------------------------ Fahrwerk
+# T 2.2.1: mindestens 30 mm statische Bodenfreiheit mit Fahrer.
+# T 8.2:   alle Grenzen gelten "with any suspension setup, with or without
+#          a driver" - deshalb reicht die statische Lage nicht.
+fahrwerk:
+  # 40 mm, soll aber einstellbar bleiben - das Reglement fordert nur
+  # mindestens 30 mm (T 2.2.1), der Rest ist Auslegung.
+  bodenfreiheit_statisch: 40
+  bodenfreiheit_variabel: true
+  bodenfreiheit_min_regel: 30
+
+  # Zeigt auf eure vorhandenen Kinematikexporte. Das Werkzeug liest daraus
+  # den Federungs-Envelope und prüft die Regeln über den gesamten Bereich.
+  kinematik_ordner: "../../fahrzeug/RSP26"
+  # Liegt im Repository, damit der Validator unabhaengig von lokalen
+  # Ordnern ist. Kopiert am 09.09.2026 aus den RSP26-Datacurves.
+
+  # Vollstaendig vorhanden: Hub, Wanken und Lenken fuer beide Achsen.
+  # Aus den Exporten gelesen am 09.09.2026:
+  #
+  #                    vorne                hinten
+  #   Radhub      -24.333 .. +24.354    -22.895 .. +22.937   mm
+  #   Wankwinkel   -2.329 ..  +2.324     -2.329 ..  +2.324   Grad
+  #   Spurweite  1196.76  .. 1200.47   1175.61  .. 1181.46   mm
+  #
+  # NICHT enthalten ist der NICKWINKEL. Fuer den Frontfluegel ist er der
+  # wichtigste Freiheitsgrad, weil er den Bodenabstand direkt aendert.
+  # Bitte nachliefern oder unten unter ersatzwerte eintragen.
+
+  # Die frueher vorgesehenen Ersatzwerte entfallen: die echten Kennlinien
+  # liegen vollstaendig vor, nur der Nickwinkel ist gerechnet statt gemessen.
+  envelope:
+    radhub_vorne: [-24.333, 24.354]    # mm, aus den Exporten
+    radhub_hinten: [-22.895, 22.937]
+    wankwinkel: [-2.329, 2.324]        # Grad, aus den Exporten
+
+# ------------------------------------------------- CAD-Koordinatensystem
+# BEFUND 09.09.2026 aus dem Fahrzeugmodell:
+#   +X zeigt nach VORNE   (AIP bei +514, Helm bei -1019)
+#   +Z zeigt nach OBEN    (Helm bei 703, AIP bei 463 - passt zu Hoehen ueber Grund)
+#   Ursprung in der Vorderachsmitte, z = 0 auf der Bodenebene
+#
+# Das Werkzeug rechnet bisher mit x nach HINTEN. Beide Konventionen sind
+# gueltig, aber sie unterscheiden sich im Vorzeichen von x. Solange das an
+# einer einzigen Stelle umgerechnet wird, ist das unkritisch - genau wie schon
+# bei der Y/Z-Frage beim IBL-Export.
+#
+# ZU KLAEREN: Zeigt +Y im Fahrzeugmodell nach links oder nach rechts?
+# Bei +X vorne und +Z oben muss +Y nach LINKS zeigen, damit das
+# Koordinatensystem rechtshaendig ist (ISO 8855). Bitte einmal bestaetigen.
+cad_konvention:
+  x: "nach vorne"
+  y: "nach links"
+  z: "nach oben, z = 0 Bodenebene"
+  ursprung: "Vorderachsmitte"
+  norm: "ISO 8855"
+  # BESTAETIGT am 09.09.2026. Zwei unabhaengige Belege:
+  #  1. Gemessener Punkt an der linken Frontfluegel-Endplatte: Y = +740.
+  #     Betrag passt zur Spurweite (600 mm halbe Spur + 95 mm halbe
+  #     Reifenbreite = 695 mm Reifenaussenkante), Vorzeichen positiv links.
+  #  2. Zwingend aus der Rechtshaendigkeit: Creo-Koordinatensysteme sind
+  #     immer rechtshaendig, also X x Y = Z. Mit X vorne und Z oben MUSS Y
+  #     nach links zeigen. Haette die Messung ein Minus ergeben, waere eine
+  #     der beiden anderen Achsen anders herum als angenommen.
+
+# ------------------------------------------------------- Offene Punkte
+# ------------------------------------------------------- Fahrdynamik
+# Alle drei bewusst als Parameter - sie aendern sich von Saison zu Saison.
+fahrdynamik:
+  masse_leer: 220                # kg, ohne Fahrer
+  masse_fahrer: 75               # kg, Angabe 70-80, Mittelwert angesetzt
+  masse_fahrer_spanne: [70, 80]
+  schwerpunkthoehe: 310          # mm ueber Boden
+  schwerpunkthoehe_variabel: true
+  verzoegerung_max: 2.0          # g
+  # Statische Achslast vorn in Prozent, mit Fahrer. Vorgabe fuer die
+  # Zielbalance im Reiter Balance, im Paket-DoE und im Report. Bewusst leer:
+  # Die Zahl kommt von der Waage, nicht aus einer Schaetzung. Solange sie
+  # fehlt, wird die Zielbalance von Hand eingetragen.
+  achslast_vorne_prozent: null
+
+  # Aus den Kinematikexporten gelesen, Wert in Konstruktionslage:
+  radrate_vorne: 64884.5         # N/m   (Bereich 56092 .. 66861)
+  radrate_hinten: 68827.5        # N/m   (Bereich 60484 .. 71631)
+  antidive_vorne: 0.59012        #       (Bereich 0.461 .. 0.744)
+  antilift_hinten: 0.55318       #       (Bereich 0.440 .. 0.685)
+
+offene_punkte:
+  # Nick-Kennlinie aus dem Kinematikprogramm waere besser als die Rechnung,
+  # ist laut Team aber nicht exportierbar. Die Rechnung bleibt.
