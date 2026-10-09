@@ -1094,7 +1094,7 @@ def _ansicht_regeln() -> html.Div:
                 options=[{"label": "FS Rules 2027 v1.0", "value": "2027"}],
                 value=regeln.AKTUELL),
                 "Der einzige Regelstand im Werkzeug. Original: "
-                "Aero/FS_Rules_2027_v1.0.pdf."),
+                "AERO/FS_Rules_2027_v1.0.pdf."),
         ], spalten="240px"),
 
         html.Div(id="regelampel"),

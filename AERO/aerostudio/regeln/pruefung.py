@@ -15,7 +15,7 @@ Zwei Dinge machen die Prüfung unbequem, und beide sind hier eingebaut:
    Höhengrenzen nach oben, tiefste Lage beim Bremsen für die Bodenfreiheit.
 
 2. Es gibt genau EINEN Regelstand: FS Rules 2027 v1.0, Original im Repo
-   unter Aero/FS_Rules_2027_v1.0.pdf, Werte in rules_2027.yaml. Die
+   unter AERO/FS_Rules_2027_v1.0.pdf, Werte in rules_2027.yaml. Die
    Stände 2026 und der Academy-Entwurf 2027 sind seit dem 06.10.2026
    entfernt. Ein neuer Regelstand kommt als eigene YAML-Datei dazu und
    ersetzt AKTUELL - nicht als Sonderfall im Prüfcode.

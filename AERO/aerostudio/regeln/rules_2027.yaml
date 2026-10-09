@@ -1,7 +1,7 @@
 # FS Rules 2027 v1.0 - der EINZIGE Regelstand im Werkzeug
 #
 # Quelle: Formula Student Rules 2027, Version 1.0
-#         Original im Repo: Aero/FS_Rules_2027_v1.0.pdf
+#         Original im Repo: AERO/FS_Rules_2027_v1.0.pdf
 #         https://www.formulastudent.de/fileadmin/user_upload/all/2027/rules/FS_Rules_2027_v1.0.pdf
 #
 # Alle Werte hier sind aus dem Originaltext abgeschrieben, mit Seitenangabe.
@@ -13,7 +13,7 @@
 
 meta:
   version: "2027-v1.0"
-  quelle: "FS Rules 2027 v1.0 (Aero/FS_Rules_2027_v1.0.pdf)"
+  quelle: "FS Rules 2027 v1.0 (AERO/FS_Rules_2027_v1.0.pdf)"
   status: gueltig
   verbindlich: true
   eingearbeitet_am: "2026-10-06"

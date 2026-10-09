@@ -23,7 +23,7 @@ neben dieser Datei als `FS_Rules_2027_v1.0.pdf`.
 
 **Starten**
 
-1. Den Ordner `Aero` holen (siehe Abschnitt 9, „Teilen“).
+1. Den Ordner `AERO` holen (siehe Abschnitt 9, „Teilen“).
 2. **Doppelklick auf `Aero Studio.bat`.**
    Beim ersten Mal legt der Starter eine eigene Python-Umgebung im Ordner `.venv`
    an und installiert alles aus `requirements.txt`. Das dauert einige Minuten und
@@ -170,7 +170,7 @@ Strukturdaten. Der Report weist das aus.
 
 ## 5. Kommandozeile
 
-Für große Läufe, aus dem Ordner `Aero` heraus (Python aus `.venv`):
+Für große Läufe, aus dem Ordner `AERO` heraus (Python aus `.venv`):
 
 ```
 .venv\Scripts\python -m aerostudio.aero.doe --spec specs\aktuell.yaml --n 500
@@ -260,11 +260,11 @@ Lokal ändert sich durch den Web-Modus nichts.
 
 Das Programm wird über **GitHub** geteilt. Das Repository ist
 `github.com/Jonger1/RSP25-26-Fahrwerk-Vergleich`, das Werkzeug liegt im Ordner
-`Aero`.
+`AERO`.
 
 **Nur benutzen** (am einfachsten):
 1. Auf GitHub **Code → Download ZIP**, entpacken.
-2. Im Ordner `Aero` **`Aero Studio.bat`** doppelklicken.
+2. Im Ordner `AERO` **`Aero Studio.bat`** doppelklicken.
 
 **Mitarbeiten und Updates bekommen** (empfohlen fürs Aero-Team):
 1. **GitHub Desktop** installieren und das Repository klonen.
