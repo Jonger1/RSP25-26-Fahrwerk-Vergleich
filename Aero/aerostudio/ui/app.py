@@ -22,9 +22,14 @@ aus aerostudio.* auf und geben das Ergebnis zurueck. Fachlogik steht hier keine.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import math
+import os
+import tempfile
 import traceback
+import zipfile
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -62,7 +67,35 @@ from ..spec.projekt import AeroSpec
 from . import darstellung, meldungen
 
 PROJEKT = Path(__file__).resolve().parents[2]
-SPEC_VORGABE = PROJEKT / "specs" / "aktuell.yaml"
+
+# --- Web-Modus -----------------------------------------------------------
+# Gehostet (AEROSTUDIO_WEB=1) ist der Programmordner schreibgeschuetzt oder
+# fluechtig, und Creo gibt es auf dem Server nicht. Geschrieben wird dann in
+# eine eigene Ablage (AEROSTUDIO_ABLAGE, sonst ein Ordner im Temp-Verzeichnis);
+# gelesen werden Beispiele, Profile und Regeln weiter aus dem Programmordner.
+# Lokal ist die Ablage der Programmordner - es aendert sich nichts.
+WEB = os.environ.get("AEROSTUDIO_WEB", "").strip().lower() not in ("", "0", "false", "nein")
+WEB_ABLAGE = (Path(os.environ.get("AEROSTUDIO_ABLAGE")
+                   or Path(tempfile.gettempdir()) / "aerostudio")
+              if WEB else None)
+
+
+def ablage() -> Path:
+    """Wohin geschrieben wird: lokal der Programmordner, im Web die Ablage."""
+    return WEB_ABLAGE if WEB_ABLAGE is not None else PROJEKT
+
+
+def _finde(pfad) -> Path:
+    """Eine relativ angegebene Datei: erst in der Ablage, dann im
+    Programmordner (dort liegen die Beispiele)."""
+    p = Path(pfad)
+    if p.is_absolute():
+        return p
+    eigen = ablage() / p
+    return eigen if eigen.exists() else PROJEKT / p
+
+
+SPEC_VORGABE = (WEB_ABLAGE or PROJEKT) / "specs" / "aktuell.yaml"
 
 FARBE_OK = "#2e7d32"
 FARBE_HINWEIS = "#ef6c00"
@@ -824,8 +857,11 @@ def _ansicht_creo() -> html.Div:
             html.Div([
                 html.Button("IBL schreiben", id="btn-export", n_clicks=0,
                             className="as-knopf as-knopf-voll"),
+                # Im Web gibt es auf dem Server kein Creo - der Knopf bleibt im
+                # Layout (Callbacks haengen daran), ist aber unsichtbar.
                 html.Button("Schreiben und in Creo öffnen", id="btn-creo",
-                            n_clicks=0, className="as-knopf as-knopf-leer"),
+                            n_clicks=0, className="as-knopf as-knopf-leer",
+                            style={"display": "none"} if WEB else None),
                 html.Button("Skelett schreiben (nur Achsen)", id="btn-skelett",
                             n_clicks=0, className="as-knopf as-knopf-leer"),
                 html.Div(id="creo-status", className="as-hinweis",
@@ -929,6 +965,20 @@ def _ansicht_unterboden() -> html.Div:
     ])
 
 
+def _specs_auf_platte() -> list[Path]:
+    """Alle Spec-Dateien unter specs/ - aus dem Programmordner und, im Web,
+    aus der Ablage. Relativ zu ihrem Wurzelordner, ohne die Historie."""
+    gefunden: dict[str, Path] = {}
+    for wurzel in dict.fromkeys([PROJEKT, ablage()]):
+        ordner = wurzel / "specs"
+        if not ordner.is_dir():
+            continue
+        for p in sorted(ordner.rglob("*.yaml")):
+            if ".historie" not in p.parts:
+                gefunden.setdefault(str(p.relative_to(wurzel)), p)
+    return [Path(k) for k in sorted(gefunden)]
+
+
 def _spec_dateien() -> list[dict]:
     """Specs unter specs/ zum Dazunehmen.
 
@@ -936,13 +986,9 @@ def _spec_dateien() -> list[dict]:
     ohne gespeicherte Paketvarianten - die enthalten schon alle Fluegel,
     dazugenommen zaehlten Front- und Heckfluegel doppelt.
     """
-    ordner = PROJEKT / "specs"
-    if not ordner.is_dir():
-        return []
-    return [{"label": str(p.relative_to(ordner)), "value": str(p.relative_to(PROJEKT))}
-            for p in sorted(ordner.rglob("*.yaml"))
-            if ".historie" not in p.parts and "pakete" not in p.parts
-            and p.name != SPEC_VORGABE.name]
+    return [{"label": str(p.relative_to("specs")), "value": str(p)}
+            for p in _specs_auf_platte()
+            if "pakete" not in p.parts and p.name != SPEC_VORGABE.name]
 
 
 def _ansicht_balance() -> html.Div:
@@ -1058,13 +1104,23 @@ def _ansicht_regeln() -> html.Div:
     ])
 
 
+def _webbanner():
+    if not WEB:
+        return html.Div()
+    return html.Div(
+        "Web-Version: Gespeichertes und Exporte liegen nur vorübergehend auf "
+        "dem Server und werden mit allen Nutzern geteilt. Entwürfe mit "
+        "\u201eHerunterladen\u201c sichern und über Projekt \u2192 \u201eEntwurf "
+        "öffnen\u201c wieder hochladen. Creo-Export: IBL-Dateien über "
+        "\u201eExporte als ZIP\u201c laden.",
+        className="as-status-hinweis",
+        style={"padding": "8px 24px", "background": "#fff4e0", "fontSize": "13px"})
+
+
 def _alle_specs() -> list[dict]:
     """Alle Specs unter specs/ zum Oeffnen - auch aktuell.yaml und Pakete."""
-    ordner = PROJEKT / "specs"
-    if not ordner.is_dir():
-        return []
-    return [{"label": str(p.relative_to(ordner)), "value": str(p.relative_to(PROJEKT))}
-            for p in sorted(ordner.rglob("*.yaml")) if ".historie" not in p.parts]
+    return [{"label": str(p.relative_to("specs")), "value": str(p)}
+            for p in _specs_auf_platte()]
 
 
 def _ansicht_projekt() -> html.Div:
@@ -1084,7 +1140,26 @@ def _ansicht_projekt() -> html.Div:
             html.Button("Öffnen", id="btn-oeffnen", n_clicks=0,
                         className="as-knopf as-knopf-voll",
                         style={"marginTop": "8px"}),
+            dcc.Upload(id="spec-hochladen", accept=".yaml,.yml",
+                       children=html.Div(["Oder eine Spec-Datei hierher ziehen / ",
+                                          html.A("vom Rechner wählen")]),
+                       style={"marginTop": "10px", "padding": "12px",
+                              "border": "1px dashed #c8ccd4", "borderRadius": "6px",
+                              "textAlign": "center", "fontSize": "13px",
+                              "cursor": "pointer"}),
             html.Div(id="oeffnen-status", className="as-hinweis",
+                     style={"marginTop": "9px"}),
+        ]),
+        _karte([
+            _ueberschrift("Exporte herunterladen"),
+            html.Div("Alles, was das Werkzeug geschrieben hat — IBL, DXF, "
+                     "Familientabelle, DoE-Ergebnisse, Reports — als eine "
+                     "ZIP-Datei.", className="as-hinweis",
+                     style={"marginBottom": "9px"}),
+            html.Button("Exporte als ZIP", id="btn-export-zip", n_clicks=0,
+                        className="as-knopf as-knopf-leer"),
+            dcc.Download(id="export-zip"),
+            html.Div(id="export-zip-status", className="as-hinweis",
                      style={"marginTop": "9px"}),
         ]),
         _karte([
@@ -1155,8 +1230,14 @@ def layout() -> html.Div:
                 html.Span(id="kopf-hash", className="as-hash"),
                 html.Button("Spec speichern", id="btn-speichern", n_clicks=0,
                             className="as-knopf as-knopf-klein"),
+                html.Button("Herunterladen", id="btn-spec-download", n_clicks=0,
+                            className="as-knopf as-knopf-klein",
+                            title="Den Entwurf als YAML-Datei auf den eigenen "
+                                  "Rechner laden"),
+                dcc.Download(id="spec-download"),
             ], className="as-kopf-rechts"),
         ], className="as-kopf"),
+        _webbanner(),
         html.Div(className="as-streifen"),
 
         dcc.Tabs(id="reiter", value="profil", className="as-reiter", children=[
@@ -1767,9 +1848,7 @@ def _profil_aktualisieren(*werte):
 
 def _spec_oeffnen(pfad) -> tuple:
     """Feldwerte, Basis und Meldung fuer eine Spec-Datei."""
-    datei = Path(pfad)
-    if not datei.is_absolute():
-        datei = PROJEKT / datei
+    datei = _finde(pfad)
     spec = AeroSpec.laden(datei)
     werte, basis, hinweise = felder_aus_spec(spec)
     meldung = [html.Div(f"Geöffnet: {datei.name} (Spec {spec.hash()})",
@@ -1797,6 +1876,61 @@ def _oeffnen(n, start, gewaehlt):
         return _spec_oeffnen(pfad)
     except Exception as fehler:
         return (*leer, _fehlerkarte(fehler))
+
+
+@app.callback(Output("spec-download", "data"),
+              Input("btn-spec-download", "n_clicks"), State("spec", "data"),
+              prevent_initial_call=True)
+def _spec_herunterladen(n, daten):
+    """Der Entwurf als YAML - im Web der einzige dauerhafte Speicher."""
+    if not daten:
+        return no_update
+    spec = AeroSpec.model_validate(daten)
+    name = "".join(z if z.isalnum() or z in "-_" else "_"
+                   for z in (spec.meta.name or "entwurf"))[:60] or "entwurf"
+    return dict(content=spec.als_yaml(), filename=f"{name}_{spec.hash()}.yaml")
+
+
+@app.callback(*[Output(i.component_id, i.component_property, allow_duplicate=True)
+                for i in _EINGABEN],
+              Output("oeffnen-status", "children", allow_duplicate=True),
+              Input("spec-hochladen", "contents"),
+              State("spec-hochladen", "filename"),
+              prevent_initial_call=True)
+def _hochladen(inhalt, dateiname):
+    """Eine Spec-Datei vom eigenen Rechner oeffnen - wie 'Oeffnen', nur
+    dass die Datei aus dem Browser kommt und nicht von der Platte."""
+    leer = tuple(no_update for _ in _EINGABEN)
+    if not inhalt:
+        return (*leer, no_update)
+    try:
+        import yaml
+        _art, roh = inhalt.split(",", 1)
+        text = base64.b64decode(roh).decode("utf-8")
+        spec = AeroSpec.model_validate(yaml.safe_load(text))
+        werte, basis, hinweise = felder_aus_spec(spec)
+        meldung = [html.Div(f"Hochgeladen: {dateiname or 'Spec'} "
+                            f"(Spec {spec.hash()})", className="as-status-ok")]
+        meldung += [html.Div(h, className="as-status-hinweis") for h in hinweise]
+        return (*werte, basis, html.Div(meldung))
+    except Exception as fehler:
+        return (*leer, _fehlerkarte(fehler))
+
+
+@app.callback(Output("export-zip", "data"), Output("export-zip-status", "children"),
+              Input("btn-export-zip", "n_clicks"), prevent_initial_call=True)
+def _exporte_als_zip(n):
+    ordner = ablage() / "export"
+    dateien = sorted(p for p in ordner.rglob("*") if p.is_file()) \
+        if ordner.is_dir() else []
+    if not dateien:
+        return no_update, "Noch keine Exporte vorhanden."
+    puffer = io.BytesIO()
+    with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for d in dateien:
+            z.write(d, d.relative_to(ordner))
+    return (dcc.send_bytes(puffer.getvalue(), "aerostudio_exporte.zip"),
+            f"{len(dateien)} Dateien.")
 
 
 @app.callback(Output("katalog-notiz", "children"),
@@ -2047,7 +2181,7 @@ def _export(daten, toleranz, ordner, ausgabe, dateiname, n_export, n_creo):
         name = _exportname(dateiname, element)
         if ausgabe == "endplatte":
             name += " Endplatte"
-        ziel = PROJEKT / (ordner or "export") / export.dateiname(name)
+        ziel = ablage() / (ordner or "export") / export.dateiname(name)
 
         # Beide Schaltflaechen schreiben - die zweite oeffnet zusaetzlich Creo.
         nach_creo = _ausgeloest_von("btn-creo")
@@ -2494,7 +2628,7 @@ def _dxf_schreiben(n, daten, ordner, dateiname, art, stationen, angestellt):
         profil = profil_fuer(element)
         fertigung = element.fertigung_wirksam(spec.fertigung)
         winkel = element.anstellwinkel if (angestellt or []) else 0.0
-        ziel_ordner = PROJEKT / (ordner or "export")
+        ziel_ordner = ablage() / (ordner or "export")
         name = _exportname(dateiname, element)
 
         if art == "satz":
@@ -2572,7 +2706,7 @@ def _skelett_schreiben(n, daten, ordner, dateiname, skelettname):
         plan = skelett.plane_skelett([achse], regeln.Bezugsgeometrie.aus_datei())
         name = (skelettname or "").strip() or (
             _exportname(dateiname, element) + " Skelett")
-        ziel = PROJEKT / (ordner or "export") / export.dateiname(name)
+        ziel = ablage() / (ordner or "export") / export.dateiname(name)
         skelett.schreibe(plan, ziel)
         return html.Div([
             html.Div(f"Skelett geschrieben: {ziel}", className="as-status-ok"),
@@ -3299,7 +3433,7 @@ def _fluegelkraefte(element, geschwindigkeit: float):
 
 def _paket(spec: AeroSpec, weitere: list[str] | None) -> AeroSpec:
     """Das Spec im Editor plus die dazugenommenen, als ein Paket-Spec."""
-    return aero_paket.bauen(spec, [AeroSpec.laden(PROJEKT / pfad)
+    return aero_paket.bauen(spec, [AeroSpec.laden(_finde(pfad))
                                    for pfad in weitere or []])
 
 
@@ -3442,7 +3576,7 @@ _KENNFELD_ZWISCHENSPEICHER: dict[str, dict] = {}
 
 
 def _paket_datei(datei: str | None) -> Path:
-    return PROJEKT / (datei or "export/doe_paket.yaml")
+    return ablage() / (datei or "export/doe_paket.yaml")
 
 
 @app.callback(Output("fig-paket", "figure"), Output("paket-status", "children"),
@@ -3596,9 +3730,9 @@ def _paket_speichern(n, nr, datei, daten, weitere):
                     "Erst neu optimieren.")
         variante = aero_doe.variante(p, lauf.varianten[int(nr)])
         variante.meta.name = f"{p.meta.name} — Paketvariante {nr}"
-        ziel = PROJEKT / "specs" / "pakete" / f"paket_variante_{nr}.yaml"
+        ziel = ablage() / "specs" / "pakete" / f"paket_variante_{nr}.yaml"
         variante.speichern(ziel, historie=False)
-        return (f"Gespeichert als {ziel.relative_to(PROJEKT)} — alle Flügel, "
+        return (f"Gespeichert als {ziel.relative_to(ablage())} — alle Flügel, "
                 f"Unterboden und Rake in einer Datei.")
     except Exception as fehler:
         return _fehlerkarte(fehler)
@@ -3618,11 +3752,11 @@ def _report(n, daten, weitere, tempo, ziel, aero):
     try:
         spec = AeroSpec.model_validate(daten)
         daten_ = report.sammeln(
-            spec, [AeroSpec.laden(PROJEKT / p) for p in weitere or []],
+            spec, [AeroSpec.laden(_finde(p)) for p in weitere or []],
             ["Editor", *(weitere or [])], float(tempo or 20.0),
             float(ziel) if ziel not in (None, "") else None, bool(aero))
         name = "".join(z if z.isalnum() else "_" for z in spec.meta.name)[:60]
-        pfad = report.schreiben(daten_, PROJEKT / "export" / f"report_{name}.pdf")
+        pfad = report.schreiben(daten_, ablage() / "export" / f"report_{name}.pdf")
         return dcc.send_file(str(pfad)), f"Geschrieben: {pfad}"
     except Exception as fehler:
         return no_update, _fehlerkarte(fehler)
@@ -3646,7 +3780,7 @@ def _drs(n_vergleich, n_familie, daten, tempo):
                             className="as-status-hinweis")
         if _ausgeloest_von("btn-familie"):
             pfad = familientabelle.schreiben(
-                spec, PROJEKT / spec.export.ordner / f"familientabelle_drs_"
+                spec, ablage() / spec.export.ordner / f"familientabelle_drs_"
                 f"{familientabelle.praefix(element)}.txt")
             kopf, zeilen = familientabelle.tabelle(spec)
             return html.Div([
@@ -3691,7 +3825,7 @@ def _drskarte(v, tempo: float) -> html.Div:
 
 
 def _doe_pfad(datei: str | None) -> Path:
-    return PROJEKT / (datei or "export/doe_unterboden.yaml")
+    return ablage() / (datei or "export/doe_unterboden.yaml")
 
 
 @app.callback(Output("fig-pareto", "figure"), Output("doe-status", "children"),

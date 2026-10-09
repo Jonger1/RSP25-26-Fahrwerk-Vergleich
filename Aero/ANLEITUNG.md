@@ -57,7 +57,10 @@ leitet sich allein aus diesem Spec ab.
   Projekt).
 * **Beim Start öffnet Aero Studio `specs/aktuell.yaml` automatisch.** Du
   machst also dort weiter, wo du zuletzt gespeichert hast.
-* **Reiter Projekt → „Entwurf öffnen“** lädt jedes andere Spec in die Felder:
+* **„Herunterladen“** (oben rechts) speichert den Entwurf als YAML-Datei auf
+  deinem Rechner, zum Weitergeben oder Sichern.
+* **Reiter Projekt → „Entwurf öffnen“** lädt jedes andere Spec in die Felder,
+  aus der Liste oder per Ziehen einer YAML-Datei vom eigenen Rechner:
   ein Beispiel aus `specs/beispiele/`, eine Paketvariante aus `specs/pakete/`
   oder den Entwurf eines Teamkollegen. Danach „Spec speichern“, um damit
   weiterzuarbeiten.
@@ -118,7 +121,7 @@ So entsteht ein Frontflügel. Die Reiter stehen oben in der Leiste.
 | **Balance** | Gesamtfahrzeug aus mehreren Specs: Abtrieb, Achslasten, Balance vorn, Nickwanderung, DRS offen; Paket-Optimierung |
 | **Fahrzeug & Regeln** | Regelampel FS Rules 2027 v1.0 mit Fahrzustand, Seiten- und Draufsicht |
 | **Creo** | Export als IBL, Skelett, Vorschau der Punkte |
-| **Projekt** | Entwurf öffnen, Speicherstand, Historie, PDF-Report, das komplette Spec als Text |
+| **Projekt** | Entwurf öffnen oder hochladen, Exporte als ZIP, Historie, PDF-Report, das komplette Spec als Text |
 
 ### Unterboden
 
@@ -234,7 +237,26 @@ Im GitHub-Repository als Issue, mit Spec-Hash und einem Screenshot.
 
 ---
 
-## 9. Teilen und gemeinsam arbeiten
+## 9. Web-Version (gehostet)
+
+Aero Studio kann auch auf einem Server laufen, damit es ohne Installation im
+Browser erreichbar ist. Der Einstieg dafür ist `wsgi.py`
+(z. B. `gunicorn wsgi:server`). Er schaltet den **Web-Modus** ein:
+
+* Gespeichert wird in eine eigene Ablage auf dem Server
+  (`AEROSTUDIO_ABLAGE`, sonst ein Temp-Ordner). Dort liegt nichts dauerhaft,
+  und alle Nutzer teilen sich die Ablage.
+* **Entwürfe deshalb immer mit „Herunterladen“ sichern** und bei Bedarf über
+  „Entwurf öffnen“ wieder hochladen.
+* IBL-, DXF- und PDF-Dateien holst du über Projekt → **„Exporte als ZIP“**.
+  Das direkte Öffnen in Creo gibt es online nicht.
+* Ein Hinweisbanner oben erinnert daran.
+
+Lokal ändert sich durch den Web-Modus nichts.
+
+---
+
+## 10. Teilen und gemeinsam arbeiten
 
 Das Programm wird über **GitHub** geteilt. Das Repository ist
 `github.com/Jonger1/RSP25-26-Fahrwerk-Vergleich`, das Werkzeug liegt im Ordner
