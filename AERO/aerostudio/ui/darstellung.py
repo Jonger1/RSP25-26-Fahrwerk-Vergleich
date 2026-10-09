@@ -1041,3 +1041,81 @@ def paketbild(lauf) -> go.Figure:
                      rangemode="tozero")
     fig.update_yaxes(title="Abtrieb [N]")
     return _achsen(fig)
+
+
+# ------------------------------------------------------ Polaren über Re
+
+# Eine Farbe je Reynoldszahl, in fester Reihenfolge vergeben - aufsteigend
+# nach Re, damit eine Reynoldszahl ihre Farbe behält, wenn eine weitere
+# dazukommt. Acht Stück; mehr Reynoldszahlen lesen sich ohnehin nicht mehr.
+FARBEN_REIHE = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4",
+                "#008300", "#4a3aa7", "#e34948")
+
+
+def _re_text(re: float) -> str:
+    return f"Re {re:,.0f}".replace(",", " ")
+
+
+def polarendiagramme(polaren, schwelle: float = 0.8,
+                     beschriftungen: dict | None = None) -> go.Figure:
+    """Die fünf Polarendiagramme wie bei Airfoil Tools, eine Kurve je Re.
+
+    CL über CD, CL über alpha, CL/CD über alpha, CD über alpha und CM über
+    alpha. Wo NeuralFoil sich selbst nicht traut (Vertrauen unter der
+    Schwelle), läuft die Kurve gestrichelt weiter - der Abrissbereich sieht
+    sonst genauso belastbar aus wie der Rest.
+    """
+    from plotly.subplots import make_subplots
+
+    titel = ("CL über CD", "CL über α", "CL/CD über α", "CD über α", "CM über α")
+    fig = make_subplots(rows=3, cols=2, subplot_titles=titel,
+                        horizontal_spacing=0.09, vertical_spacing=0.11)
+    orte = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1)]
+    beschriftungen = beschriftungen or {}
+
+    for nr, p in enumerate(polaren[:len(FARBEN_REIHE)]):
+        farbe = FARBEN_REIHE[nr]
+        name = beschriftungen.get(p.reynolds, _re_text(p.reynolds))
+        guete = p.cl / np.maximum(p.cd, 1e-9)
+        reihen = [(p.cd, p.cl), (p.alpha, p.cl), (p.alpha, guete),
+                  (p.alpha, p.cd), (p.alpha, p.cm)]
+        sicher = p.vertrauen >= schwelle
+        # Die gestrichelte Kurve greift einen Punkt in den sicheren Bereich
+        # hinein, sonst entstuende an der Grenze eine Luecke.
+        rand = sicher.copy()
+        rand[1:] &= sicher[:-1]
+        rand[:-1] &= sicher[1:]
+        unsicher = ~rand
+
+        for (zeile, spalte), (x, y) in zip(orte, reihen):
+            erstes = (zeile, spalte) == (1, 1)
+            hover = (f"{name}<br>α %{{customdata:.1f}}°<br>"
+                     "x %{x:.4g}<br>y %{y:.4g}<extra></extra>")
+            fig.add_trace(go.Scatter(
+                x=x, y=np.where(sicher, y, np.nan), mode="lines",
+                line=dict(color=farbe, width=2), name=name,
+                legendgroup=name, showlegend=erstes, customdata=p.alpha,
+                hovertemplate=hover), row=zeile, col=spalte)
+            if unsicher.any():
+                fig.add_trace(go.Scatter(
+                    x=x, y=np.where(unsicher, y, np.nan), mode="lines",
+                    line=dict(color=farbe, width=2, dash="dot"),
+                    name=f"{name} (unsicher)", legendgroup=name,
+                    showlegend=False, customdata=p.alpha,
+                    hovertemplate=hover.replace("<extra>", " (unsicher)<extra>")),
+                    row=zeile, col=spalte)
+
+    layout = _grundlayout("", hoehe=1040)
+    layout.update(showlegend=True, hovermode="closest",
+                  margin=dict(l=55, r=20, t=40, b=45),
+                  legend=dict(orientation="v", x=0.56, y=0.02,
+                              xanchor="left", yanchor="bottom",
+                              title=dict(text="gestrichelt: NeuralFoil unsicher")))
+    fig.update_layout(**layout)
+    achsen = [("CD", "CL"), ("α [°]", "CL"), ("α [°]", "CL/CD"),
+              ("α [°]", "CD"), ("α [°]", "CM")]
+    for (zeile, spalte), (xt, yt) in zip(orte, achsen):
+        fig.update_xaxes(title_text=xt, row=zeile, col=spalte)
+        fig.update_yaxes(title_text=yt, row=zeile, col=spalte)
+    fig.update_annotations(font_size=13)
+    return _achsen(fig)

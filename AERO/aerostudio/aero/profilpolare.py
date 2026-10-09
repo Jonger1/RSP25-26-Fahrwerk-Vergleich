@@ -132,7 +132,7 @@ class Polare:
 
 def polare(profil, reynolds_zahl: float,
            alpha: np.ndarray | None = None,
-           modell: str = "medium") -> Polare:
+           modell: str = "medium", n_crit: float = 9.0) -> Polare:
     """Rechnet die Polare eines Profils.
 
     `profil` ist ein Profil-Objekt; gerechnet wird mit seiner Einheitssehne,
@@ -146,7 +146,8 @@ def polare(profil, reynolds_zahl: float,
 
     punkte = profil.repanelisiert(80).punkte
     daten = _rechne(punkte.tobytes(), punkte.shape, np.asarray(alpha).tobytes(),
-                    len(np.atleast_1d(alpha)), float(reynolds_zahl), modell)
+                    len(np.atleast_1d(alpha)), float(reynolds_zahl), modell,
+                    float(n_crit))
 
     ordnung = np.argsort(np.asarray(alpha, dtype=float))
     a = np.asarray(alpha, dtype=float)[ordnung]
@@ -159,7 +160,7 @@ def polare(profil, reynolds_zahl: float,
 
 
 @lru_cache(maxsize=256)
-def _rechne(punkte_bytes, form, alpha_bytes, n_alpha, re, modell):
+def _rechne(punkte_bytes, form, alpha_bytes, n_alpha, re, modell, n_crit=9.0):
     """Der eigentliche Aufruf, gepuffert.
 
     Gepuffert über die Rohbytes, weil numpy-Felder nicht hashbar sind. Der
@@ -188,7 +189,8 @@ def _rechne(punkte_bytes, form, alpha_bytes, n_alpha, re, modell):
     punkte = np.frombuffer(punkte_bytes, dtype=float).reshape(form)
     alpha = np.frombuffer(alpha_bytes, dtype=float).reshape(n_alpha)
     ergebnis = nf.get_aero_from_coordinates(coordinates=punkte, alpha=alpha,
-                                            Re=re, model_size=modell)
+                                            Re=re, n_crit=n_crit,
+                                            model_size=modell)
     return {k: np.atleast_1d(np.asarray(v, dtype=float))
             for k, v in ergebnis.items()}
 
@@ -203,3 +205,119 @@ def polarenschar(profil, geschwindigkeiten, sehne_mm: float,
     """
     return {float(v): polare(profil, reynolds(v, sehne_mm), modell=modell)
             for v in geschwindigkeiten}
+
+
+# --------------------------------------------------- Polaren über Reynolds
+
+# Die Reihe, die auch Airfoil Tools zeigt. Für den Rennwagen liegt der
+# interessante Teil zwischen 100 000 und 500 000 - darunter platzt bei den
+# meisten Hochauftriebsprofilen die Laminarblase auf.
+REYNOLDS_REIHE = (50_000, 100_000, 200_000, 500_000, 1_000_000)
+
+
+def lies_reynolds(text) -> list[float]:
+    """Reynoldszahlen aus einer Eingabe wie "50k, 1e5; 200 000, 1M".
+
+    Tausendertrennung mit Leerzeichen oder Punkt ist erlaubt, k und M als
+    Kürzel. Doppelte fallen weg, die Reihenfolge ist aufsteigend - so behält
+    jede Reynoldszahl ihre Farbe, wenn eine andere dazukommt.
+    """
+    if text is None:
+        return []
+    if isinstance(text, (int, float)):
+        teile = [str(text)]
+    else:
+        teile = str(text).replace(";", ",").split(",")
+    werte = set()
+    for teil in teile:
+        roh = teil.strip().replace(" ", "").replace("\u202f", "").replace("_", "")
+        if not roh:
+            continue
+        faktor = 1.0
+        if roh[-1] in "kK":
+            faktor, roh = 1e3, roh[:-1]
+        elif roh[-1] in "mM":
+            faktor, roh = 1e6, roh[:-1]
+        if roh.count(".") >= 1 and "e" not in roh.lower() and len(roh.split(".")[-1]) == 3 \
+                and faktor == 1.0:
+            roh = roh.replace(".", "")          # 200.000 als Tausendertrennung
+        try:
+            wert = float(roh) * faktor
+        except ValueError:
+            raise ValueError(f"'{teil.strip()}' ist keine Reynoldszahl. "
+                             f"Erlaubt sind z. B. 200000, 200k, 2e5 oder 1M.")
+        if not 1e3 <= wert <= 1e8:
+            raise ValueError(f"Reynoldszahl {wert:,.0f} liegt außerhalb dessen, "
+                             f"wofür NeuralFoil trainiert ist (10^3 bis 10^8)."
+                             .replace(",", " "))
+        werte.add(round(wert))
+    return [float(w) for w in sorted(werte)]
+
+
+def polarenreihe(profil, reynoldszahlen, alpha=None, modell: str = "medium",
+                 n_crit: float = 9.0) -> list[Polare]:
+    """Je eine Polare je Reynoldszahl, aufsteigend sortiert."""
+    return [polare(profil, re, alpha=alpha, modell=modell, n_crit=n_crit)
+            for re in sorted(float(r) for r in reynoldszahlen)]
+
+
+def kennwerte(p: Polare) -> dict:
+    """Die Zahlen, die man aus einer Polare abliest.
+
+    Getrennt nach Auftriebs- und Abtriebsseite, weil ein Profil im Werkzeug
+    je nach Wirkrichtung gespiegelt ist: Für Abtrieb zählt das negative
+    Maximum, für den Bullwing das positive.
+    """
+    güte = p.cl / np.maximum(p.cd, 1e-9)
+    i_max, i_min = int(np.argmax(p.cl)), int(np.argmin(p.cl))
+    i_gut, i_schlecht = int(np.argmax(güte)), int(np.argmin(güte))
+    i_cd = int(np.argmin(p.cd))
+    return {
+        "reynolds": p.reynolds,
+        "cl_max": float(p.cl[i_max]), "alpha_cl_max": float(p.alpha[i_max]),
+        "cl_min": float(p.cl[i_min]), "alpha_cl_min": float(p.alpha[i_min]),
+        "gleitzahl_max": float(güte[i_gut]), "alpha_gleitzahl_max": float(p.alpha[i_gut]),
+        "gleitzahl_min": float(güte[i_schlecht]),
+        "alpha_gleitzahl_min": float(p.alpha[i_schlecht]),
+        "cd_min": float(p.cd[i_cd]), "alpha_cd_min": float(p.alpha[i_cd]),
+        "cl_0": float(p.cl_bei(0.0)), "cm_0": float(p.cm_bei(0.0)),
+        "sicher": sicherer_bereich(p),
+    }
+
+
+def sicherer_bereich(p: Polare, schwelle: float = VERTRAUENSSCHWELLE):
+    """Der zusammenhaengende Winkelbereich, in dem NeuralFoil sich traut.
+
+    Gesucht um den Winkel des kleinsten Widerstands herum - dort liegt der
+    anliegende Arbeitsbereich. Ein Betrag "unsicher ab |alpha|" taugt beim
+    gespiegelten Profil nicht: Der Abriss liegt auf einer Seite frueh, auf
+    der anderen spaet. None, wenn schon der beste Punkt unsicher ist.
+    """
+    sicher = p.vertrauen >= schwelle
+    i = int(np.argmin(p.cd))
+    if not sicher[i]:
+        kandidaten = np.flatnonzero(sicher)
+        if not len(kandidaten):
+            return None
+        i = int(kandidaten[np.argmin(np.abs(kandidaten - i))])
+    links = rechts = i
+    while links > 0 and sicher[links - 1]:
+        links -= 1
+    while rechts < len(sicher) - 1 and sicher[rechts + 1]:
+        rechts += 1
+    return float(p.alpha[links]), float(p.alpha[rechts])
+
+
+def als_csv(polaren: list[Polare]) -> str:
+    """Alle Polaren in einer Tabelle, eine Zeile je Reynoldszahl und Winkel.
+
+    Mit Semikolon und Dezimalpunkt - Excel öffnet das auf einem deutschen
+    Rechner richtig, wenn man es über "Daten > Aus Text" holt, und jedes
+    Skript liest es ohne Umweg.
+    """
+    zeilen = ["profil;reynolds;alpha_grad;cl;cd;cm;cl_cd;vertrauen"]
+    for p in polaren:
+        for a, cl, cd, cm, v in zip(p.alpha, p.cl, p.cd, p.cm, p.vertrauen):
+            zeilen.append(f"{p.name};{p.reynolds:.0f};{a:.2f};{cl:.5f};{cd:.6f};"
+                          f"{cm:.5f};{cl / max(cd, 1e-9):.3f};{v:.3f}")
+    return "\n".join(zeilen) + "\n"

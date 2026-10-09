@@ -114,7 +114,7 @@ So entsteht ein Frontflügel. Die Reiter stehen oben in der Leiste.
 
 | Reiter | Wofür |
 |---|---|
-| **Profil** | Profilquelle, Sehne, Anstellwinkel, Wirkrichtung (Abtrieb/Auftrieb), Fertigungsverfahren und -prüfung |
+| **Profil** | Profilquelle, Sehne, Anstellwinkel, Wirkrichtung (Abtrieb/Auftrieb), Fertigungsverfahren und -prüfung, Polaren über mehrere Reynoldszahlen |
 | **Flügel** | Spannweitenverteilung, Lage am Fahrzeug, Endplatte und Footplate, Abtriebsabschätzung, Flügelvorschlag zu einem Zielabtrieb |
 | **Kaskade** | Flaps, Druckverteilung am Schnitt, räumlicher Abtrieb, DRS, Generator, DXF-Fertigungsvorlagen |
 | **Unterboden** | Kanal mit Einlass, Kehle und Diffusor; Rake und Drehpunkt; Druckverlauf, Höhenkennlinie; DoE mit Pareto-Front |
@@ -122,6 +122,25 @@ So entsteht ein Frontflügel. Die Reiter stehen oben in der Leiste.
 | **Fahrzeug & Regeln** | Regelampel FS Rules 2027 v1.0 mit Fahrzustand, Seiten- und Draufsicht |
 | **Creo** | Export als IBL, Skelett, Vorschau der Punkte |
 | **Projekt** | Entwurf öffnen oder hochladen, Exporte als ZIP, Historie, PDF-Report, das komplette Spec als Text |
+
+### Polaren über die Reynoldszahl (Reiter Profil, unten)
+
+Die fünf Diagramme wie bei Airfoil Tools – CL über CD, CL über α, CL/CD über
+α, CD über α und CM über α –, aber für genau das Profil im Editor gerechnet
+(NeuralFoil, Ncrit 9 wie XFOIL). Sie rechnen live mit, sobald sich das Profil
+ändert.
+
+* **Reynoldszahlen**: mit Komma getrennt, `200000`, `200k` und `2e5` sind
+  gleich. Bis zu acht.
+* **Dazu aus Geschwindigkeit**: z. B. `10, 20` – die Reynoldszahl kommt dann
+  aus Tempo und Sehne. So sieht man, welche Polare im Betrieb gilt.
+* **Gestrichelt** ist, wo NeuralFoil sich selbst unter 80 % sicher ist, meist
+  hinter dem Abriss. Die Tabelle darunter nennt CL-Maximum, beste Gleitzahl,
+  CD min, CL und CM bei 0° und den sicheren Winkelbereich je Reynoldszahl.
+* Bei Wirkrichtung **Abtrieb** ist das Profil gespiegelt, die Kurven stehen
+  gegenüber Airfoil Tools auf dem Kopf (negatives CL = Abtrieb). Für den
+  direkten Vergleich die Wirkrichtung auf Auftrieb stellen.
+* **Polaren als CSV** lädt alle Werte als Tabelle herunter.
 
 ### Unterboden
 

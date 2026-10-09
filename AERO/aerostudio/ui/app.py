@@ -286,6 +286,54 @@ def _ansicht_profil() -> html.Div:
                      style={"flex": 1, "minWidth": 0}),
         ], className="as-zeile"),
         _karte([dcc.Graph(id="fig-zonen", **_GRAPH)]),
+        _polarenkarte(),
+    ])
+
+
+def _polarenkarte() -> html.Div:
+    """Polaren des Profils über mehrere Reynoldszahlen, wie bei Airfoil Tools
+    - aber hier gerechnet, für genau das Profil im Editor."""
+    return html.Div([
+        _leiste("Polaren über die Reynoldszahl", [
+            _feld("Reynoldszahlen", dcc.Input(
+                id="polar-re", type="text", debounce=True,
+                value="50k, 100k, 200k, 500k, 1M", className="as-textfeld"),
+                "Mit Komma getrennt. 200000, 200k und 2e5 sind gleich. "
+                "Bis zu acht."),
+            _feld("Dazu aus Geschwindigkeit [m/s]", dcc.Input(
+                id="polar-tempo", type="text", debounce=True, value="",
+                placeholder="z. B. 10, 20", className="as-textfeld"),
+                "Rechnet die Reynoldszahl aus Tempo und der Sehne oben - "
+                "so sieht man die Polare, die im Betrieb wirklich gilt."),
+            _feld("Anstellwinkel von [°]", dcc.Input(
+                id="polar-von", type="number", value=-20.0, step="any",
+                debounce=True, className="as-textfeld")),
+            _feld("bis [°]", dcc.Input(
+                id="polar-bis", type="number", value=20.0, step="any",
+                debounce=True, className="as-textfeld"),
+                "In Schritten von 0,5°."),
+            _feld("Ncrit", dcc.Input(
+                id="polar-ncrit", type="number", value=9.0, step="any",
+                min=1, max=18, debounce=True, className="as-textfeld"),
+                "Turbulenz der Anströmung wie in XFOIL: 9 ist der Standard "
+                "(auch bei Airfoil Tools), kleiner = früherer Umschlag."),
+            _feld("Netz", dcc.Dropdown(
+                id="polar-modell", clearable=False, value="xlarge",
+                options=[{"label": "xlarge (genauer)", "value": "xlarge"},
+                         {"label": "medium (wie Flügelrechnung)",
+                          "value": "medium"}],
+                style={"fontSize": "13px"}),
+                "Welche Größe des NeuralFoil-Netzes rechnet."),
+            _feld("", html.Div([
+                html.Button("Polaren als CSV", id="btn-polar-csv", n_clicks=0,
+                            className="as-knopf as-knopf-leer"),
+                dcc.Download(id="polar-csv"),
+            ])),
+        ], spalten="170px"),
+        html.Div(id="polar-hinweis"),
+        _karte([dcc.Loading(dcc.Graph(id="fig-polaren", **_GRAPH),
+                            type="circle")]),
+        _karte([html.Div(id="polar-tabelle")]),
     ])
 
 
@@ -2607,6 +2655,156 @@ def _aerokarte(e, kennlinie, wirkung=None) -> html.Div:
             ], style={"flex": "1 1 0", "minWidth": 0}),
         ], className="as-zeile"),
     ])
+
+
+# ------------------------------------------------------------ Polaren über Re
+
+def _polarenreihe(daten, re_text, tempo_text, von, bis, ncrit, modell):
+    """Rechnet die Polaren fuer das Profil im Editor.
+
+    Gibt die Polaren, die Beschriftung je Reynoldszahl und das Profil
+    zurueck. Gemeinsam fuer Diagramm und CSV, damit beide dasselbe zeigen.
+    """
+    import numpy as np
+
+    from ..aero import profilpolare as pp
+
+    spec = AeroSpec.model_validate(daten)
+    element = spec.elemente[0]
+    profil = profil_fuer(element)
+
+    beschriftung = {}
+    zahlen = pp.lies_reynolds(re_text)
+    for teil in str(tempo_text or "").replace(";", ",").split(","):
+        if not teil.strip():
+            continue
+        try:
+            v = float(teil.strip().replace(" ", ""))
+        except ValueError:
+            raise ValueError(f"'{teil.strip()}' ist keine Geschwindigkeit.")
+        if v <= 0:
+            raise ValueError("Die Geschwindigkeit muss größer als 0 sein.")
+        re = float(round(pp.reynolds(v, element.sehne)))
+        zahlen.append(re)
+        beschriftung[re] = (f"Re {re:,.0f}".replace(",", " ")
+                            + f" ({v:g} m/s)")
+    zahlen = sorted(set(zahlen))
+    if not zahlen:
+        raise ValueError("Keine Reynoldszahl angegeben.")
+    if len(zahlen) > len(darstellung.FARBEN_REIHE):
+        raise ValueError(f"{len(zahlen)} Reynoldszahlen sind zu viele zum "
+                         f"Lesen - höchstens {len(darstellung.FARBEN_REIHE)}.")
+
+    von = -20.0 if von is None else float(von)
+    bis = 20.0 if bis is None else float(bis)
+    if von > bis:
+        von, bis = bis, von
+    if bis - von < 1.0:
+        raise ValueError("Der Winkelbereich muss mindestens 1° umfassen.")
+    if max(abs(von), abs(bis)) > 45.0:
+        raise ValueError("Mehr als ±45° rechnet NeuralFoil nicht sinnvoll.")
+    alpha = np.arange(von, bis + 1e-9, 0.5)
+    polaren = pp.polarenreihe(profil, zahlen, alpha=alpha,
+                              modell=modell or "xlarge",
+                              n_crit=float(ncrit or 9.0))
+    return polaren, beschriftung, profil, element
+
+
+def _polarentabelle(polaren, beschriftung, abtrieb: bool) -> html.Table:
+    from ..aero.profilpolare import kennwerte
+
+    zeilen = [html.Tr([html.Th("Reynoldszahl"),
+                       html.Th("CL max" if not abtrieb else "CL min (Abtrieb)"),
+                       html.Th("bei α"), html.Th("beste |CL|/CD"),
+                       html.Th("bei α"), html.Th("CD min"), html.Th("CL bei 0°"),
+                       html.Th("CM bei 0°"), html.Th("NeuralFoil sicher")])]
+    for nr, p in enumerate(polaren):
+        k = kennwerte(p)
+        if abtrieb:
+            cl, a_cl = k["cl_min"], k["alpha_cl_min"]
+            gz, a_gz = -k["gleitzahl_min"], k["alpha_gleitzahl_min"]
+        else:
+            cl, a_cl = k["cl_max"], k["alpha_cl_max"]
+            gz, a_gz = k["gleitzahl_max"], k["alpha_gleitzahl_max"]
+        name = beschriftung.get(p.reynolds,
+                                f"Re {p.reynolds:,.0f}".replace(",", " "))
+        sicher = k["sicher"]
+        zeilen.append(html.Tr([
+            html.Td([html.Span("■ ", style={
+                "color": darstellung.FARBEN_REIHE[nr]}), name]),
+            html.Td(f"{cl:+.2f}"), html.Td(f"{a_cl:+.1f}°"),
+            html.Td(f"{gz:.0f}"), html.Td(f"{a_gz:+.1f}°"),
+            html.Td(f"{k['cd_min']:.4f}"), html.Td(f"{k['cl_0']:+.2f}"),
+            html.Td(f"{k['cm_0']:+.3f}"),
+            html.Td("nirgends" if sicher is None
+                    else f"{sicher[0]:+.1f}° bis {sicher[1]:+.1f}°")]))
+    return html.Table(zeilen, className="as-tabelle")
+
+
+@app.callback(Output("fig-polaren", "figure"), Output("polar-tabelle", "children"),
+              Output("polar-hinweis", "children"),
+              Input("spec", "data"), Input("polar-re", "value"),
+              Input("polar-tempo", "value"), Input("polar-von", "value"),
+              Input("polar-bis", "value"), Input("polar-ncrit", "value"),
+              Input("polar-modell", "value"))
+def _polaren_zeichnen(daten, re_text, tempo_text, von, bis, ncrit, modell):
+    """Die fuenf Polarendiagramme, live zum Profil im Editor.
+
+    NeuralFoil rechnet eine Reihe in Hundertstelsekunden, und die Polaren
+    sind je Profil und Reynoldszahl gepuffert - Aenderungen an Sehne oder
+    Winkel kosten also nichts, nur ein neues Profil rechnet neu.
+    """
+    leer = {"data": [], "layout": {"height": 200}}
+    if not daten:
+        return leer, "", ""
+    if not aero_verfuegbar():
+        return leer, "", html.Div(
+            "Ohne NeuralFoil lassen sich keine Polaren rechnen.",
+            className="as-hinweis")
+    try:
+        polaren, beschriftung, profil, element = _polarenreihe(
+            daten, re_text, tempo_text, von, bis, ncrit, modell)
+        richtung = getattr(element.wirkrichtung, "value", element.wirkrichtung)
+        abtrieb = richtung == "abtrieb"
+        hinweis = html.Div([
+            html.Div(
+                (f"{profil.name}, gespiegelt für Abtrieb: negatives CL ist "
+                 f"Abtrieb, die Kurven stehen deshalb auf dem Kopf gegenüber "
+                 f"Airfoil Tools. Wer dessen Ansicht will, stellt oben die "
+                 f"Wirkrichtung auf Auftrieb." if abtrieb else
+                 f"{profil.name}, wie gezeichnet (Auftrieb)."),
+                className="as-hinweis"),
+            html.Div(
+                "Gerechnet mit NeuralFoil, einer Nachbildung von XFOIL für das "
+                "einzelne Profil, ohne Boden und ohne Kaskade. Gestrichelt ist, "
+                "wo NeuralFoil sich selbst unter 80 % sicher ist - meist "
+                "hinter dem Abriss. Dort ist die Zahl eine Hausnummer.",
+                className="as-hinweis", style={"marginTop": "4px"}),
+        ], style={"margin": "0 0 8px 2px"})
+        return (darstellung.polarendiagramme(polaren, beschriftungen=beschriftung),
+                _polarentabelle(polaren, beschriftung, abtrieb), hinweis)
+    except Exception as fehler:
+        return leer, "", _fehlerkarte(fehler)
+
+
+@app.callback(Output("polar-csv", "data"), Input("btn-polar-csv", "n_clicks"),
+              State("spec", "data"), State("polar-re", "value"),
+              State("polar-tempo", "value"), State("polar-von", "value"),
+              State("polar-bis", "value"), State("polar-ncrit", "value"),
+              State("polar-modell", "value"), prevent_initial_call=True)
+def _polaren_csv(n, daten, re_text, tempo_text, von, bis, ncrit, modell):
+    from ..aero.profilpolare import als_csv
+
+    if not daten:
+        return no_update
+    try:
+        polaren, _b, profil, _e = _polarenreihe(daten, re_text, tempo_text,
+                                                von, bis, ncrit, modell)
+    except Exception:
+        return no_update
+    name = "".join(z if z.isalnum() or z in "-_" else "_"
+                   for z in (profil.name or "profil"))[:40] or "profil"
+    return dict(content=als_csv(polaren), filename=f"polaren_{name}.csv")
 
 
 @app.callback(Output("dxf-status", "children"),
